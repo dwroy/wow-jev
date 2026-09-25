@@ -1,0 +1,9 @@
+## Interface: 30300
+## Title: JevBridge
+## Notes: 把游戏状态编码成客户区左上角的色条（像素桥 v1，仅用于本地自建服务器的研究实验）
+## Version: 1.0
+
+SchemaV1.lua
+Codec.lua
+State.lua
+Bridge.lua

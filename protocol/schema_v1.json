@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "doc": "JevBridge 载荷 v1。字段按顺序定长排列，整数一律大端。缺失的值编码为 0；超出范围的值截到边界。",
+  "fields": [
+    {"name": "t_ms", "type": "u32", "doc": "floor(GetTime()*1000) mod 2^32，用来算延迟和判重"},
+    {"name": "caps", "type": "bits16", "bits": ["facing", "speed", "map_area", "map_pos", "aura_spell_id"],
+     "doc": "客户端实际提供了哪些接口；对应位为 0 时，相关字段恒为 0，不代表真值为 0"},
+
+    {"name": "p_flags", "type": "bits16",
+     "bits": ["in_combat", "dead", "ghost", "casting", "channeling", "mounted", "resting", "moving",
+              "swimming", "flying", "indoors", "stealthed", "has_target"]},
+    {"name": "p_hp", "type": "u32"},
+    {"name": "p_hp_max", "type": "u32"},
+    {"name": "p_power", "type": "u32"},
+    {"name": "p_power_max", "type": "u32"},
+    {"name": "p_power_type", "type": "u8", "doc": "UnitPowerType：0 法力 1 怒气 2 集中 3 能量 6 符文能量"},
+    {"name": "p_level", "type": "u8"},
+    {"name": "p_cast_hash", "type": "u24", "doc": "施法/引导的法术名哈希，见 protocol-v1.md；3.3.5a 的 UnitCastingInfo 不返回法术 ID"},
+    {"name": "p_cast_rem_ms", "type": "u16"},
+    {"name": "p_map_id", "type": "u16", "doc": "GetCurrentMapAreaID"},
+    {"name": "p_map_x", "type": "u16", "doc": "GetPlayerMapPosition 的 x × 65535"},
+    {"name": "p_map_y", "type": "u16", "doc": "GetPlayerMapPosition 的 y × 65535"},
+    {"name": "p_facing", "type": "u16", "doc": "GetPlayerFacing 弧度 × 10000"},
+    {"name": "p_speed", "type": "u16", "doc": "GetUnitSpeed 码/秒 × 100"},
+
+    {"name": "t_flags", "type": "bits16",
+     "bits": ["exists", "hostile", "dead", "casting", "channeling", "interruptible", "is_player",
+              "tapped_by_other", "targeting_me"]},
+    {"name": "t_hp_pct", "type": "u16", "doc": "血量百分比 × 100（0–10000）"},
+    {"name": "t_level", "type": "u8", "doc": "UnitLevel；-1（骷髅级）编码为 255"},
+    {"name": "t_class", "type": "u8", "doc": "0 无 1 normal 2 elite 3 rare 4 rareelite 5 worldboss 6 trivial"},
+    {"name": "t_guid", "type": "u32", "doc": "UnitGUID 十六进制串的低 32 位"},
+    {"name": "t_cast_hash", "type": "u24"},
+    {"name": "t_cast_rem_ms", "type": "u16"},
+    {"name": "t_range", "type": "u8", "doc": "0 无目标或未知 1 ≤9.9 码 2 ≤11.1 码 3 ≤28 码 4 >28 码（CheckInteractDistance）"},
+
+    {"name": "gcd_rem_ms", "type": "u16"},
+    {"name": "actions", "type": "array", "count": 12, "doc": "动作条 1–12 格",
+     "fields": [
+       {"name": "cd_ms", "type": "u16", "doc": "冷却剩余毫秒，不含公共冷却"},
+       {"name": "flags", "type": "bits8", "bits": ["has", "usable", "no_mana", "in_range", "out_of_range", "current", "auto_repeat"]}
+     ]},
+
+    {"name": "p_buffs", "type": "array", "count": 8, "fields": [
+      {"name": "id", "type": "u24"}, {"name": "rem_ds", "type": "u16", "doc": "剩余时间，单位 0.1 秒；0 表示永久"},
+      {"name": "stacks", "type": "u8"}, {"name": "flags", "type": "bits8", "bits": ["mine"]}]},
+    {"name": "p_debuffs", "type": "array", "count": 4, "fields": [
+      {"name": "id", "type": "u24"}, {"name": "rem_ds", "type": "u16"},
+      {"name": "stacks", "type": "u8"}, {"name": "flags", "type": "bits8", "bits": ["mine"]}]},
+    {"name": "t_debuffs", "type": "array", "count": 8, "fields": [
+      {"name": "id", "type": "u24"}, {"name": "rem_ds", "type": "u16"},
+      {"name": "stacks", "type": "u8"}, {"name": "flags", "type": "bits8", "bits": ["mine"]}]},
+    {"name": "t_buffs", "type": "array", "count": 4, "fields": [
+      {"name": "id", "type": "u24"}, {"name": "rem_ds", "type": "u16"},
+      {"name": "stacks", "type": "u8"}, {"name": "flags", "type": "bits8", "bits": ["mine"]}]}
+  ]
+}

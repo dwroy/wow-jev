@@ -1,0 +1,16 @@
+[project]
+name = "wow-jev-pixel-bridge"
+version = "0.1.0"
+description = "JevBridge 像素桥 v1：WoW 3.3.5a 插件 + Windows 截屏解码器 + Python 参考实现（仅用于本地自建服务器）"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest", "lupa", "pillow"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
