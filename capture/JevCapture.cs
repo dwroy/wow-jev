@@ -3,7 +3,7 @@
 //
 //   JevCapture.exe --image <png>...  [--repeat N]
 //   JevCapture.exe --live  [--title T] [--class C] [--w 640] [--h 32] [--poll 1] [--stats 10]
-//   JevCapture.exe --show  <png>... [--x 100] [--y 100] [--interval 33] [--title T]
+//   JevCapture.exe --show  <png>... [--x 100] [--y 100] [--interval 33] [--title T] [--dpi-aware 0]
 //
 // 语法限制：C# 5（csc 4.0.30319），不能用 $""、?.、=>、nameof。
 
@@ -349,6 +349,12 @@ namespace JevCapture
 
         public static string Frame(Result r, long tick, double capMs, double decMs, string file)
         {
+            return Frame(r, tick, -1, capMs, decMs, file);
+        }
+
+        // qpcMs：与 tick 同一时刻采的 QPC 毫秒数（TickCount 每 15.6 ms 才跳一次，对时和测延迟太粗）；< 0 时不输出
+        public static string Frame(Result r, long tick, double qpcMs, double capMs, double decMs, string file)
+        {
             StringBuilder sb = new StringBuilder(700);
             sb.Append("{\"ok\":").Append(r.Ok ? "true" : "false");
             sb.Append(",\"reason\":\"").Append(r.Reason).Append('"');
@@ -363,6 +369,7 @@ namespace JevCapture
             sb.Append(",\"y0\":").Append(F(r.Y0));
             sb.Append(",\"max_err\":").Append(r.MaxErr);
             sb.Append(",\"tick_ms\":").Append(tick);
+            if (qpcMs >= 0) sb.Append(",\"qpc_ms\":").Append(F(qpcMs));
             sb.Append(",\"cap_ms\":").Append(F(capMs));
             sb.Append(",\"dec_ms\":").Append(F(decMs));
             if (file != null) sb.Append(",\"file\":\"").Append(Esc(file)).Append('"');
@@ -409,10 +416,11 @@ namespace JevCapture
 
     class ShowForm : Form
     {
-        Bitmap[] images; int index;
-        public ShowForm(Bitmap[] imgs, int x, int y, int interval, string title)
+        Bitmap[] images; int index; int lastPainted = -1; TextWriter log;
+        public ShowForm(Bitmap[] imgs, int x, int y, int interval, string title, TextWriter log)
         {
             images = imgs;
+            this.log = log;
             Text = title;
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
@@ -433,6 +441,13 @@ namespace JevCapture
         void OnTick(object sender, EventArgs e) { index = (index + 1) % images.Length; Invalidate(); }
         protected override void OnPaint(PaintEventArgs e)
         {
+            // 每张图第一次画出来时记一行 QPC 时间，和 --live 的 qpc_ms 相减就是"画面变化 → 解码完成"的延迟
+            if (index != lastPainted)
+            {
+                lastPainted = index;
+                log.WriteLine("{\"show\":" + index + ",\"qpc_ms\":" +
+                    (Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency).ToString("0.###", CultureInfo.InvariantCulture) + "}");
+            }
             e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
             e.Graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
             e.Graphics.DrawImage(images[index], new Rectangle(0, 0, images[index].Width, images[index].Height));
@@ -547,6 +562,7 @@ namespace JevCapture
                         Native.POINT pt = new Native.POINT();
                         Native.ClientToScreen(hwnd, ref pt);
                         long tick = Environment.TickCount;
+                        double qpcMs = Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency;
                         sw.Restart();
                         Pixels px = grab.Grab(pt.X, pt.Y);
                         double capMs = sw.Elapsed.TotalMilliseconds;
@@ -568,7 +584,7 @@ namespace JevCapture
                                 if (lastSeq >= 0 && ((r.Seq - lastSeq + 65536) % 65536) > 1) seqGaps++;
                                 frames++;
                                 lastSeq = r.Seq;
-                                Out.WriteLine(Json.Frame(r, tick, capMs, decMs, null));
+                                Out.WriteLine(Json.Frame(r, tick, qpcMs, capMs, decMs, null));
                             }
                             lastReason = null;
                         }
@@ -578,7 +594,7 @@ namespace JevCapture
                             // 失败行限流：原因变了立刻报，同一原因每秒最多一行
                             if (r.Reason != lastReason || (int)tick - lastFailTick >= 1000)
                             {
-                                Out.WriteLine(Json.Frame(r, tick, capMs, decMs, null));
+                                Out.WriteLine(Json.Frame(r, tick, qpcMs, capMs, decMs, null));
                                 lastFailTick = (int)tick; lastReason = r.Reason;
                             }
                         }
@@ -608,7 +624,7 @@ namespace JevCapture
             int interval = int.Parse(Arg(args, "--interval", "33"), CultureInfo.InvariantCulture);
             string title = Arg(args, "--title", "JevCapture Show");
             Native.timeBeginPeriod(1);
-            try { Application.Run(new ShowForm(imgs, x, y, interval, title)); }
+            try { Application.Run(new ShowForm(imgs, x, y, interval, title, Out)); }
             finally { Native.timeEndPeriod(1); }
             return 0;
         }
@@ -616,17 +632,18 @@ namespace JevCapture
         [STAThread]
         static int Main(string[] args)
         {
-            string dpi = Native.EnableDpiAwareness();
+            string mode = args.Length > 0 ? args[0] : "";
+            // --show --dpi-aware 0：不声明 DPI 感知，让 DWM 像对待 3.3.5a 的 Wow.exe 一样把窗口按系统缩放比例拉伸
+            string dpi = mode == "--show" && Arg(args, "--dpi-aware", "1") == "0" ? "unaware" : Native.EnableDpiAwareness();
             StreamWriter w = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false));
             w.AutoFlush = true;
             w.NewLine = "\n";
             Out = w;
-            string mode = args.Length > 0 ? args[0] : "";
             if (mode == "--image") return RunImage(args);
             if (mode == "--live") return RunLive(args);
             if (mode == "--show") return RunShow(args);
             if (mode == "--dpi") { Out.WriteLine("{\"dpi\":\"" + dpi + "\"}"); return 0; }
-            Console.Error.WriteLine("用法：JevCapture.exe --image <png>... [--repeat N] | --live [--title T] [--class C] [--w 640] [--h 32] [--poll 1] [--stats 10] | --show <png>... [--x N] [--y N] [--interval ms] [--title T]");
+            Console.Error.WriteLine("用法：JevCapture.exe --image <png>... [--repeat N] | --live [--title T] [--class C] [--w 640] [--h 32] [--poll 1] [--stats 10] | --show <png>... [--x N] [--y N] [--interval ms] [--title T] [--dpi-aware 0]");
             return 2;
         }
     }

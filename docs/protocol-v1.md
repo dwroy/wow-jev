@@ -67,7 +67,8 @@ CRC：CRC-16/CCITT-FALSE，多项式 0x1021，初值 0xFFFF，不反射，无最
 | payload | 载荷十六进制；C# 端不解析字段，交给使用方按 schema 解析 |
 | pitch / x0 / y0 | 格距、色条左边界、上边界（亚像素，截图坐标） |
 | max_err | 各通道离最近档位的最大偏差（≤ 8 才能还原） |
-| tick_ms | 截屏时的 `Environment.TickCount` |
+| tick_ms | 截屏时的 `Environment.TickCount`（实测每 15.6 ms 才跳一次） |
+| qpc_ms | 仅 `--live`：与 tick_ms 同一时刻采的 QPC 毫秒数，用于对时和测延迟 |
 | cap_ms / dec_ms | 截屏（或读图）耗时、解码耗时 |
 
 `--image` 模式额外带 `file`。`--live` 只在 seq 变化时输出成功行；失败行在原因变化时立即输出，同一原因每秒最多一行；每 10 秒往 stderr 写一行统计（captures、ok、crc_fail、other_fail、frames、seq_gaps、耗时均值/最大值），用来算 CRC 失败率。
@@ -94,10 +95,27 @@ CRC：CRC-16/CCITT-FALSE，多项式 0x1021，初值 0xFFFF，不反射，无最
 - **gamma**：请保持显示 gamma 为 1.0，不要用独占全屏（可能截到黑图），用窗口化或无边框窗口。
 - 预热后的纯解码耗时约 0.05 ms/帧（`--repeat 200` 平均）；首帧约 6 ms 是 JIT 预热。
 
-## 6. 待有客户端后确认
+## 6. 实测
+
+环境：Windows 11，3840×2160，缩放 150%，144 Hz，i9-13900K，RTX 4090；WSL2 Ubuntu 24.04。
+
+### 6.1 不开游戏的真实截屏链路（已确认，2026-09-25）
+
+`--show` 在桌面上 1:1 显示渲染好的帧，`--live` 截屏解码（`tools/show_frames.py`）。
+
+| 项 | 结论 | 数据 |
+|---|---|---|
+| 解码可靠性 | 已确认，达标 | 150 秒内 23023 次截屏，crc_fail 0，other_fail 0；3474 帧载荷逐帧与原图一致，max_err 全为 0；seq 跨 65535→0 回绕正确 |
+| 截屏 + 解码 ≤ 5 ms | 按字面不达标，实际开销达标 | cap_ms 均值 5.56、p99 8.15、最大 11.6；dec_ms 均值 0.019。cap_ms 几乎全是等待 DWM 合成：屏幕 DC 的 BitBlt 固定在 vblank 后约 1.3 ms 返回，1×1 与 640×32 同样耗时 6.9 ms（poll 0），返回的是刚合成的画面 |
+| 画面变化 → WSL 拿到 JSON | 已确认，像素桥自身部分达标 | `--show` 绘制时刻到解码完成（同一 QPC 时钟）+ 管道：均值 5.7 ms、p99 10.0 ms、最大 32.8 ms（4136 帧）。不含游戏渲染和采样等待 |
+| WSL 管道延迟 | 已确认，可忽略 | 回声探针 RTT 均值 0.49 ms、p99 0.92 ms，单程约 0.25 ms |
+| TickCount 分辨率 | 已确认 | 每 15–16 ms 跳一次，`timeBeginPeriod(1)` 无效；因此新增 `qpc_ms` |
+| 窗口被系统放大 1.5 倍（DPI 虚拟化，模拟 3.3.5a 的 Wow.exe） | 已确认，能解码 | `--show --dpi-aware 0`：60 秒 1372 帧全部成功，max_err 0，格距识别为 4.54 |
+
+### 6.2 待有 3.3.5a 客户端后确认
 
 - `GetPlayerFacing`、`GetUnitSpeed`、`UnitAura` 第 11 个返回值 spellId、`GetCurrentMapAreaID` 是否可用（看 `caps`）。
-- `GetTime` 和 `Environment.TickCount` 是否同一个时钟（决定能否用 `t_ms` 和 `tick_ms` 直接算延迟）。
+- `GetTime` 与哪个时钟对齐（`tools/clock_sync.py` 同时比较 tick_ms 和 qpc_ms，并测游戏内完整延迟）。
 - `gxResolution` 是否等于客户区高度；不等时用 `/jevbridge height`。
 - 独占全屏下截屏是否为黑图。
-- 真实链路指标：截屏 + 解码 ≤ 5 ms，状态变化到 WSL 拿到 JSON ≤ 60 ms，连跑 1 小时 CRC 失败率 < 0.1%。
+- 游戏内连跑 1 小时 CRC 失败率 < 0.1%；状态变化到 WSL 拿到 JSON ≤ 60 ms（含游戏渲染与 30 Hz 采样等待）。
