@@ -2,11 +2,17 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "urn:wow-agent:protocol:agent-v1",
   "title": "WoW Agent 协议 v1",
-  "description": "第 0 阶段跨语言观察、模拟动作与执行回执协议；不产生真实键鼠输入。",
+  "description": "三层 agent 观察、模拟/原生动作意图和执行回执；原生动作引用独立 wow-input schema，效果需观测证据。",
   "oneOf": [
-    { "$ref": "#/definitions/observation" },
-    { "$ref": "#/definitions/actionIntent" },
-    { "$ref": "#/definitions/executionReceipt" }
+    {
+      "$ref": "#/definitions/observation"
+    },
+    {
+      "$ref": "#/definitions/actionIntent"
+    },
+    {
+      "$ref": "#/definitions/executionReceipt"
+    }
   ],
   "definitions": {
     "identifier": {
@@ -32,25 +38,46 @@
     },
     "jsonValue": {
       "oneOf": [
-        { "type": "null" },
-        { "type": "boolean" },
-        { "type": "string" },
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string"
+        },
         {
           "type": "number",
           "minimum": -9007199254740991,
           "maximum": 9007199254740991
         },
-        { "type": "array", "items": { "$ref": "#/definitions/jsonValue" } },
-        { "type": "object", "additionalProperties": { "$ref": "#/definitions/jsonValue" } }
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/jsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/jsonValue"
+          }
+        }
       ]
     },
     "sourceClock": {
       "description": "未经对时的原始时钟；仅存证，不用于 deadline 或字段时效判断。",
       "type": "object",
       "additionalProperties": false,
-      "required": ["domain", "value_ms"],
+      "required": [
+        "domain",
+        "value_ms"
+      ],
       "properties": {
-        "domain": { "$ref": "#/definitions/identifier" },
+        "domain": {
+          "$ref": "#/definitions/identifier"
+        },
         "value_ms": {
           "type": "number",
           "minimum": 0,
@@ -61,282 +88,880 @@
     "observedField": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["value", "status", "captured_at_ms", "source", "source_observation_id"],
+      "required": [
+        "value",
+        "status",
+        "captured_at_ms",
+        "source",
+        "source_observation_id"
+      ],
       "properties": {
-        "value": { "$ref": "#/definitions/jsonValue" },
-        "status": { "enum": ["known", "unknown", "unavailable"] },
-        "captured_at_ms": { "$ref": "#/definitions/milliseconds" },
-        "source": { "enum": ["cv", "seed", "pixel_bridge", "window", "simulated", "manual"] },
-        "source_observation_id": { "$ref": "#/definitions/identifier" },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "value": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "status": {
+          "enum": [
+            "known",
+            "unknown",
+            "unavailable"
+          ]
+        },
+        "captured_at_ms": {
+          "$ref": "#/definitions/milliseconds"
+        },
+        "source": {
+          "enum": [
+            "cv",
+            "seed",
+            "pixel_bridge",
+            "window",
+            "simulated",
+            "manual"
+          ]
+        },
+        "source_observation_id": {
+          "$ref": "#/definitions/identifier"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
         "artifact_ids": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/definitions/identifier" }
+          "items": {
+            "$ref": "#/definitions/identifier"
+          }
         },
-        "source_clock": { "$ref": "#/definitions/sourceClock" }
+        "source_clock": {
+          "$ref": "#/definitions/sourceClock"
+        },
+        "capture_window": {
+          "$ref": "#/definitions/captureWindow"
+        },
+        "reason": {
+          "$ref": "#/definitions/reason"
+        }
       },
       "allOf": [
         {
-          "if": { "type": "object", "properties": { "status": { "enum": ["unknown", "unavailable"] } } },
-          "then": { "type": "object", "properties": { "value": { "type": "null" } } }
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "enum": [
+                  "unknown",
+                  "unavailable"
+                ]
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "null"
+              }
+            }
+          }
         }
       ]
     },
     "window": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["token", "hwnd", "pid", "client_width", "client_height", "focused"],
+      "required": [
+        "token",
+        "hwnd",
+        "pid",
+        "client_width",
+        "client_height",
+        "focused"
+      ],
       "properties": {
-        "token": { "$ref": "#/definitions/identifier" },
-        "hwnd": { "type": "string", "pattern": "^0x[0-9a-fA-F]{1,16}$" },
-        "pid": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
-        "client_width": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "client_height": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "focused": { "type": "boolean" }
+        "token": {
+          "$ref": "#/definitions/identifier"
+        },
+        "hwnd": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{1,16}$"
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "client_width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "client_height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "focused": {
+          "type": "boolean"
+        }
       }
     },
     "artifact": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "kind", "path"],
+      "required": [
+        "id",
+        "kind",
+        "path"
+      ],
       "properties": {
-        "id": { "$ref": "#/definitions/identifier" },
-        "kind": { "enum": ["screenshot", "raw_observation", "log"] },
-        "path": { "type": "string", "minLength": 1 },
-        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        "id": {
+          "$ref": "#/definitions/identifier"
+        },
+        "kind": {
+          "enum": [
+            "screenshot",
+            "raw_observation",
+            "log"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
       }
     },
     "observation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["protocol", "version", "type", "id", "run_id", "at_ms", "observation_seq", "window", "fields", "artifacts"],
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "id",
+        "run_id",
+        "at_ms",
+        "observation_seq",
+        "window",
+        "fields",
+        "artifacts"
+      ],
       "properties": {
-        "protocol": { "const": "wow-agent" },
-        "version": { "const": 1 },
-        "type": { "const": "observation" },
-        "id": { "$ref": "#/definitions/identifier" },
-        "run_id": { "$ref": "#/definitions/identifier" },
-        "at_ms": { "$ref": "#/definitions/milliseconds" },
-        "observation_seq": { "$ref": "#/definitions/counter" },
+        "protocol": {
+          "const": "wow-agent"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "observation"
+        },
+        "id": {
+          "$ref": "#/definitions/identifier"
+        },
+        "run_id": {
+          "$ref": "#/definitions/identifier"
+        },
+        "at_ms": {
+          "$ref": "#/definitions/milliseconds"
+        },
+        "observation_seq": {
+          "$ref": "#/definitions/counter"
+        },
         "window": {
-          "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/window" }]
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/window"
+            }
+          ]
         },
         "fields": {
           "type": "object",
-          "propertyNames": { "$ref": "#/definitions/fieldPath" },
-          "additionalProperties": { "$ref": "#/definitions/observedField" }
+          "propertyNames": {
+            "$ref": "#/definitions/fieldPath"
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/observedField"
+          }
         },
-        "artifacts": { "type": "array", "items": { "$ref": "#/definitions/artifact" } }
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/artifact"
+          }
+        }
       }
     },
     "plan": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "revision"],
+      "required": [
+        "id",
+        "revision"
+      ],
       "properties": {
-        "id": { "$ref": "#/definitions/identifier" },
-        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 }
+        "id": {
+          "$ref": "#/definitions/identifier"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
       }
     },
     "condition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["field", "op", "max_age_ms"],
+      "required": [
+        "field",
+        "op",
+        "max_age_ms"
+      ],
       "properties": {
-        "field": { "$ref": "#/definitions/fieldPath" },
-        "op": { "enum": ["eq", "ne", "exists", "gte", "lte"] },
-        "value": { "$ref": "#/definitions/jsonValue" },
-        "max_age_ms": { "$ref": "#/definitions/milliseconds" }
+        "field": {
+          "$ref": "#/definitions/fieldPath"
+        },
+        "op": {
+          "enum": [
+            "eq",
+            "ne",
+            "exists",
+            "gte",
+            "lte"
+          ]
+        },
+        "value": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "max_age_ms": {
+          "$ref": "#/definitions/milliseconds"
+        }
       },
       "allOf": [
         {
-          "if": { "type": "object", "properties": { "op": { "const": "exists" } } },
-          "then": { "not": { "type": "object", "properties": { "value": {} }, "required": ["value"] } },
-          "else": { "type": "object", "properties": { "value": { "$ref": "#/definitions/jsonValue" } }, "required": ["value"] }
+          "if": {
+            "type": "object",
+            "properties": {
+              "op": {
+                "const": "exists"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "type": "object",
+              "properties": {
+                "value": {}
+              },
+              "required": [
+                "value"
+              ]
+            }
+          },
+          "else": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "$ref": "#/definitions/jsonValue"
+              }
+            },
+            "required": [
+              "value"
+            ]
+          }
         },
         {
-          "if": { "type": "object", "properties": { "op": { "enum": ["gte", "lte"] } } },
-          "then": { "type": "object", "properties": { "value": { "type": "number" } } }
+          "if": {
+            "type": "object",
+            "properties": {
+              "op": {
+                "enum": [
+                  "gte",
+                  "lte"
+                ]
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "number"
+              }
+            }
+          }
         }
       ]
     },
     "simulatedAction": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "args"],
+      "required": [
+        "name",
+        "args"
+      ],
       "properties": {
-        "name": { "const": "simulate_noop" },
-        "args": { "type": "object", "additionalProperties": false, "maxProperties": 0 }
+        "name": {
+          "const": "simulate_noop"
+        },
+        "args": {
+          "type": "object",
+          "additionalProperties": false,
+          "maxProperties": 0
+        }
       }
     },
     "actionIntent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["protocol", "version", "type", "id", "run_id", "at_ms", "plan", "based_on_observation_id", "actor", "mode", "window_token", "action", "deadline_ms", "conditions"],
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "id",
+        "run_id",
+        "at_ms",
+        "plan",
+        "based_on_observation_id",
+        "actor",
+        "mode",
+        "window_token",
+        "action",
+        "deadline_ms",
+        "conditions"
+      ],
       "properties": {
-        "protocol": { "const": "wow-agent" },
-        "version": { "const": 1 },
-        "type": { "const": "action_intent" },
-        "id": { "$ref": "#/definitions/identifier" },
-        "run_id": { "$ref": "#/definitions/identifier" },
-        "at_ms": { "$ref": "#/definitions/milliseconds" },
-        "plan": { "$ref": "#/definitions/plan" },
-        "based_on_observation_id": { "$ref": "#/definitions/identifier" },
-        "actor": { "enum": ["code", "jev", "brain"] },
-        "mode": { "const": "simulated" },
-        "window_token": {
-          "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/identifier" }]
+        "protocol": {
+          "const": "wow-agent"
         },
-        "action": { "$ref": "#/definitions/simulatedAction" },
-        "deadline_ms": { "$ref": "#/definitions/milliseconds" },
-        "conditions": { "type": "array", "items": { "$ref": "#/definitions/condition" } }
-      }
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "action_intent"
+        },
+        "id": {
+          "$ref": "#/definitions/identifier"
+        },
+        "run_id": {
+          "$ref": "#/definitions/identifier"
+        },
+        "at_ms": {
+          "$ref": "#/definitions/milliseconds"
+        },
+        "plan": {
+          "$ref": "#/definitions/plan"
+        },
+        "based_on_observation_id": {
+          "$ref": "#/definitions/identifier"
+        },
+        "actor": {
+          "enum": [
+            "code",
+            "jev",
+            "brain"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "simulated",
+            "live"
+          ]
+        },
+        "window_token": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/identifier"
+            }
+          ]
+        },
+        "action": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/simulatedAction"
+            },
+            {
+              "$ref": "#/definitions/nativeAction"
+            }
+          ]
+        },
+        "deadline_ms": {
+          "$ref": "#/definitions/milliseconds"
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/condition"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "const": "simulated"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "$ref": "#/definitions/simulatedAction"
+              }
+            }
+          },
+          "else": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "$ref": "#/definitions/nativeAction"
+              },
+              "window_token": {
+                "$ref": "#/definitions/identifier"
+              }
+            }
+          }
+        }
+      ]
     },
     "reason": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["code"],
+      "required": [
+        "code"
+      ],
       "properties": {
-        "code": { "$ref": "#/definitions/identifier" },
-        "message": { "type": "string", "minLength": 1 }
+        "code": {
+          "$ref": "#/definitions/identifier"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "inputResult": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "events_requested", "events_inserted"],
+      "required": [
+        "status",
+        "events_requested",
+        "events_inserted"
+      ],
       "properties": {
-        "status": { "enum": ["rejected", "simulated", "sent", "partial", "failed", "cancelled", "released"] },
-        "events_requested": { "$ref": "#/definitions/counter" },
-        "events_inserted": { "$ref": "#/definitions/counter" },
-        "reason": { "$ref": "#/definitions/reason" }
+        "status": {
+          "enum": [
+            "rejected",
+            "simulated",
+            "sent",
+            "partial",
+            "failed",
+            "cancelled",
+            "released"
+          ]
+        },
+        "events_requested": {
+          "$ref": "#/definitions/counter"
+        },
+        "events_inserted": {
+          "$ref": "#/definitions/counter"
+        },
+        "reason": {
+          "$ref": "#/definitions/reason"
+        }
       },
       "allOf": [
         {
-          "if": { "type": "object", "properties": { "status": { "enum": ["simulated", "rejected"] } } },
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "enum": [
+                  "simulated",
+                  "rejected"
+                ]
+              }
+            }
+          },
           "then": {
             "type": "object",
             "properties": {
-              "events_requested": { "const": 0 },
-              "events_inserted": { "const": 0 }
+              "events_requested": {
+                "const": 0
+              },
+              "events_inserted": {
+                "const": 0
+              }
             }
           }
         },
         {
-          "if": { "type": "object", "properties": { "status": { "const": "sent" } } },
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "sent"
+              }
+            }
+          },
           "then": {
             "type": "object",
             "properties": {
-              "events_requested": { "type": "integer", "minimum": 1 },
-              "events_inserted": { "type": "integer", "minimum": 1 }
+              "events_requested": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "events_inserted": {
+                "type": "integer",
+                "minimum": 1
+              }
             }
           }
         },
         {
-          "if": { "type": "object", "properties": { "status": { "const": "partial" } } },
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "partial"
+              }
+            }
+          },
           "then": {
             "type": "object",
             "properties": {
-              "events_requested": { "type": "integer", "minimum": 2 },
-              "events_inserted": { "type": "integer", "minimum": 1 }
+              "events_requested": {
+                "type": "integer",
+                "minimum": 2
+              },
+              "events_inserted": {
+                "type": "integer",
+                "minimum": 1
+              }
             }
           }
         },
         {
-          "if": { "type": "object", "properties": { "status": { "enum": ["rejected", "partial", "failed", "cancelled"] } } },
-          "then": { "type": "object", "properties": { "reason": { "$ref": "#/definitions/reason" } }, "required": ["reason"] }
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "enum": [
+                  "rejected",
+                  "partial",
+                  "failed",
+                  "cancelled"
+                ]
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "reason": {
+                "$ref": "#/definitions/reason"
+              }
+            },
+            "required": [
+              "reason"
+            ]
+          }
         }
       ]
     },
     "effectResult": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "evidence_observation_ids"],
+      "required": [
+        "status",
+        "evidence_observation_ids"
+      ],
       "properties": {
-        "status": { "enum": ["pending", "confirmed", "failed", "unknown", "not_applicable"] },
+        "status": {
+          "enum": [
+            "pending",
+            "confirmed",
+            "failed",
+            "unknown",
+            "not_applicable"
+          ]
+        },
         "evidence_observation_ids": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/definitions/identifier" }
+          "items": {
+            "$ref": "#/definitions/identifier"
+          }
         },
-        "reason": { "$ref": "#/definitions/reason" }
+        "reason": {
+          "$ref": "#/definitions/reason"
+        }
       },
       "allOf": [
         {
-          "if": { "type": "object", "properties": { "status": { "const": "confirmed" } } },
-          "then": { "type": "object", "properties": { "evidence_observation_ids": { "type": "array", "minItems": 1 } } }
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "confirmed"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "evidence_observation_ids": {
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          }
         },
         {
-          "if": { "type": "object", "properties": { "status": { "enum": ["failed", "unknown"] } } },
-          "then": { "type": "object", "properties": { "reason": { "$ref": "#/definitions/reason" } }, "required": ["reason"] }
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "enum": [
+                  "failed",
+                  "unknown"
+                ]
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "reason": {
+                "$ref": "#/definitions/reason"
+              }
+            },
+            "required": [
+              "reason"
+            ]
+          }
         },
         {
-          "if": { "type": "object", "properties": { "status": { "const": "not_applicable" } } },
-          "then": { "type": "object", "properties": { "evidence_observation_ids": { "type": "array", "maxItems": 0 } } }
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "not_applicable"
+              }
+            }
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "evidence_observation_ids": {
+                "type": "array",
+                "maxItems": 0
+              }
+            }
+          }
         }
       ]
     },
     "timing": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["started_at_ms", "finished_at_ms"],
+      "required": [
+        "started_at_ms",
+        "finished_at_ms"
+      ],
       "properties": {
         "started_at_ms": {
-          "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/milliseconds" }]
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/milliseconds"
+            }
+          ]
         },
         "finished_at_ms": {
-          "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/milliseconds" }]
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/milliseconds"
+            }
+          ]
         }
       }
     },
     "executionReceipt": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["protocol", "version", "type", "id", "run_id", "at_ms", "action_id", "revision", "mode", "input", "effect", "timing"],
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "id",
+        "run_id",
+        "at_ms",
+        "action_id",
+        "revision",
+        "mode",
+        "input",
+        "effect",
+        "timing"
+      ],
       "properties": {
-        "protocol": { "const": "wow-agent" },
-        "version": { "const": 1 },
-        "type": { "const": "execution_receipt" },
-        "id": { "$ref": "#/definitions/identifier" },
-        "run_id": { "$ref": "#/definitions/identifier" },
-        "at_ms": { "$ref": "#/definitions/milliseconds" },
-        "action_id": { "$ref": "#/definitions/identifier" },
-        "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
-        "mode": { "enum": ["simulated", "live"] },
-        "input": { "$ref": "#/definitions/inputResult" },
-        "effect": { "$ref": "#/definitions/effectResult" },
-        "timing": { "$ref": "#/definitions/timing" }
+        "protocol": {
+          "const": "wow-agent"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "execution_receipt"
+        },
+        "id": {
+          "$ref": "#/definitions/identifier"
+        },
+        "run_id": {
+          "$ref": "#/definitions/identifier"
+        },
+        "at_ms": {
+          "$ref": "#/definitions/milliseconds"
+        },
+        "action_id": {
+          "$ref": "#/definitions/identifier"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "mode": {
+          "enum": [
+            "simulated",
+            "live"
+          ]
+        },
+        "input": {
+          "$ref": "#/definitions/inputResult"
+        },
+        "effect": {
+          "$ref": "#/definitions/effectResult"
+        },
+        "timing": {
+          "$ref": "#/definitions/timing"
+        }
       },
       "allOf": [
         {
-          "if": { "type": "object", "properties": { "mode": { "const": "simulated" } } },
+          "if": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "const": "simulated"
+              }
+            }
+          },
           "then": {
             "type": "object",
             "properties": {
               "input": {
                 "type": "object",
                 "properties": {
-                  "status": { "enum": ["simulated", "rejected", "failed", "cancelled"] },
-                  "events_requested": { "const": 0 },
-                  "events_inserted": { "const": 0 }
+                  "status": {
+                    "enum": [
+                      "simulated",
+                      "rejected",
+                      "failed",
+                      "cancelled"
+                    ]
+                  },
+                  "events_requested": {
+                    "const": 0
+                  },
+                  "events_inserted": {
+                    "const": 0
+                  }
                 }
               },
               "effect": {
                 "type": "object",
                 "properties": {
-                  "status": { "const": "not_applicable" },
-                  "evidence_observation_ids": { "type": "array", "maxItems": 0 }
+                  "status": {
+                    "const": "not_applicable"
+                  },
+                  "evidence_observation_ids": {
+                    "type": "array",
+                    "maxItems": 0
+                  }
                 }
               }
             }
           },
           "else": {
             "type": "object",
-            "properties": { "input": { "type": "object", "properties": { "status": { "not": { "const": "simulated" } } } } }
+            "properties": {
+              "input": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "not": {
+                      "const": "simulated"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       ]
+    },
+    "captureWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "earliest_ms",
+        "latest_ms"
+      ],
+      "properties": {
+        "earliest_ms": {
+          "$ref": "#/definitions/milliseconds"
+        },
+        "latest_ms": {
+          "$ref": "#/definitions/milliseconds"
+        }
+      }
+    },
+    "nativeAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "args"
+      ],
+      "properties": {
+        "name": {
+          "const": "native_input"
+        },
+        "args": {
+          "$ref": "urn:wow-input:protocol:native-v1#/definitions/action"
+        }
+      }
     }
   }
 }

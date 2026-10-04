@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { Ajv, type ErrorObject, type ValidateFunction } from 'ajv';
+import type { NativeAction } from '../hand/protocol.js';
 
 export interface Envelope {
   protocol: 'wow-agent';
@@ -18,6 +20,9 @@ interface ObservedFieldMetadata {
   confidence?: number;
   artifact_ids?: string[];
   source_clock?: { domain: string; value_ms: number };
+  /** WSL request-to-receive interval; captured_at_ms is its conservative lower bound. */
+  capture_window?: { earliest_ms: number; latest_ms: number };
+  reason?: { code: string; message?: string };
 }
 
 export type ObservedField = ObservedFieldMetadata & (
@@ -54,17 +59,19 @@ export interface Observation extends Envelope {
   artifacts: Artifact[];
 }
 
-export interface ActionIntent extends Envelope {
+interface ActionIntentBase extends Envelope {
   type: 'action_intent';
   actor: 'code' | 'jev' | 'brain';
-  mode: 'simulated';
   plan: { id: string; revision: number };
   based_on_observation_id: string;
-  window_token: string | null;
-  action: { name: 'simulate_noop'; args: Record<string, never> };
   deadline_ms: number;
   conditions: ActionCondition[];
 }
+
+export type ActionIntent = ActionIntentBase & (
+  | { mode: 'simulated'; window_token: string | null; action: { name: 'simulate_noop'; args: Record<string, never> } }
+  | { mode: 'live'; window_token: string; action: { name: 'native_input'; args: NativeAction } }
+);
 
 export interface ExecutionReceipt extends Envelope {
   type: 'execution_receipt';
@@ -93,6 +100,8 @@ export type ProtocolValidator = ValidateFunction<AgentMessage>;
 export async function loadProtocolValidator(schemaPath: string): Promise<ProtocolValidator> {
   const schema: unknown = JSON.parse(await readFile(schemaPath, 'utf8'));
   const ajv = new Ajv({ allErrors: true, strict: true, validateFormats: false });
+  const nativeSchema: unknown = JSON.parse(await readFile(join(dirname(schemaPath), 'native-input-v1.schema.json'), 'utf8'));
+  ajv.addSchema(nativeSchema as object);
   return ajv.compile<AgentMessage>(schema as object);
 }
 
@@ -112,6 +121,11 @@ export function semanticErrors(message: AgentMessage): string[] {
   if (message.type === 'observation') {
     for (const [path, field] of Object.entries(message.fields)) {
       if (field.captured_at_ms > message.at_ms) errors.push(`/fields/${path}/captured_at_ms: 不得晚于观察消息 at_ms。`);
+      if (field.capture_window) {
+        const { earliest_ms: earliest, latest_ms: latest } = field.capture_window;
+        if (earliest > latest || latest > message.at_ms) errors.push(`/fields/${path}/capture_window: 请求/接收边界必须按时间排列并不晚于观察。`);
+        if (field.captured_at_ms !== earliest) errors.push(`/fields/${path}/captured_at_ms: 必须使用请求时刻这个保守下界，不能用接收或模型完成时间。`);
+      }
     }
   } else if (message.type === 'action_intent') {
     if (message.deadline_ms < message.at_ms) errors.push('/deadline_ms: 不得早于动作消息 at_ms。');
