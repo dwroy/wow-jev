@@ -1,0 +1,21 @@
+{
+  "name": "@wow-jev/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=18.18" },
+  "scripts": {
+    "agent": "tsx src/cli.ts",
+    "doctor": "tsx src/cli.ts doctor",
+    "validate": "tsx src/cli.ts validate",
+    "demo": "tsx src/cli.ts demo",
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": { "ajv": "^8.17.1" },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
