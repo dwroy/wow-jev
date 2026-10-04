@@ -61,5 +61,5 @@ test('CLI doctor separates offline readiness from unfinished real input', async 
   assert.equal(report.ready_for_offline_demo, true);
   assert.equal(report.real_input_enabled, false);
   assert.equal(report.checks.find((check: { id: string }) => check.id === 'windows').status, 'skipped');
-  assert.equal(report.checks.find((check: { id: string }) => check.id === 'input_adapter').status, 'skipped');
+  assert.ok(['ok', 'warning'].includes(report.checks.find((check: { id: string }) => check.id === 'input_adapter').status));
 });

@@ -1,0 +1,746 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:wow-input:protocol:native-v1",
+  "title": "Windows 原生输入协议 v1",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/command"
+    },
+    {
+      "$ref": "#/definitions/ready"
+    },
+    {
+      "$ref": "#/definitions/receipt"
+    },
+    {
+      "$ref": "#/definitions/error"
+    }
+  ],
+  "definitions": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "session": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "counter": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
+    },
+    "duration": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5000
+    },
+    "coordinate": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535
+    },
+    "relative": {
+      "type": "integer",
+      "minimum": -32767,
+      "maximum": 32767
+    },
+    "key": {
+      "enum": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T",
+        "U",
+        "V",
+        "W",
+        "X",
+        "Y",
+        "Z",
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9",
+        "F10",
+        "F11",
+        "F12",
+        "SPACE",
+        "SHIFT",
+        "CTRL",
+        "ALT",
+        "ESC",
+        "TAB",
+        "ENTER",
+        "BACKSPACE",
+        "UP",
+        "DOWN",
+        "LEFT",
+        "RIGHT"
+      ]
+    },
+    "button": {
+      "enum": [
+        "left",
+        "right",
+        "middle"
+      ]
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "$ref": "#/definitions/coordinate"
+        },
+        "y": {
+          "$ref": "#/definitions/coordinate"
+        }
+      }
+    },
+    "action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "keys",
+            "duration_ms"
+          ],
+          "properties": {
+            "kind": {
+              "const": "key"
+            },
+            "keys": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 60,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/definitions/key"
+              }
+            },
+            "duration_ms": {
+              "$ref": "#/definitions/duration"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "mode",
+            "x",
+            "y"
+          ],
+          "properties": {
+            "kind": {
+              "const": "mouse_move"
+            },
+            "mode": {
+              "const": "absolute"
+            },
+            "x": {
+              "$ref": "#/definitions/coordinate"
+            },
+            "y": {
+              "$ref": "#/definitions/coordinate"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "mode",
+            "dx",
+            "dy"
+          ],
+          "properties": {
+            "kind": {
+              "const": "mouse_move"
+            },
+            "mode": {
+              "const": "relative"
+            },
+            "dx": {
+              "$ref": "#/definitions/relative"
+            },
+            "dy": {
+              "$ref": "#/definitions/relative"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "button",
+            "x",
+            "y",
+            "duration_ms"
+          ],
+          "properties": {
+            "kind": {
+              "const": "mouse_click"
+            },
+            "button": {
+              "$ref": "#/definitions/button"
+            },
+            "x": {
+              "$ref": "#/definitions/coordinate"
+            },
+            "y": {
+              "$ref": "#/definitions/coordinate"
+            },
+            "duration_ms": {
+              "$ref": "#/definitions/duration"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "delta"
+          ],
+          "properties": {
+            "kind": {
+              "const": "mouse_wheel"
+            },
+            "delta": {
+              "type": "integer",
+              "minimum": -12000,
+              "maximum": 12000,
+              "multipleOf": 120,
+              "not": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "button",
+            "from",
+            "to",
+            "duration_ms"
+          ],
+          "properties": {
+            "kind": {
+              "const": "mouse_drag"
+            },
+            "button": {
+              "$ref": "#/definitions/button"
+            },
+            "from": {
+              "$ref": "#/definitions/point"
+            },
+            "to": {
+              "$ref": "#/definitions/point"
+            },
+            "duration_ms": {
+              "$ref": "#/definitions/duration"
+            }
+          }
+        }
+      ]
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "id",
+        "session_id",
+        "op"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-input"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "command"
+        },
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "session_id": {
+          "$ref": "#/definitions/session"
+        },
+        "op": {
+          "enum": [
+            "execute",
+            "heartbeat",
+            "cancel",
+            "release_all",
+            "shutdown",
+            "status"
+          ]
+        },
+        "action": {
+          "$ref": "#/definitions/action"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "op": {
+                "const": "execute"
+              }
+            },
+            "required": [
+              "op"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "action": {}
+            },
+            "required": [
+              "action"
+            ]
+          },
+          "else": {
+            "not": {
+              "type": "object",
+              "properties": {
+                "action": {}
+              },
+              "required": [
+                "action"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hwnd",
+        "pid",
+        "client_width",
+        "client_height",
+        "focused"
+      ],
+      "properties": {
+        "hwnd": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{1,16}$"
+        },
+        "pid": {
+          "$ref": "#/definitions/pid"
+        },
+        "client_width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "client_height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "focused": {
+          "type": "boolean"
+        }
+      }
+    },
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "domain",
+        "at_ms"
+      ],
+      "properties": {
+        "domain": {
+          "const": "windows-qpc"
+        },
+        "at_ms": {
+          "$ref": "#/definitions/counter"
+        }
+      }
+    },
+    "ready": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "executor_pid",
+        "watchdog_pid",
+        "window",
+        "capabilities",
+        "local_clock"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-input"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "ready"
+        },
+        "session_id": {
+          "$ref": "#/definitions/session"
+        },
+        "executor_pid": {
+          "$ref": "#/definitions/pid"
+        },
+        "watchdog_pid": {
+          "$ref": "#/definitions/pid"
+        },
+        "window": {
+          "$ref": "#/definitions/window"
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "keys",
+            "max_duration_ms",
+            "heartbeat_lease_ms"
+          ],
+          "properties": {
+            "keys": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/definitions/key"
+              }
+            },
+            "max_duration_ms": {
+              "const": 5000
+            },
+            "heartbeat_lease_ms": {
+              "const": 1000
+            }
+          }
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        }
+      }
+    },
+    "reason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/definitions/id"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "id",
+        "session_id",
+        "op",
+        "status",
+        "input",
+        "effect",
+        "timing",
+        "local_clock"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-input"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "receipt"
+        },
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "session_id": {
+          "$ref": "#/definitions/session"
+        },
+        "op": {
+          "enum": [
+            "execute",
+            "heartbeat",
+            "cancel",
+            "release_all",
+            "shutdown",
+            "status"
+          ]
+        },
+        "status": {
+          "enum": [
+            "accepted",
+            "completed",
+            "rejected",
+            "cancelled",
+            "failed",
+            "ok"
+          ]
+        },
+        "input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "events_requested",
+            "events_inserted",
+            "released"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "not_sent",
+                "sent",
+                "partial",
+                "released",
+                "failed"
+              ]
+            },
+            "events_requested": {
+              "$ref": "#/definitions/counter"
+            },
+            "events_inserted": {
+              "$ref": "#/definitions/counter"
+            },
+            "released": {
+              "type": "boolean"
+            }
+          }
+        },
+        "effect": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status"
+          ],
+          "properties": {
+            "status": {
+              "const": "unknown"
+            }
+          }
+        },
+        "reason": {
+          "$ref": "#/definitions/reason"
+        },
+        "timing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "clock",
+            "started_ms",
+            "finished_ms"
+          ],
+          "properties": {
+            "clock": {
+              "const": "windows_qpc"
+            },
+            "started_ms": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/definitions/counter"
+                }
+              ]
+            },
+            "finished_ms": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/definitions/counter"
+                }
+              ]
+            }
+          }
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        },
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "active_action_id",
+            "held_keys_mask",
+            "held_mouse_mask",
+            "watchdog_ready",
+            "stop_requested",
+            "stop_reason",
+            "lease_deadline_ms"
+          ],
+          "properties": {
+            "active_action_id": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/definitions/id"
+                }
+              ]
+            },
+            "held_keys_mask": {
+              "type": "string"
+            },
+            "held_mouse_mask": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 7
+            },
+            "watchdog_ready": {
+              "type": "boolean"
+            },
+            "stop_requested": {
+              "type": "boolean"
+            },
+            "stop_reason": {
+              "type": "string"
+            },
+            "lease_deadline_ms": {
+              "$ref": "#/definitions/counter"
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "enum": [
+                  "rejected",
+                  "failed"
+                ]
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "reason": {}
+            },
+            "required": [
+              "reason"
+            ]
+          }
+        }
+      ]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "reason",
+        "local_clock"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-input"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "error"
+        },
+        "session_id": {
+          "$ref": "#/definitions/session"
+        },
+        "reason": {
+          "$ref": "#/definitions/reason"
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        }
+      }
+    }
+  }
+}
