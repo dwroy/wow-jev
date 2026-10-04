@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "urn:wow-agent:protocol:agent-v1",
   "title": "WoW Agent 协议 v1",
-  "description": "第 0 阶段跨语言观察、模拟动作与执行回执协议；不产生真实键鼠输入。",
+  "description": "三层 agent 观察、模拟/原生动作意图和执行回执；原生动作引用独立 wow-input schema，效果需观测证据。",
   "oneOf": [
     { "$ref": "#/definitions/observation" },
     { "$ref": "#/definitions/actionIntent" },
@@ -58,6 +58,14 @@
         }
       }
     },
+    "captureWindow": {
+      "type": "object", "additionalProperties": false,
+      "required": ["earliest_ms", "latest_ms"],
+      "properties": {
+        "earliest_ms": { "$ref": "#/definitions/milliseconds" },
+        "latest_ms": { "$ref": "#/definitions/milliseconds" }
+      }
+    },
     "observedField": {
       "type": "object",
       "additionalProperties": false,
@@ -74,7 +82,9 @@
           "uniqueItems": true,
           "items": { "$ref": "#/definitions/identifier" }
         },
-        "source_clock": { "$ref": "#/definitions/sourceClock" }
+        "source_clock": { "$ref": "#/definitions/sourceClock" },
+        "capture_window": { "$ref": "#/definitions/captureWindow" },
+        "reason": { "$ref": "#/definitions/reason" }
       },
       "allOf": [
         {
@@ -170,6 +180,14 @@
         "args": { "type": "object", "additionalProperties": false, "maxProperties": 0 }
       }
     },
+    "nativeAction": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "args"],
+      "properties": {
+        "name": { "const": "native_input" },
+        "args": { "$ref": "urn:wow-input:protocol:native-v1#/definitions/action" }
+      }
+    },
     "actionIntent": {
       "type": "object",
       "additionalProperties": false,
@@ -184,14 +202,22 @@
         "plan": { "$ref": "#/definitions/plan" },
         "based_on_observation_id": { "$ref": "#/definitions/identifier" },
         "actor": { "enum": ["code", "jev", "brain"] },
-        "mode": { "const": "simulated" },
+        "mode": { "enum": ["simulated", "live"] },
         "window_token": {
           "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/identifier" }]
         },
-        "action": { "$ref": "#/definitions/simulatedAction" },
+        "action": { "oneOf": [{ "$ref": "#/definitions/simulatedAction" }, { "$ref": "#/definitions/nativeAction" }] },
         "deadline_ms": { "$ref": "#/definitions/milliseconds" },
         "conditions": { "type": "array", "items": { "$ref": "#/definitions/condition" } }
-      }
+      },
+      "allOf": [{
+        "if": { "type": "object", "properties": { "mode": { "const": "simulated" } } },
+        "then": { "type": "object", "properties": { "action": { "$ref": "#/definitions/simulatedAction" } } },
+        "else": { "type": "object", "properties": {
+          "action": { "$ref": "#/definitions/nativeAction" },
+          "window_token": { "$ref": "#/definitions/identifier" }
+        } }
+      }]
     },
     "reason": {
       "type": "object",
@@ -208,11 +234,23 @@
       "required": ["status", "events_requested", "events_inserted"],
       "properties": {
         "status": { "enum": ["rejected", "simulated", "sent", "partial", "failed", "cancelled", "released"] },
-        "events_requested": { "$ref": "#/definitions/counter" },
-        "events_inserted": { "$ref": "#/definitions/counter" },
+        "events_requested": { "oneOf": [{ "$ref": "#/definitions/counter" }, { "type": "null" }] },
+        "events_inserted": { "oneOf": [{ "$ref": "#/definitions/counter" }, { "type": "null" }] },
+        "counts_status": { "enum": ["known", "unknown"] },
         "reason": { "$ref": "#/definitions/reason" }
       },
       "allOf": [
+        {
+          "if": { "type": "object", "properties": { "counts_status": { "const": "unknown" } }, "required": ["counts_status"] },
+          "then": { "type": "object", "properties": {
+            "status": { "const": "failed" },
+            "events_requested": { "type": "null" }, "events_inserted": { "type": "null" }
+          } },
+          "else": { "type": "object", "properties": {
+            "events_requested": { "$ref": "#/definitions/counter" },
+            "events_inserted": { "$ref": "#/definitions/counter" }
+          } }
+        },
         {
           "if": { "type": "object", "properties": { "status": { "enum": ["simulated", "rejected"] } } },
           "then": {

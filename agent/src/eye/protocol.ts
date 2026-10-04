@@ -1,0 +1,32 @@
+import { readFile } from 'node:fs/promises';
+import { Ajv, type ValidateFunction } from 'ajv';
+export interface EyeWindow { hwnd: string; pid: number; client_width: number; client_height: number; focused: boolean }
+export interface EyeReason { code: string; message?: string }
+export interface EyeClock { domain: 'windows-qpc'; at_ms: number }
+export interface EyeCommand { protocol: 'wow-eye'; version: 1; type: 'command'; session_id: string; id: string; op: 'sample' | 'shutdown'; save?: boolean }
+export interface EyeReady { protocol: 'wow-eye'; version: 1; type: 'ready'; session_id: string; capture_pid: number; window: EyeWindow; artifact_root: string; export_root: string | null; local_clock: EyeClock; capture_method: 'printwindow' }
+export interface EyeSample {
+  protocol: 'wow-eye'; version: 1; type: 'sample'; session_id: string; id: string; seq: number; window: EyeWindow;
+  capture: { status: 'ok' | 'unavailable'; started_qpc_ms: number; finished_qpc_ms: number; method: 'printwindow'; reason?: EyeReason };
+  metrics: { mean_luma: number | null; variance_luma: number | null; frame_delta: number | null };
+  detectors: { inventory_open: { status: 'known' | 'unknown' | 'unavailable'; value: boolean | null; confidence: number; reason?: EyeReason; calibration_id: string | null } };
+  artifact: null | { id: string; windows_path: string; exported_windows_path?: string; sha256: string; width: number; height: number };
+  local_clock: EyeClock;
+}
+export interface EyeStopped { protocol: 'wow-eye'; version: 1; type: 'stopped'; session_id: string; id: string; local_clock: EyeClock }
+export interface EyeError { protocol: 'wow-eye'; version: 1; type: 'error'; session_id?: string; id?: string; reason: EyeReason; local_clock: EyeClock }
+export interface EyeOfflineResult { protocol: 'wow-eye'; version: 1; type: 'offline_result'; image: { width: number; height: number; sha256: string }; frame_status: 'ok' | 'unavailable'; metrics: EyeSample['metrics']; detectors: EyeSample['detectors']; local_clock: EyeClock }
+export type EyeMessage = EyeCommand | EyeReady | EyeSample | EyeStopped | EyeError | EyeOfflineResult;
+export type EyeValidator = ValidateFunction<EyeMessage>;
+export async function loadEyeValidator(path: string): Promise<EyeValidator> {
+  return new Ajv({ strict: true, allErrors: true }).compile<EyeMessage>(JSON.parse(await readFile(path, 'utf8')) as object);
+}
+export function assertEye(value: unknown, validator: EyeValidator): asserts value is EyeMessage {
+  if (!validator(value)) throw new Error(`eye_schema: ${(validator.errors ?? []).map((error) => `${error.instancePath} ${error.message}`).join('; ')}`);
+  if (value.type === 'sample') {
+    if (value.capture.started_qpc_ms > value.capture.finished_qpc_ms || value.capture.finished_qpc_ms > value.local_clock.at_ms) throw new Error('eye_windows_clock_order');
+    const detector = value.detectors.inventory_open;
+    if (detector.status === 'known' && typeof detector.value !== 'boolean' || detector.status !== 'known' && detector.value !== null) throw new Error('eye_detector_value');
+  }
+}
+export interface SampleBracket { sample: EyeSample; started_at_ms: number; received_at_ms: number }

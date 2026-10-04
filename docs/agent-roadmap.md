@@ -2,7 +2,7 @@
 
 用户于 2026-10-04 确认架构和逐步验收方式，并授权负责人组织工作树内并行研发、测试、验收及本地合并。当前测试目标为正式服客户端。
 
-当前状态：第 0、1 步已完成并通过负责人验收。第 1 步覆盖 Windows 专用记录窗口、WSL TypeScript 实际链路，以及正式服短移动/跳跃/转镜头/背包开关的本地画面复核。结果与入口见 [acceptance/stage-0.md](acceptance/stage-0.md) 和 [acceptance/stage-1.md](acceptance/stage-1.md)。第 2 步眼与状态日志未开始；正式服自动效果识别及整个 WSL 发行版重启恢复未实现/未验收。
+当前状态：第 0、1 步已完成并通过负责人验收。第 1 步覆盖 Windows 专用记录窗口、WSL TypeScript 实际链路，以及正式服短移动/跳跃/转镜头/背包开关的本地画面复核。第 2 步眼与状态日志已通过最终回归和正式服整链验收并本地集成；当前自动效果确认覆盖已校准的背包开关。结果见 [acceptance/stage-0.md](acceptance/stage-0.md)、[acceptance/stage-1.md](acceptance/stage-1.md)、[acceptance/stage-2.md](acceptance/stage-2.md)，体验见 [eye-runtime.md](eye-runtime.md)。移动等效果及整个 WSL 发行版重启恢复仍未自动确认/验收。
 
 ## 系统分工
 

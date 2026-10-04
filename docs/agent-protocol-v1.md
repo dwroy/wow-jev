@@ -1,8 +1,8 @@
 # WoW Agent 协议 v1
 
-这是第 0 阶段的跨语言协议，覆盖观察、动作意图和执行回执。唯一的动作是 `simulate_noop`：不截图、不调用模型、不发送键鼠输入，也不确认任何真实游戏效果。
+跨语言协议覆盖观察、动作意图和执行回执。第 0 阶段 `simulate_noop` 保持零输入；第 2 阶段增加有采样时间边界的真实观察和 `native_input` 意图，由第 1 阶段 Windows 执行器处理。效果确认必须另外引用观察证据。
 
-结构定义以 [`protocol/agent-v1.schema.json`](../protocol/agent-v1.schema.json) 为准，使用 JSON Schema draft-07。现有 [`protocol/schema_v1.json`](../protocol/schema_v1.json) 仍是 JevBridge 像素桥载荷定义，不属于同一版本体系。像素桥以后经过感知适配器转换成本协议的 Observation，不改动原有二进制协议。
+结构定义以 [`protocol/agent-v1.schema.json`](../protocol/agent-v1.schema.json) 为准，使用 JSON Schema draft-07。原生动作参数通过外部 `$ref` 复用 [`native-input-v1.schema.json`](../protocol/native-input-v1.schema.json) 的 action 定义；加载器在编译前登记该 schema，不复制另一套键鼠参数。现有 [`protocol/schema_v1.json`](../protocol/schema_v1.json) 仍是 JevBridge 像素桥载荷定义，不属于同一版本体系。像素桥以后经过感知适配器转换成本协议的 Observation，不改动原有二进制协议。
 
 ## 1. 消息与时间域
 
@@ -16,14 +16,14 @@
 | `version` | 固定为整数 `1` |
 | `type` | `observation`、`action_intent` 或 `execution_receipt` |
 | `id` | 本次运行内唯一消息 ID；1–128 个 ASCII 字符，限字母、数字、点、下划线、冒号和连字符，首字符为字母或数字 |
-| `run_id` | 一次运行及其协调器时钟域；重启或回放创建新 ID |
+| `run_id` | 一次运行及其协调器时钟域；新在线运行创建新 ID；离线回放保留源运行身份和原时标 |
 | `at_ms` | 协调器本次运行内的单调时钟毫秒数，非负整数 |
 
 `at_ms` 是消息进入统一运行日志的时间。观察字段另有 `captured_at_ms`，表示来源画面或来源事件的采集时间。两者都属于同一个 `run_id` 的协调器时钟域，整数上限为 JavaScript 的最大安全整数。
 
 Windows QPC、游戏 GetTime 和 WSL 的单调时钟不共享起点。未经对时，不能相减或直接拿来计算时效。原始值可以存入字段的 `source_clock: {domain, value_ms}`，其 `domain` 必须标识具体生产者和时钟实例。原始游戏计时器回绕、游戏重启或进程重启后不能继续当作原时钟实例。
 
-感知请求可以在协调器发起时标记采集时间，并将该时间沿截屏、识别和返回链传递。后续如果需要更精确的跨进程采集时间，再记录对时偏差和误差范围。不能先假定同机就是同一时钟。
+真实跨系统感知请求在协调器发起时标记 `capture_window.earliest_ms`，完整接收时标记 `latest_ms`。`captured_at_ms` 使用 earliest 这个保守下界；latest 必须不晚于 Observation.at_ms。这样没有对时也能给出保守字段年龄，不能把接收或模型完成时间冒充采集时间。该区间只包围一次截屏请求，不证明游戏 GPU 画面的生成时间。后续如果需要更精确的跨进程采集时间，再记录对时偏差和误差范围。不能先假定同机就是同一时钟。
 
 Schema 验证消息的结构；以下关系必须由运行层检查：
 
@@ -67,7 +67,9 @@ JSON Schema 不能比较两个属性的数值、验证跨消息引用、证明�
 
 例如 `target` 的 `known + null` 表示明确没有目标；`unknown + null` 表示不能判断目标。未提供字段也表示未知，不能补成 0 或 false。`known` 表示有观测结果，不表示推断永远正确。
 
-Seed 返回时间晚于截图时，字段继续使用原截图的 `captured_at_ms`。同一字段融合时先比较采集时间，不能让迟到结果覆盖更新的值。同一时刻不同来源冲突时，根据经过验证的字段来源规则处理，或保留未知；不能把模型自报的置信度当作校准准确率。
+可选 `reason: {code,message?}` 区分 unsupported、低相似度、未启用、过期等原因。`unavailable + reason:unsupported` 表示不支持；明确不存在使用 known false 或明确的 known null，不能把 unknown 变为 false。
+
+Seed 返回时间晚于截图时，字段继续使用原截图的 `captured_at_ms`、capture_window、source_observation_id 和 artifact 引用。同一字段融合时先比较采集时间，不能让迟到结果覆盖更新的值。同一时刻不同来源冲突时，根据经过验证的字段来源规则处理，或保留未知；不能把模型自报的置信度当作校准准确率。
 
 像素桥 `caps` 为 false 的字段映射为 `unavailable`，不能把载荷里的 0 当真值。像素桥低 32 位目标 GUID 只保存为来源片段，不冒充完整目标身份。
 
@@ -82,9 +84,9 @@ Seed 返回时间晚于截图时，字段继续使用原截图的 `captured_at_m
 | `plan: {id, revision}` | 当前计划身份及版本；revision 从 1 开始 |
 | `based_on_observation_id` | 作出决定时使用的观察 |
 | `actor` | `code`、`jev` 或 `brain` |
-| `mode` | 第 0 步固定为 `simulated` |
+| `mode` | simulated 为 no-op；live 为明确的原生输入意图 |
 | `window_token` | 本动作绑定的窗口会话；无窗口模拟时为 `null` |
-| `action` | 第 0 步仅为 `{"name":"simulate_noop","args":{}}` |
+| `action` | 模拟 simulate_noop，或真实 native_input（参数复用 wow-input action schema） |
 | `deadline_ms` | 最晚允许开始执行的时间 |
 | `conditions` | 本动作需要满足的观察条件列表，可为空 |
 
@@ -98,7 +100,7 @@ Seed 返回时间晚于截图时，字段继续使用原截图的 `captured_at_m
 
 运行层还应检查当前计划 revision、窗口会话和必要的执行前置条件。新计划生效后，旧大脑回答和待执行动作失效。未来真实键鼠动作必须有非空窗口身份，并由 Windows 侧再次核实实际焦点；先前的 `focused: true` 不是持续有效的保证。
 
-本阶段 schema 不接受真实动作名、任意 `args` 或 `mode: live` 的 ActionIntent。新增技能或输入动作时，先扩展动作注册表、schema 和验证，再接执行器。
+`mode: simulated` 仅接受 simulate_noop；`mode: live` 仅接受 `action: {name:native_input,args:NativeAction}`，且 window_token 非空。args 由原生输入 schema 严格约束。计划/条件闸和技能编排仍按第 3 阶段逐步实现，记录动作时不能跳过当前窗口和输入层检查。
 
 ## 4. ExecutionReceipt：输入与效果分开
 
@@ -106,7 +108,7 @@ Seed 返回时间晚于截图时，字段继续使用原截图的 `captured_at_m
 
 同一动作可以产生多个回执，每个回执有独立消息 ID，`revision` 严格递增。更新只能推进已知状态，不能用旧回执覆盖新回执。
 
-`input` 必须有 `status`、`events_requested` 和 `events_inserted`；事件计数为非负整数。
+`input` 必须有 `status`、`events_requested` 和 `events_inserted`；已知事件计数为非负整数。可选 counts_status 默认 known。传输失效且无法确认实际计数时，live failed 回执使用 counts_status:unknown，两个计数字段均为 null，不能用 0/0 冒充没有发送输入。未知计数不允许 sent/partial/released，也不能用于模拟回执。
 
 | input.status | 含义 |
 |---|---|
@@ -141,11 +143,11 @@ Seed 返回时间晚于截图时，字段继续使用原截图的 `captured_at_m
 }
 ```
 
-Schema 为后续阶段保留 `mode: live` 的回执形状，当前没有合法的 live ActionIntent 或真实执行器。模拟模式强制零输入计数，效果固定为 `not_applicable`，不能生成 `sent` 或 `confirmed`。执行被拒绝的模拟回执同样没有真实效果验证。
+当前支持合法的 live ActionIntent 与第 1 阶段真实执行器；原生回执说明输入，转换为 agent 回执后仍须单独验证效果。模拟模式强制零输入计数，效果固定为 `not_applicable`，不能生成 `sent` 或 `confirmed`。执行被拒绝的模拟回执同样没有真实效果验证。
 
 ## 5. 执行生命周期约束
 
-以下是后续键鼠 adapter 必须实现的约束，本阶段仅定义契约，不宣称已有 Windows 实测：
+以下为键鼠生命周期契约，第 1 阶段已验收的实际范围见 [stage-1.md](acceptance/stage-1.md)，不能据此外推整个 WSL 重启：
 
 - 一个 action ID 最多派发一次动作。重复同一请求返回既有回执；同 ID、不同内容拒绝。取消和释放是原动作的生命周期操作，不是重新派发。
 - `partial`、确认超时或断连后先重新观察，不自动重复技能、点击或其他输入。
@@ -153,7 +155,7 @@ Schema 为后续阶段保留 `mode: live` 的回执形状，当前没有合法�
 - 失焦、取消、断连和急停释放本程序持有的键与按钮。释放不能被场景闸或焦点闸拒绝。取消不等于已经释放。
 - 独立看门狗覆盖执行进程被强杀的场景；进程内 `finally` 无法保证这种情况下松键。
 - 输入调度器统一管理重叠动作的键和按钮占用，防止一个动作结束时松开另一个动作仍持有的键。
-- Record、Replay、Shadow 和模拟模式不能转发真实输入。真实执行通过明确的 adapter 和运行模式启用。
+- 离线 Replay、只读观察和模拟模式不能转发真实输入。有限 record-action 必须显式 live，经统一原生 adapter，并记录前后观察与真实回执。
 
 ## 6. 正反例与验证边界
 

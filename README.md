@@ -13,6 +13,8 @@ npm run demo
 
 第 0 阶段不发送游戏输入。第 1 阶段已提供真实 Windows 键鼠入口，默认 dry-run；专用记录窗口、TypeScript 链路与一轮正式服效果复核均已通过，见 [第 1 阶段验收记录](docs/acceptance/stage-1.md)。感知、Jev、大脑和学习能力按计划逐步接入。
 
+第 2 阶段已接通 Windows 截图/CV、WSL 状态与日志、异步 Seed 和离线回放；真实背包开关整链已通过，最终交付状态见 [第 2 阶段验收记录](docs/acceptance/stage-2.md)。体验方法见 [眼运行时](docs/eye-runtime.md)。当前自动效果确认覆盖已校准布局的背包开关；Jev、大脑和学习尚未接入。
+
 ```bash
 # 构建输入执行器、独立释放看门狗和专用测试窗口
 bash native/windows/build.sh
