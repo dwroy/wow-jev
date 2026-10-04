@@ -129,3 +129,20 @@ test('capture timing keeps the request lower bound and does not compare unmapped
   const unsupported = { ...field, status: 'unavailable', value: null, reason: { code: 'unsupported' } };
   assert.ok(validateMessage({ ...sample, fields: { 'player.health_ratio': unsupported } }, validator).ok);
 });
+
+test('transport failure can record unknown counts without inventing zero input', async () => {
+  const validator = await loadProtocolValidator(schemaPath);
+  const base = createDemo('unknown-input-counts')[2];
+  assert.ok(base?.type === 'execution_receipt');
+  const receipt: ExecutionReceipt = {
+    ...base, mode: 'live',
+    input: { status: 'failed', counts_status: 'unknown', events_requested: null, events_inserted: null,
+      reason: { code: 'transport_unconfirmed' } },
+    effect: { status: 'unknown', evidence_observation_ids: [], reason: { code: 'transport_unconfirmed' } },
+  };
+  assert.ok(validateMessage(receipt, validator).ok, JSON.stringify(validator.errors));
+  assert.equal(validator({ ...receipt, mode: 'simulated' }), false);
+  assert.equal(validator({ ...receipt, input: { ...receipt.input, events_requested: 0, events_inserted: 0 } }), false);
+  assert.equal(validator({ ...receipt, input: { ...receipt.input, status: 'sent' } }), false);
+  assert.equal(validator({ ...receipt, input: { ...receipt.input, counts_status: 'known' } }), false);
+});

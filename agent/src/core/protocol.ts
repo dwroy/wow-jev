@@ -73,17 +73,18 @@ export type ActionIntent = ActionIntentBase & (
   | { mode: 'live'; window_token: string; action: { name: 'native_input'; args: NativeAction } }
 );
 
+export type InputResult = { reason?: { code: string; message?: string } } & (
+  | { counts_status?: 'known'; status: 'rejected' | 'simulated' | 'sent' | 'partial' | 'failed' | 'cancelled' | 'released';
+      events_requested: number; events_inserted: number }
+  | { counts_status: 'unknown'; status: 'failed'; events_requested: null; events_inserted: null }
+);
+
 export interface ExecutionReceipt extends Envelope {
   type: 'execution_receipt';
   action_id: string;
   revision: number;
   mode: 'simulated' | 'live';
-  input: {
-    status: 'rejected' | 'simulated' | 'sent' | 'partial' | 'failed' | 'cancelled' | 'released';
-    events_requested: number;
-    events_inserted: number;
-    reason?: { code: string; message?: string };
-  };
+  input: InputResult;
   effect: {
     status: 'pending' | 'confirmed' | 'failed' | 'unknown' | 'not_applicable';
     evidence_observation_ids: string[];
@@ -135,12 +136,14 @@ export function semanticErrors(message: AgentMessage): string[] {
     if (finish !== null && finish > message.at_ms) errors.push('/timing/finished_at_ms: 不得晚于回执 at_ms。');
     if (start !== null && finish !== null && start > finish) errors.push('/timing: 完成时间不得早于开始时间。');
     const input = message.input;
-    if (input.events_inserted > input.events_requested) errors.push('/input/events_inserted: 不得超过请求事件数。');
-    if (input.status === 'sent' && (input.events_requested === 0 || input.events_inserted !== input.events_requested)) {
-      errors.push('/input/status: sent 必须表示所有请求事件已插入。');
-    }
-    if (input.status === 'partial' && !(input.events_inserted > 0 && input.events_inserted < input.events_requested)) {
-      errors.push('/input/status: partial 必须满足 0 < 插入数 < 请求数。');
+    if (input.counts_status !== 'unknown') {
+      if (input.events_inserted > input.events_requested) errors.push('/input/events_inserted: 不得超过请求事件数。');
+      if (input.status === 'sent' && (input.events_requested === 0 || input.events_inserted !== input.events_requested)) {
+        errors.push('/input/status: sent 必须表示所有请求事件已插入。');
+      }
+      if (input.status === 'partial' && !(input.events_inserted > 0 && input.events_inserted < input.events_requested)) {
+        errors.push('/input/status: partial 必须满足 0 < 插入数 < 请求数。');
+      }
     }
     if (input.status === 'rejected' && message.effect.status === 'confirmed') {
       errors.push('/effect/status: 被拒绝的输入不能宣称游戏效果已确认。');
