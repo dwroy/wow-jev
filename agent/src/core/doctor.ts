@@ -174,9 +174,8 @@ export async function runDoctor(
     binaryCheck('windows_csc', options.cscPath, deps),
     windowsCheck(options, deps),
     dpiCheck(options, deps),
-    Promise.resolve<DoctorCheck>({
-      id: 'input_adapter', status: 'skipped', detail: '第 1 阶段键鼠执行适配器尚未实现；当前仅支持模拟。',
-    }),
+    binaryCheck('input_adapter', join(options.legacyRoot, 'native/windows/bin/WinInput.exe'), deps),
+    binaryCheck('input_watchdog', join(options.legacyRoot, 'native/windows/bin/WinInputWatchdog.exe'), deps),
   ]);
   return {
     stage: 'foundation', real_input_enabled: false,
