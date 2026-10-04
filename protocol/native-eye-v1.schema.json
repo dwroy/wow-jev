@@ -1,0 +1,646 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:wow-agent:native-eye-v1",
+  "title": "Windows 只读截图/CV 协议 v1",
+  "description": "源时钟为 Windows QPC；offline_result 不代表实时 PrintWindow 捕获。",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/command"
+    },
+    {
+      "$ref": "#/definitions/ready"
+    },
+    {
+      "$ref": "#/definitions/sample"
+    },
+    {
+      "$ref": "#/definitions/stopped"
+    },
+    {
+      "$ref": "#/definitions/error"
+    },
+    {
+      "$ref": "#/definitions/offline"
+    }
+  ],
+  "definitions": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "domain",
+        "at_ms"
+      ],
+      "properties": {
+        "domain": {
+          "const": "windows-qpc"
+        },
+        "at_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "reason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hwnd",
+        "pid",
+        "client_width",
+        "client_height",
+        "focused"
+      ],
+      "properties": {
+        "hwnd": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{1,16}$"
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "client_width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "client_height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "focused": {
+          "type": "boolean"
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mean_luma",
+        "variance_luma",
+        "frame_delta"
+      ],
+      "properties": {
+        "mean_luma": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 255
+            }
+          ]
+        },
+        "variance_luma": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 65025
+            }
+          ]
+        },
+        "frame_delta": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          ]
+        }
+      }
+    },
+    "detector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "value",
+        "confidence",
+        "calibration_id"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "known",
+            "unknown",
+            "unavailable"
+          ]
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "reason": {
+          "$ref": "#/definitions/reason"
+        },
+        "calibration_id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "known"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "boolean"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "value": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "detectors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inventory_open"
+      ],
+      "properties": {
+        "inventory_open": {
+          "$ref": "#/definitions/detector"
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "windows_path",
+        "sha256",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "windows_path": {
+          "type": "string",
+          "pattern": "^[A-Za-z]:\\\\"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "exported_windows_path": {
+          "type": "string",
+          "pattern": "^(?:[A-Za-z]:\\\\|\\\\\\\\[^\\\\]+\\\\[^\\\\]+\\\\)"
+        }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "started_qpc_ms",
+        "finished_qpc_ms",
+        "method"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "ok",
+            "unavailable"
+          ]
+        },
+        "started_qpc_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "finished_qpc_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "method": {
+          "const": "printwindow"
+        },
+        "reason": {
+          "$ref": "#/definitions/reason"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "unavailable"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "reason"
+            ],
+            "properties": {
+              "reason": {
+                "$ref": "#/definitions/reason"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "id",
+        "op"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-eye"
+        },
+        "version": {
+          "const": 1
+        },
+        "session_id": {
+          "$ref": "#/definitions/uuid"
+        },
+        "type": {
+          "const": "command"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "op": {
+          "enum": [
+            "sample",
+            "shutdown"
+          ]
+        },
+        "save": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "op": {
+                "const": "shutdown"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "save": false
+            }
+          }
+        }
+      ]
+    },
+    "ready": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "session_id",
+        "local_clock",
+        "type",
+        "window",
+        "artifact_root",
+        "capture_method",
+        "capture_pid",
+        "export_root"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-eye"
+        },
+        "version": {
+          "const": 1
+        },
+        "session_id": {
+          "$ref": "#/definitions/uuid"
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        },
+        "type": {
+          "const": "ready"
+        },
+        "window": {
+          "$ref": "#/definitions/window"
+        },
+        "artifact_root": {
+          "type": "string",
+          "pattern": "^[A-Za-z]:\\\\"
+        },
+        "capture_method": {
+          "const": "printwindow"
+        },
+        "capture_pid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "export_root": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[A-Za-z]:\\\\|\\\\\\\\[^\\\\]+\\\\[^\\\\]+(?:\\\\|$))"
+            }
+          ]
+        }
+      }
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "session_id",
+        "local_clock",
+        "type",
+        "id",
+        "seq",
+        "window",
+        "capture",
+        "metrics",
+        "detectors",
+        "artifact"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-eye"
+        },
+        "version": {
+          "const": 1
+        },
+        "session_id": {
+          "$ref": "#/definitions/uuid"
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        },
+        "type": {
+          "const": "sample"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "window": {
+          "$ref": "#/definitions/window"
+        },
+        "capture": {
+          "$ref": "#/definitions/capture"
+        },
+        "metrics": {
+          "$ref": "#/definitions/metrics"
+        },
+        "detectors": {
+          "$ref": "#/definitions/detectors"
+        },
+        "artifact": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/artifact"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "stopped": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "session_id",
+        "local_clock",
+        "type",
+        "id"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-eye"
+        },
+        "version": {
+          "const": 1
+        },
+        "session_id": {
+          "$ref": "#/definitions/uuid"
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        },
+        "type": {
+          "const": "stopped"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "reason",
+        "local_clock"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-eye"
+        },
+        "version": {
+          "const": 1
+        },
+        "session_id": {
+          "$ref": "#/definitions/uuid"
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        },
+        "type": {
+          "const": "error"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "reason": {
+          "$ref": "#/definitions/reason"
+        }
+      }
+    },
+    "offline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "image",
+        "frame_status",
+        "metrics",
+        "detectors",
+        "local_clock"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-eye"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "offline_result"
+        },
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "width",
+            "height",
+            "sha256"
+          ],
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          }
+        },
+        "frame_status": {
+          "enum": [
+            "ok",
+            "unavailable"
+          ]
+        },
+        "metrics": {
+          "$ref": "#/definitions/metrics"
+        },
+        "detectors": {
+          "$ref": "#/definitions/detectors"
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        }
+      }
+    }
+  }
+}
