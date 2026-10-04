@@ -41,7 +41,7 @@ static class WinInput
         public KeySpec[] Keys;
         public int Duration, Button, X, Y, Dx, Dy, Delta, FromX, FromY, ToX, ToY;
         public long StartedMs = -1;
-        public int Requested, Inserted;
+        public long Requested, Inserted;
         public bool OwnedEver;
         public bool ReleaseAccounted;
         public readonly object ReleaseSync = new object();
@@ -135,7 +135,7 @@ static class WinInput
             ready.Add("capabilities", Obj("keys", names, "max_duration_ms", MaxDurationMs, "heartbeat_lease_ms", HeartbeatLeaseMs));
             Emit(ready);
         }
-        Dictionary<string, object> Reply(Command command, string status, string inputStatus, int requested, int inserted,
+        Dictionary<string, object> Reply(Command command, string status, string inputStatus, long requested, long inserted,
             bool released, long startedMs, long finishedMs, string reason, string message)
         {
             Dictionary<string, object> reply = Base("receipt");
@@ -178,7 +178,7 @@ static class WinInput
                     if (reason != null)
                     {
                         RequestStop(reason);
-                        TryRelease(current, 500);
+                        ReleaseUntilSafe(current);
                         Error("session_stopped", reason);
                         WaitOutput(150);
                         Environment.Exit(3);
@@ -188,7 +188,9 @@ static class WinInput
                 }
                 catch (Exception error)
                 {
-                    RequestStop("lease_monitor_failed"); TryRelease(null, 500);
+                    RequestStop("lease_monitor_failed");
+                    Work current; lock (stateLock) current = active;
+                    ReleaseUntilSafe(current);
                     Error("session_stopped", error.Message); WaitOutput(150); Environment.Exit(3); return;
                 }
                 Thread.Sleep(20);
@@ -275,6 +277,17 @@ static class WinInput
         {
             if (work != null) lock (work.ReleaseSync) return ReleaseLoop(work, timeoutMs);
             return ReleaseLoop(null, timeoutMs);
+        }
+        void ReleaseUntilSafe(Work work)
+        {
+            // When the guardian is gone, exiting would relinquish admission
+            // while old UP retries can still affect a new session. Quarantine
+            // remains alive and owns admission until the ledger is empty.
+            while (true)
+            {
+                if (TryRelease(work, 500).Released) return;
+                Thread.Sleep(20);
+            }
         }
         ReleaseResult ReleaseLoop(Work work, int timeoutMs)
         {
@@ -524,7 +537,7 @@ static class WinInput
             ending = true; RequestStop(stopReason.Length == 0 ? "executor_exit" : stopReason);
             Work current; lock (stateLock) current = active;
             if (current != null && current.Thread != null) current.Thread.Join(700);
-            TryRelease(null, 500); WaitOutput(200);
+            ReleaseUntilSafe(current); WaitOutput(200);
             // Leave the watchdog alive until it has independently observed stop and released the ledger.
             try { watchdog.WaitForExit(1500); } catch { }
             output.CompleteAdding(); outputThread.Join(200);
@@ -610,7 +623,7 @@ static class WinInput
         if (message.Length > 2048) message = message.Substring(0, 2048);
         return Obj("code", code, "message", message);
     }
-    static string InputSummary(int requested, int inserted, bool released, bool ownedEver)
+    static string InputSummary(long requested, long inserted, bool released, bool ownedEver)
     {
         if (requested == 0) return "not_sent";
         if (inserted == 0) return "failed";
@@ -659,6 +672,7 @@ static class WinInput
     {
         Console.InputEncoding = new UTF8Encoding(false); Console.OutputEncoding = new UTF8Encoding(false);
         Native.MakeDpiAware(); string session = Guid.Empty.ToString("D");
+        Mutex admission = null; bool ownsAdmission = false;
         try
         {
             if (args.Length == 1 && args[0] == "list")
@@ -681,6 +695,10 @@ static class WinInput
                 throw new ArgumentException("Session must be a nonempty canonical lowercase UUID");
             session = requestedSession;
             if (!File.Exists(args[8])) throw new ArgumentException("Watchdog executable does not exist");
+            admission = new Mutex(false, LeaseStore.GlobalExecutorAdmissionMutexName);
+            try { ownsAdmission = admission.WaitOne(0); }
+            catch (AbandonedMutexException) { ownsAdmission = true; }
+            if (!ownsAdmission) throw new InputFailure("executor_busy", "A previous executor still owns input admission or is releasing its ledger");
             using (Server server = new Server(session, new IntPtr(handle), pid, args[8])) server.Run();
             return 0;
         }
@@ -692,6 +710,11 @@ static class WinInput
                 "local_clock", Obj("domain", "windows-qpc", "at_ms", Clock.NowMs));
             Console.WriteLine(new JavaScriptSerializer().Serialize(result));
             return 2;
+        }
+        finally
+        {
+            if (ownsAdmission && admission != null) admission.ReleaseMutex();
+            if (admission != null) admission.Dispose();
         }
     }
 }

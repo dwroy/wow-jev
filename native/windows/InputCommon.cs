@@ -115,6 +115,9 @@ namespace WowJev.Input
         const int Magic = 0x57495631;
         const int Capacity = 256;
         public const string GlobalOwnerMutexName = "Local\\WowJevInput.GlobalOwner";
+        // Main executor thread owns this for its entire lifetime. The guardian
+        // separately owns GlobalOwnerMutex until the old ledger has been cleared.
+        public const string GlobalExecutorAdmissionMutexName = "Local\\WowJevInput.ExecutorAdmission";
         public readonly string SessionId;
         public readonly string MemoryName;
         public readonly string MutexName;
