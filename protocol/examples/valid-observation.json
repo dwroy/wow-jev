@@ -1,0 +1,34 @@
+{
+  "protocol": "wow-agent",
+  "version": 1,
+  "type": "observation",
+  "id": "obs-demo-1",
+  "run_id": "run-protocol-demo",
+  "at_ms": 0,
+  "observation_seq": 0,
+  "window": null,
+  "fields": {
+    "scene": {
+      "value": "simulation",
+      "status": "known",
+      "captured_at_ms": 0,
+      "source": "simulated",
+      "source_observation_id": "obs-demo-1"
+    },
+    "target": {
+      "value": null,
+      "status": "unknown",
+      "captured_at_ms": 0,
+      "source": "simulated",
+      "source_observation_id": "obs-demo-1"
+    },
+    "ui.chat_focused": {
+      "value": null,
+      "status": "unavailable",
+      "captured_at_ms": 0,
+      "source": "simulated",
+      "source_observation_id": "obs-demo-1"
+    }
+  },
+  "artifacts": []
+}

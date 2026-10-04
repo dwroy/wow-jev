@@ -1,0 +1,16 @@
+{
+  "protocol": "wow-agent",
+  "version": 1,
+  "type": "action_intent",
+  "id": "act-invalid-args",
+  "run_id": "run-protocol-invalid",
+  "at_ms": 1,
+  "plan": { "id": "plan-demo", "revision": 1 },
+  "based_on_observation_id": "obs-demo-1",
+  "actor": "code",
+  "mode": "simulated",
+  "window_token": null,
+  "action": { "name": "simulate_noop", "args": { "key": "W" } },
+  "deadline_ms": 100,
+  "conditions": []
+}

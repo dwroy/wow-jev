@@ -1,0 +1,18 @@
+{
+  "protocol": "wow-agent",
+  "version": 1,
+  "type": "action_intent",
+  "id": "act-demo-1",
+  "run_id": "run-protocol-demo",
+  "at_ms": 1,
+  "plan": { "id": "plan-demo", "revision": 1 },
+  "based_on_observation_id": "obs-demo-1",
+  "actor": "code",
+  "mode": "simulated",
+  "window_token": null,
+  "action": { "name": "simulate_noop", "args": {} },
+  "deadline_ms": 100,
+  "conditions": [
+    { "field": "scene", "op": "eq", "value": "simulation", "max_age_ms": 100 }
+  ]
+}

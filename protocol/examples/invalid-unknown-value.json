@@ -1,0 +1,20 @@
+{
+  "protocol": "wow-agent",
+  "version": 1,
+  "type": "observation",
+  "id": "obs-invalid-unknown",
+  "run_id": "run-protocol-invalid",
+  "at_ms": 0,
+  "observation_seq": 0,
+  "window": null,
+  "fields": {
+    "player.hp": {
+      "value": 0,
+      "status": "unknown",
+      "captured_at_ms": 0,
+      "source": "simulated",
+      "source_observation_id": "obs-invalid-unknown"
+    }
+  },
+  "artifacts": []
+}

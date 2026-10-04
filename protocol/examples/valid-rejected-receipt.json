@@ -1,0 +1,19 @@
+{
+  "protocol": "wow-agent",
+  "version": 1,
+  "type": "execution_receipt",
+  "id": "receipt-rejected-1",
+  "run_id": "run-protocol-demo",
+  "at_ms": 101,
+  "action_id": "act-demo-1",
+  "revision": 1,
+  "mode": "simulated",
+  "input": {
+    "status": "rejected",
+    "events_requested": 0,
+    "events_inserted": 0,
+    "reason": { "code": "deadline_expired", "message": "超过最晚开始时间，没有执行。" }
+  },
+  "effect": { "status": "not_applicable", "evidence_observation_ids": [] },
+  "timing": { "started_at_ms": null, "finished_at_ms": 101 }
+}

@@ -1,0 +1,14 @@
+{
+  "protocol": "wow-agent",
+  "version": 1,
+  "type": "execution_receipt",
+  "id": "receipt-invalid-confirmed",
+  "run_id": "run-protocol-invalid",
+  "at_ms": 2,
+  "action_id": "act-future-live",
+  "revision": 1,
+  "mode": "live",
+  "input": { "status": "sent", "events_requested": 2, "events_inserted": 2 },
+  "effect": { "status": "confirmed", "evidence_observation_ids": [] },
+  "timing": { "started_at_ms": 1, "finished_at_ms": 2 }
+}
