@@ -148,10 +148,13 @@ static class WinInputWatchdog
             if (closed) return;
             try
             {
-                long now = Clock.NowMs;
                 bool alive = Native.IsProcessAlive(options.ExecutorPid, executorStart);
                 store.WithLock(delegate(LeaseSnapshot state)
                 {
+                    // Compare the locked snapshot with a time sampled after the
+                    // lock is acquired. A concurrent heartbeat may be newer than
+                    // any sample taken before process checks / lock waiting.
+                    long now = Clock.NowMs;
                     if (!stopping)
                     {
                         if (state.ExecutorPid != options.ExecutorPid || state.ExecutorStartTimeTicks != executorStart)
