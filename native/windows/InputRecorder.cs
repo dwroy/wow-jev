@@ -259,7 +259,7 @@ static class InputRecorder
                     { "extended", (bits & (1L << 24)) != 0 }, { "repeat", (bits & (1L << 30)) != 0 }
                 });
             }
-            else if (kind >= 0x0200 && kind <= 0x020A && kind != 0x0203 && kind != 0x0206 && kind != 0x0209)
+            else if (kind >= 0x0200 && kind <= 0x020A)
             {
                 int x = (short)(message.LParam.ToInt64() & 65535);
                 int y = (short)((message.LParam.ToInt64() >> 16) & 65535);
@@ -273,8 +273,10 @@ static class InputRecorder
                 }
                 else
                 {
-                    record["event"] = kind == 0x0201 || kind == 0x0204 || kind == 0x0207 ? "mouse_down" : "mouse_up";
-                    record["button"] = kind == 0x0201 || kind == 0x0202 ? "left" : (kind == 0x0204 || kind == 0x0205 ? "right" : "middle");
+                    bool doubleClick = kind == 0x0203 || kind == 0x0206 || kind == 0x0209;
+                    record["event"] = kind == 0x0201 || kind == 0x0204 || kind == 0x0207 || doubleClick ? "mouse_down" : "mouse_up";
+                    record["button"] = kind >= 0x0201 && kind <= 0x0203 ? "left" : (kind >= 0x0204 && kind <= 0x0206 ? "right" : "middle");
+                    if (doubleClick) record["double_click"] = true;
                 }
                 record["x"] = x; record["y"] = y;
                 context.Record(this, record);
