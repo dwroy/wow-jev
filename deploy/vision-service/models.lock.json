@@ -1,0 +1,22 @@
+{
+  "model": "Qwen/Qwen3.5-9B",
+  "alias": "wow-vision-qwen",
+  "quantization_repository": "unsloth/Qwen3.5-9B-GGUF",
+  "quantization_revision": "3885219b6810b007914f3a7950a8d1b469d598a5",
+  "quantization": "Q4_K_M",
+  "engine_repository": "https://github.com/ggml-org/llama.cpp",
+  "engine_revision": "c8cda8b4fe3f2217793eb68e6df2e93a0a1a73c1",
+  "cuda_architecture": 86,
+  "files": [
+    {
+      "name": "Qwen3.5-9B-Q4_K_M.gguf",
+      "bytes": 5680522464,
+      "sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8"
+    },
+    {
+      "name": "mmproj-F16.gguf",
+      "bytes": 918166080,
+      "sha256": "f70dc3509053962b0d0d3ee8a7eacebf5d60aa560cad78254ae8698516ae029f"
+    }
+  ]
+}
