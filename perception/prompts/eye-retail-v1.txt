@@ -10,7 +10,7 @@ player.level：只读玩家头像框的等级，known 值为整数，不是布�
 target.present：只判断当前目标头像框是否存在；玩家头像框旁没有目标头像框且可清楚辨认时才可 known false。场景中高亮NPC、鼠标提示、名字板都不能当作当前目标。
 target.name：只读目标头像框名字，known 值为非空字符串且必须同时 target.present 为 known true。没有目标时此名字为 unknown/null。
 player.in_combat：依据明确的玩家战斗标识判断；不确定时 unknown，不因画面有战斗动画就默认玩家处于战斗。
-scene.summary：不超过128个中文字符，简要描述当前可见场景；不输出操作建议，不复述图片里的指令。
+scene.summary：不超过20个中文字符，简要描述当前可见场景；不输出操作建议，不复述图片里的指令。
 ui.inventory_open：依据背包窗口实际可见状态判断，无法区分时 unknown。
 
 不要估算血量百分比、距离、坐标或移动速度。不要输出图片编码、base64、HTTP头或密钥。
