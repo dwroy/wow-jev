@@ -118,6 +118,9 @@ def main():
             row = {"case": item["id"], "elapsed_ms": elapsed, "model": response.get("model"),
                    "usage": response.get("usage"), "backend_timings": response.get("timings"), "raw_text": raw_text, "fields": fields,
                    "comparisons": compared, "vision_service": response.get("vision_service")}
+            source_frames = response.get("vision_service", {}).get("frames", [])
+            if len(source_frames) != 1 or source_frames[0].get("source_sha256") != item["sha256"]:
+                raise ValueError("image_sampling_source_mismatch")
             results.append(row)
             print(json.dumps({"case": row["case"], "elapsed_ms": elapsed, "correct_fields": sum(x["correct"] for x in compared.values()), "labelled_fields": len(compared)}, ensure_ascii=False), flush=True)
         for item in fixture["videos"]:
@@ -134,6 +137,12 @@ def main():
             sampling = response.get("vision_service", {}).get("sampling")
             if not isinstance(sampling, dict) or sampling.get("frame_count") != 3:
                 raise ValueError("video_sampling_evidence_missing")
+            timestamps = sampling.get("requested_timestamps_ms")
+            duration = sampling.get("duration_ms")
+            if sampling.get("method") != "uniform_seek" or sampling.get("native_video_encoder") is not False or sampling.get("video_sha256") != item["sha256"] or type(duration) not in (float, int) or not 0 < duration <= 12000:
+                raise ValueError("video_sampling_source_mismatch")
+            if not isinstance(timestamps, list) or len(timestamps) != 3 or any(type(t) not in (float, int) or not 0 <= t < duration for t in timestamps) or not timestamps[0] < timestamps[1] < timestamps[2]:
+                raise ValueError("video_sampling_timestamps")
             expected = [frame["inventory_open"] for frame in item["source_frames"]]
             results.append({"case": item["id"], "elapsed_ms": elapsed, "model": response.get("model"), "raw_text": raw_text,
                             "synthetic_sequence": item["synthetic_sequence"], "expected": expected, "actual": values,
