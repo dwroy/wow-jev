@@ -22,19 +22,21 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def write_manifest(output_dir, native_dir):
-    paths = [ROOT / "protocol/native-input-v1.schema.json", ROOT / "profiles/input-default.json"]
-    paths += list((ROOT / "native/windows").glob("*.cs"))
-    paths += list((ROOT / "agent/src/hand").glob("*.ts"))
-    paths += list((ROOT / "tools").glob("*input*acceptance.py"))
-    paths += [ROOT / "tools/InputLeaseTestGate.cs"]
+def write_manifest(output_dir, native_dir, repo_root=ROOT):
+    paths = [repo_root / "protocol/native-input-v1.schema.json", repo_root / "capture/WinSnap.cs",
+             repo_root / "capture/bin/WinSnap.exe"]
+    paths += list((repo_root / "profiles").rglob("*.json"))
+    paths += list((repo_root / "native/windows").glob("*.cs"))
+    paths += list((repo_root / "agent/src/hand").glob("*.ts"))
+    paths += list((repo_root / "tools").glob("input*.py"))
+    paths += [repo_root / "tools/InputLeaseTestGate.cs"]
     paths += [native_dir / f"{name}.exe" for name in ("WinInput", "WinInputWatchdog", "InputRecorder")]
     manifest = {
         "started_utc": datetime.now(timezone.utc).isoformat(),
-        "git_head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+        "git_head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo_root, text=True).strip(),
         "python": sys.version.split()[0],
         "node": subprocess.check_output(["/usr/bin/node", "--version"], text=True).strip(),
-        "sha256": {str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path):
+        "sha256": {str(path.relative_to(repo_root)) if path.is_relative_to(repo_root) else str(path):
                    hashlib.sha256(path.read_bytes()).hexdigest() for path in paths if path.is_file()},
     }
     (output_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
