@@ -9,6 +9,7 @@
     "doctor": "tsx src/cli.ts doctor",
     "validate": "tsx src/cli.ts validate",
     "demo": "tsx src/cli.ts demo",
+    "input": "tsx src/hand/cli.ts",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
