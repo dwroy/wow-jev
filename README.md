@@ -2,7 +2,7 @@
 
 代码、Jev 小脑和执行大脑共同完成游戏任务；手统一执行键鼠动作，眼提供状态和证据，离线学习者从实际日志中更新经验、prompt 和代码。当前测试目标按用户指示采用正式服客户端。
 
-实施与验收见 [docs/agent-roadmap.md](docs/agent-roadmap.md)，协作规则见 [AGENTS.md](AGENTS.md)。新 agent 入口在 `agent/`，跨语言协议在 `protocol/agent-v1.schema.json`；第 0 阶段提供诊断、协议验证和纯模拟演示。
+实施与验收见 [docs/agent-roadmap.md](docs/agent-roadmap.md)，协作规则见 [AGENTS.md](AGENTS.md)。新 agent 入口在 `agent/`，跨语言协议在 `protocol/agent-v1.schema.json`；第 0 阶段已完成诊断、协议验证和纯模拟演示，结果见 [第 0 阶段验收记录](docs/acceptance/stage-0.md)。
 
 ```bash
 cd agent
