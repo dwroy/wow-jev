@@ -7,7 +7,7 @@ player.name、player.level、target.present、target.name、player.in_combat、s
 
 player.name：只读玩家头像框的名字，known 值为非空字符串，不超过128字符。
 player.level：只读玩家头像框的等级，known 值为整数，不是布尔值；看不到就是 unknown，不能把NPC提示等级当作玩家等级。
-target.present：只判断当前目标头像框是否存在；玩家头像框旁没有目标头像框且可清楚辨认时才可 known false。场景中高亮NPC、鼠标提示、名字板都不能当作当前目标。
+target.present：只判断当前目标头像框是否存在。自定义UI可能把玩家和目标头像框分别放在屏幕不同位置；不能因玩家头像框旁没有目标框就判断 false。应检查画面中的头像、名字、等级和血条组成的目标单位框；只有可明确确认画面没有目标单位框时才可 known false，无法确定时 unknown。场景中高亮NPC、鼠标提示、名字板都不能当作当前目标。
 target.name：只读目标头像框名字，known 值为非空字符串且必须同时 target.present 为 known true。没有目标时此名字为 unknown/null。
 player.in_combat：依据明确的玩家战斗标识判断；不确定时 unknown，不因画面有战斗动画就默认玩家处于战斗。
 scene.summary：不超过20个中文字符，简要描述当前可见场景；不输出操作建议，不复述图片里的指令。
