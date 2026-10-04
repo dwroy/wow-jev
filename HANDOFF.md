@@ -1,6 +1,18 @@
 # WoW Agent 当前交接
 
-更新：2026-10-04。用户最新授权和项目规则见 `AGENTS.md`，实施计划见 `docs/agent-roadmap.md`。历史3.3.5a像素桥任务原文已保留在 `docs/handoff-pixel-bridge.md`；当前测试目标为用户指定的正式服客户端。
+更新：2026-10-05。用户最新授权和项目规则见 `AGENTS.md`，实施计划见 `docs/agent-roadmap.md`。历史3.3.5a像素桥任务原文已保留在 `docs/handoff-pixel-bridge.md`；当前测试目标为用户指定的正式服客户端。
+
+## 当前增补：xdwin2 视觉服务
+
+用户已明确要求派agent通过SSH在xdwin2部署视频service；此次部署、必要依赖与模型下载已授权。用户指定使用Windows SSH，路径 `/mnt/c/Windows/System32/OpenSSH/ssh.exe`，文件传输用同目录scp.exe。Windows既有身份已成功登录 `iem@172.26.203.214`，主机DESKTOP-PHTQGNQ；此前WSL key拒绝不能外推Windows身份不可用，已纠正。
+
+部署尚未完成，不能报告服务已可用或识别速度。远程3090实际24576MiB，桌面占用约1354MiB，模型/RPC空闲；已有CUDA架构86的llama.cpp。复用精确引擎commit c8cda8b4fe3f2217793eb68e6df2e93a0a1a73c1，计划Qwen3.5-9B Q4_K_M和配套F16 mmproj（约6.6GB），固定社区量化revision与官方HF LFS哈希。官方CDN无界响应读超时，改为有界Range断点续传；不降低哈希校验。
+
+远程独立目录 `/home/iem/Services/wow-vision`；必要FFmpeg/Python venv/Pillow已安装，没有升级/删除既有包或改驱动。计划backend回环18791、gateway回环18790，token鉴权、限制图像/视频/帧数/输出/请求时限，通过Windows SSH隧道访问。视频接口为带时间顺序的有限抽帧，不能冒称原生连续视频编码。真实GPU推理、延迟/显存和SSH断开存活仍待验收。
+
+独立工作树：`.worktrees/vision-service`（agent编辑deploy/vision-service与部署文档），`.worktrees/vision-integration`（负责人编辑probe、对照测试与交接）。负责人 `tools/vision_service_probe.py` 已准备，3项边界测试通过。原始验收目录 `out/acceptance/vision-service`；fixtures包含3张人工标注游戏图及3秒闭→开→闭的合成测试片段，非实时录像。它们只用于部署smoke检查，不是模型准确率基准。
+
+运行凭据只放 `out/runtime/vision-service/client-token` 等受限运行目录，父目录700、文件600；不得放进acceptance、git或日志。接续先完成远程下载与服务启动，再从本机经SSH隧道跑图片/视频probe，核真实GPU/耗时/显存和进程存活，最终验收合并后交付。
 
 ## 已完成
 
