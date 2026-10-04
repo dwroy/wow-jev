@@ -1,6 +1,21 @@
-# wow-jev 像素桥 v1（JevBridge）
+# wow-jev：三层 WoW Agent
 
-> **只用于本地自建的 AzerothCore 3.3.5a 服务器上的研究实验。** 不在暴雪正式服、怀旧服或有真人玩家的公开私服上使用，也不做任何规避反作弊检测的工作。
+代码、Jev 小脑和执行大脑共同完成游戏任务；手统一执行键鼠动作，眼提供状态和证据，离线学习者从实际日志中更新经验、prompt 和代码。当前测试目标按用户指示采用正式服客户端。
+
+实施与验收见 [docs/agent-roadmap.md](docs/agent-roadmap.md)，协作规则见 [AGENTS.md](AGENTS.md)。新 agent 入口在 `agent/`，跨语言协议在 `protocol/agent-v1.schema.json`；第 0 阶段提供诊断、协议验证和纯模拟演示。
+
+```bash
+cd agent
+npm ci
+npm run doctor
+npm run demo
+```
+
+第 0 阶段不发送游戏输入。Windows 键鼠执行属于第 1 阶段；感知、Jev、大脑和学习能力按计划逐步接入。
+
+## 既有 3.3.5a 像素桥（JevBridge）
+
+下方介绍已有的本地 AzerothCore 3.3.5a 感知组件；它的客户端接口和插件适用范围独立于新 agent。旧插件不能直接当作正式服感知实现。
 
 Jev（快系统）+ DeepSeek（慢系统）实验的第 2 阶段感知层。WoW 插件把游戏状态编码成客户区左上角的一条色块，Windows 侧程序截屏、解码、校验，输出 JSON。像素桥只做感知，不做决策，也不碰键鼠。
 
