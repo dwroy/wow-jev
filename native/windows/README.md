@@ -37,6 +37,8 @@ stdout 为 JSONL：
 - `recorder_state`：周期性查询真实 `GetAsyncKeyState`，含 W、SPACE、CTRL、SHIFT、ALT、F10 与左右中鼠标按钮，以及当前焦点和聚合 `counts`。失焦不会清空或伪造释放状态。
 - `recorder_status`：控制命令执行后状态，含 `ok`、`op` 和可选请求 `id`；若有排队丢失，`output_dropped` 大于零，不能把该段事件日志当作完整记录。
 
+Windows 可能把连续点击的第二个 DOWN 表示为双击消息。左、右、中按钮的这类消息均记录为对应按钮的 `mouse_down`，并附 `double_click: true`；随后正常记录 `mouse_up`，不会漏掉第二次按下或另加一组虚构输入。
+
 stdin 控制示例：
 
 ```json
