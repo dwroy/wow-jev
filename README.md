@@ -11,7 +11,7 @@ npm run doctor
 npm run demo
 ```
 
-第 0 阶段不发送游戏输入。第 1 阶段已提供真实 Windows 键鼠入口，默认 dry-run；专用记录窗口与 TypeScript 链路实际验收通过，正式服效果待体验，见 [第 1 阶段验收记录](docs/acceptance/stage-1.md)。感知、Jev、大脑和学习能力按计划逐步接入。
+第 0 阶段不发送游戏输入。第 1 阶段已提供真实 Windows 键鼠入口，默认 dry-run；专用记录窗口、TypeScript 链路与一轮正式服效果复核均已通过，见 [第 1 阶段验收记录](docs/acceptance/stage-1.md)。感知、Jev、大脑和学习能力按计划逐步接入。
 
 ```bash
 # 构建输入执行器、独立释放看门狗和专用测试窗口
