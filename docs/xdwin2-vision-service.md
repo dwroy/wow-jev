@@ -100,13 +100,15 @@ Gateway 只监听 `127.0.0.1:18790`，backend 只监听 `127.0.0.1:18791`，均�
 
 模型下载脚本只下载锁定的两个公开文件；大响应读超时后改为 4 路 32MiB Range 下载，在完整长度和 SHA256 均匹配后才写 manifest。不会从社区仓库执行 Python 模型代码。
 
-本地 `test_gateway.py` 的 13 项 HTTP 契约与边界测试已通过。这些使用假 backend，验证认证、远程 URL 拒绝、JSON/媒体限额、帧序、超时和过载，以及模型语义错误时验收非零退出，不能代表实际 GPU、OCR 或视频理解效果。远端 Python 3.14 的同组基础 12 项也已通过。
+本地与远端 Python 3.14 的 `test_gateway.py` 同组 13 项 HTTP 契约与边界测试均已通过。这些使用假 backend，验证认证、远程 URL 拒绝、JSON/媒体限额、帧序、超时和过载，以及模型语义错误时验收非零退出，不能代表实际 GPU、OCR 或视频理解效果。
 
 真实服务初测记录在 `out/acceptance/vision-service/remote-smoke-1`。640×480 的合成大字 BLUE 三次均正确：首次 875.6ms、热请求 292.7/294.5ms；red→blue→red 三帧顺序判断正确，899.2ms。这些是简单合成图测试，不能外推为 WoW HUD 刷新速度。
 
 初测 GPU 峰值 8037MiB，利用率 99%。`remote-cuda-proof.json` 将精确 backend PID142548 对应到 NVIDIA compute-app，与它映射的 `libggml-cuda`、WSL `libcuda`、动态库 SHA、实际引擎版本及 CUDA86 构建对应；WSL 的每进程显存统计显示 N/A。默认日志未打印逐层 offload 数量，因此不把构建配置当作逐层实测。`remote-ssh-detach.json` 证明之前启动/测试 SSH 退出后，相同 supervisor/backend/gateway PID 仍存活且健康；没有测试整个 WSL 重启。
 
 Windows 隧道进程 PID8984，精确命令在 `remote-tunnel.json`，本机 `127.0.0.1:18792/health` 已由当前家里 WSL 实际请求成功。启动和探测 SSH 连接关闭后，该隧道与远端服务仍运行。
+
+`remote-lifecycle-1.json` 验证正常 stop 使原 supervisor/backend/gateway 三进程全部退出；哈希期间启动的 supervisor144201 也能立即 stop，尚无模型子进程，PID 文件清理；正常重启后同模型服务恢复健康，新的 supervisor/backend/gateway 为144210/144212/144213。早期 PID/信号登记、分块哈希取消检查已实现。没有测试 supervisor 的 SIGKILL 恢复；强杀监督进程不保证子进程回收，不把正常 stop 验证外推为这一场景。
 
 负责人 `home-probe-1` 的三张真实游戏截图单图 2.37–2.85 秒，目标栏均误判不存在，关闭背包有两次未知；接口/schema/hash/视频成功不能算游戏识别通过。三帧 MP4 约1.75秒，背包顺序正确。原错误保留，后续 prompt 对照由负责人单独记录，当前不自动据此执行游戏动作。
 
