@@ -2,7 +2,7 @@
 
 用户于 2026-10-04 确认架构和逐步验收方式，并授权负责人组织工作树内并行研发、测试、验收及本地合并。当前测试目标为正式服客户端。
 
-当前状态：第 0 步已完成并通过负责人验收，结果与体验入口见 [acceptance/stage-0.md](acceptance/stage-0.md)。下一阶段为第 1 步键鼠执行。
+当前状态：第 0 步已完成；第 1 步键鼠执行的工程部分已通过 Windows 专用记录窗口和 WSL TypeScript 实际链路验收，正式服游戏效果待用户体验。结果与入口见 [acceptance/stage-0.md](acceptance/stage-0.md) 和 [acceptance/stage-1.md](acceptance/stage-1.md)。第 1 步整体尚未验收通过，第 2 步未开始。
 
 ## 系统分工
 

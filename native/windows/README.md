@@ -20,6 +20,8 @@ WinInputWatchdog.exe serve --session <小写 UUID> --executor-pid <Windows PID>
 
 释放只发送账本所有权中的键和按钮的 UP。部分插入不会清除账本，也不会宣称释放完成；继续重试 UP，直到全部已插入。释放结束前持有唯一输入 mutex。看门狗自身被强杀由执行程序检测并停止；同时强杀两者的恢复不在当前保证内。
 
+执行程序主线程另持完整生命周期的 `ExecutorAdmission` mutex。看门狗死亡但旧执行程序尚在释放时，新执行程序以 `executor_busy` 拒绝启动。停机与 EOF 清理不能在 500ms 重试失败后带着所有权退出：Windows 执行程序继续存活、持有 admission 并重试 UP，直到账本为空。执行程序死亡时则由旧看门狗继续持有 GlobalOwner，清理完成后才允许新的看门狗就绪。
+
 `--log C:\本地目录\guardian.jsonl` 可记录本地诊断；UNC/WSL 路径不接受。诊断输出和文件写入经过有界后台队列，无法阻塞清理。stdout 断开、日志文件不可写不影响账本和释放；进程结束时后台诊断可能未全部写出，释放事实应以账本和记录窗口真实状态验收。
 
 ## 专用输入记录窗口

@@ -1,6 +1,6 @@
 # WoW Agent 在线入口
 
-第 0 阶段提供环境诊断、协议校验和离线演示。这里不会调用视觉 API，也没有真实键鼠执行入口。
+提供环境诊断、协议校验、离线演示，以及第 1 阶段 Windows 键鼠入口。当前不调用视觉 API；`input` 默认 dry-run，显式 `--live` 才发送真实输入。
 
 在仓库根目录安装本地依赖并验证：
 
@@ -62,3 +62,5 @@ npm --prefix agent run input -- panic --session UUID --live
 持久会话接受 `{"op":"execute","action":{...}}`、`{"op":"cancel"}`、`{"op":"release_all"}`、`{"op":"status"}`、`{"op":"shutdown"}`。同一时间只允许一个动作；控制命令与心跳能在持续动作期间处理。会话急停使用仅当前用户可访问的 0600 Unix socket。
 
 原生回执描述事件插入与 Owned 输入是否释放，`effect.status` 始终为 `unknown`。超时、断连和关闭管道不构成释放证据，WSL 不会据此宣称松键成功；它们由 Windows 看门狗兜底，实际强杀恢复需独立实测。
+
+可编辑的键位与时长示例位于 `profiles/actions/`，按游戏中的实际绑定修改 `keys`。例如 `npm --prefix agent run input -- --window 0xHWND --pid PID --action ../profiles/actions/jump.json` 默认只校验和打印，添加 `--live` 执行。运行参数位于 `profiles/input-default.json`，协议语义见 [native-input-v1.md](../docs/native-input-v1.md)，验收与体验入口见 [stage-1.md](../docs/acceptance/stage-1.md)。
