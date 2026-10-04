@@ -23,6 +23,8 @@ npm --prefix agent run input -- list
 npm --prefix agent run input -- --window 0xHWND --pid PID --action ../profiles/actions/jump.json
 ```
 
+xdwin2 本地视觉服务已部署：Qwen3.5-9B Q4_K_M、图片及有限视频抽帧接口，经Windows SSH隧道访问。该服务尚未切换为主agent视觉来源；使用与限制见 [部署说明](docs/xdwin2-vision-service.md)，真实游戏对照见 [验收记录](docs/acceptance/vision-service.md)。
+
 ## 既有 3.3.5a 像素桥（JevBridge）
 
 下方介绍已有的本地 AzerothCore 3.3.5a 感知组件；它的客户端接口和插件适用范围独立于新 agent。旧插件不能直接当作正式服感知实现。

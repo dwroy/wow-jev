@@ -4,15 +4,17 @@
 
 ## 当前增补：xdwin2 视觉服务
 
-用户已明确要求派agent通过SSH在xdwin2部署视频service；此次部署、必要依赖与模型下载已授权。用户指定使用Windows SSH，路径 `/mnt/c/Windows/System32/OpenSSH/ssh.exe`，文件传输用同目录scp.exe。Windows既有身份已成功登录 `iem@172.26.203.214`，主机DESKTOP-PHTQGNQ；此前WSL key拒绝不能外推Windows身份不可用，已纠正。
+服务已在 `iem@172.26.203.214`（DESKTOP-PHTQGNQ，3090）部署并通过负责人真实GPU/图像/有限MP4/本机隧道和生命周期验收。用户要求使用Windows SSH：`/mnt/c/Windows/System32/OpenSSH/ssh.exe`。Windows既有身份可用，不能把WSL key被拒外推为整个登录授权缺失。
 
-部署尚未完成，不能报告服务已可用或识别速度。远程3090实际24576MiB，桌面占用约1354MiB，模型/RPC空闲；已有CUDA架构86的llama.cpp。复用精确引擎commit c8cda8b4fe3f2217793eb68e6df2e93a0a1a73c1，计划Qwen3.5-9B Q4_K_M和配套F16 mmproj（约6.6GB），固定社区量化revision与官方HF LFS哈希。官方CDN无界响应读超时，改为有界Range断点续传；不降低哈希校验。
+远程目录 `/home/iem/Services/wow-vision`；Qwen3.5-9B Q4_K_M与配套F16 mmproj固定Unsloth revision、官方HF LFS SHA，复用既有llama.cpp c8cda8b、CUDA架构86。两份文件全SHA已核验，没有升级驱动/硬件；初期CDN大响应超时，分段并行续传后完成，失败记录保留。
 
-远程独立目录 `/home/iem/Services/wow-vision`；必要FFmpeg/Python venv/Pillow已安装，没有升级/删除既有包或改驱动。计划backend回环18791、gateway回环18790，token鉴权、限制图像/视频/帧数/输出/请求时限，通过Windows SSH隧道访问。视频接口为带时间顺序的有限抽帧，不能冒称原生连续视频编码。真实GPU推理、延迟/显存和SSH断开存活仍待验收。
+Gateway/backend仅绑定回环18790/18791，默认关闭思考、ctx8192、单生成slot、最多256输出token；MP4最多4帧/12秒，属于有序抽帧理解，不是原生视频流。通过本机Windows SSH隧道18792访问；当前隧道Windows PID8984，精确命令在out证据。远程当前supervisor/backend/gateway=144210/144212/144213。SSH断开存活、正常stop、校验期间取消启动与恢复ready已实测；没有开机自起、强杀监督进程或整个WSL重启恢复验证。
 
-独立工作树：`.worktrees/vision-service`（agent编辑deploy/vision-service与部署文档），`.worktrees/vision-integration`（负责人编辑probe、对照测试与交接）。负责人 `tools/vision_service_probe.py` 已准备，3项边界测试通过。原始验收目录 `out/acceptance/vision-service`；fixtures包含3张人工标注游戏图及3秒闭→开→闭的合成测试片段，非实时录像。它们只用于部署smoke检查，不是模型准确率基准。
+本机凭据在 `out/runtime/vision-service/client-token`，父目录700/文件600。凭据不进git、acceptance、manifest或日志。原始证据在 `out/acceptance/vision-service`；固定3图人工标签和3秒闭开闭合成视频不是准确率基准。
 
-运行凭据只放 `out/runtime/vision-service/client-token` 等受限运行目录，父目录700、文件600；不得放进acceptance、git或日志。接续先完成远程下载与服务启动，再从本机经SSH隧道跑图片/视频probe，核真实GPU/耗时/显存和进程存活，最终验收合并后交付。
+完整7字段图像识别约2.4–2.9秒，修正目标框位置假设后目标原文读对，但2/3结果unknown置信度0.5导致严格schema拒绝。精简5字段profile三图15个标注值均正确，单图1.60–1.91秒，视频1.90秒；这是任务减少的性能对照，不是引擎对照，仍不能作为长期可靠性或1fps承诺。WoW主程序默认继续Seed+CV；本地服务尚未接入在线状态。后续接入须解决格式与时效，并扩大游戏样例；ROI/OCR和短输出先优化，再按相同任务比较引擎。
+
+使用见 `docs/xdwin2-vision-service.md`；验收见 `docs/acceptance/vision-service.md`、`tools/vision_service_probe.py --compact`。本地/远端同13项HTTP边界测试与本地46项视觉/客户端回归通过。实施分支codex/xdwin2-vision-service（0df5a2c、6ec8fd2）及负责人集成均已留存，必要忽略产物归档后清理本轮工作树。
 
 ## 已完成
 

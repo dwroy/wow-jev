@@ -1,6 +1,6 @@
 # xdwin2 本地视觉服务验收
 
-当前部署进行中，尚未报告真实GPU推理通过。用户明确要求在xdwin2部署视频service，并指定使用Windows SSH。
+负责人已完成远程服务部署、真实GPU、图片/有限视频输入和生命周期验收，并本地集成。完整7字段游戏识别尚未通过；不据接口成功切换WoW默认视觉源。用户明确要求在xdwin2部署视频service，并指定使用Windows SSH。
 
 ## 目标与版本
 
@@ -17,22 +17,34 @@
 
 三秒视频是由已验收的游戏截图编码的关闭→打开→关闭测试片段，各1秒，非实时录制。实际FFmpeg预处理已得到500/1500/2500ms三帧；抽帧时间是请求seek位置，不冒称精确原生PTS。
 
-真实GPU图片推理、完整短视频理解、响应耗时、显存峰值、从本机调用及SSH断开后服务存活仍待完成。暂不将本地Qwen作为WoW在线状态默认来源。
+真实GPU图片及有序帧输入、MP4均匀抽帧理解、本机Windows SSH隧道访问、SSH断开存活、正常停止和哈希期间启动取消均通过。GPU初测峰值8037MiB（含桌面），实际backend PID对应CUDA动态库/NVIDIA compute-app及固定引擎版本已保存；未独立验证逐层offload数量、supervisor强杀或WSL重启。服务不自动开机启动，暂不将本地Qwen作为WoW在线状态默认来源。
 
 ## 固定样例与入口
 
 主checkout `out/acceptance/vision-service/fixtures/manifest.json` 含3张图的源SHA与人工标签、视频源SHA和合成说明。本地测试结果只作为部署检查，不足以估计游戏准确率。
 
-服务就绪、隧道建立后使用：
+当前隧道已建立，本机18792已实测可用。精简5字段测试入口：
 
 ```bash
 /usr/bin/python3 tools/vision_service_probe.py \
   --base-url http://127.0.0.1:18792 \
   --token-file /home/dai/Projects/wow-jev/out/runtime/vision-service/client-token \
   --fixtures /home/dai/Projects/wow-jev/out/acceptance/vision-service/fixtures/manifest.json \
-  --out /home/dai/Projects/wow-jev/out/acceptance/vision-service/home-probe-1
+  --out /home/dai/Projects/wow-jev/out/acceptance/vision-service/my-probe-1 --compact
 ```
 
 输出目录不能已存在；程序不发送游戏输入、不调用Seed。HTTP和schema通过与字段预测正确分别记录，错误也保留。检查源图/视频SHA、采样方法及时间顺序；记录预处理、后端和端到端耗时、用量及原始模型结果，不落盘Authorization或请求base64。
 
 凭据仅在`out/runtime/vision-service`运行目录，父目录700、文件600，不能写入验收目录/manifest/git。视频接口是最多4帧/12秒的有序抽帧理解，不处理音轨。单图缩放与多帧缩放的尺寸须随结果记录，识别误差不能只归因模型。
+
+## 真实结果与限制
+
+- `remote-smoke-1`：简单合成大字图片首次876ms、热请求约293ms；三帧颜色顺序899ms，不能外推WoW性能。当前服务PID在`remote-lifecycle-1.json`，精确隧道PID8984与命令在`remote-tunnel.json`。
+- `home-probe-1`：真实游戏图完整7字段2.37–2.85秒；3图共15个人工标注字段，7个读对、3个已知错判、5个unknown。目标框位置假设错误已修，旧错误/原始回复/旧prompt与哈希不改写。
+- `home-probe-2`：新prompt首图触发unknown/confidence语义错误，exit1，不当作通过。
+- `home-probe-3`：修正位置假设后三图原文都读对目标；2个完整结果把unknown字段confidence写成0.5，严格拒绝，exit1；原始错误保留，不自动改成0。闭包未知仍保留。
+- `home-compact-1`：精简到同5个标注字段、不生成战斗/场景/置信度，3图15个标注值均正确；首次1.91秒、后两张1.63/1.60秒，输出53token，约115token/s。视频1.90秒，闭→开→闭正确。该结果减少任务内容，不是换引擎带来的加速，也不是长期准确率或每秒一张吞吐证明。
+
+三秒视频为从截图合成的验证片段。尚未验证长视频、实时连续流、声音、移动轨迹或目标稳定识别。vLLM/SGLang未在该设备进行同任务性能对照。下一步优先研究固定UI区域/独立OCR和短输出，再评估引擎差异。服务代码不发送游戏输入。
+
+负责人最终本机Python视觉/客户端回归46项、HTTP网关边界13项通过（模拟后端，均exit0）；远端Python3.14同13项也通过。真实功能证据与模拟测试分开保存，不将测试exit0作为所有模型字段正确的证明。

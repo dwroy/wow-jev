@@ -6,7 +6,23 @@ from threading import Thread
 
 import pytest
 
-from tools.vision_service_probe import fixture_bytes, load_token, model_content, request
+from tools.vision_service_probe import fixture_bytes, load_token, model_content, request, validate_compact
+from perception.seed_worker import Failure
+
+
+def test_compact_profile_preserves_unknown_and_rejects_inconsistent_fields():
+    value = {"player.name": "Dwroy", "player.level": 10, "target.present": None,
+             "target.name": None, "ui.inventory_open": False}
+    fields = validate_compact(json.dumps(value))
+    assert fields["target.present"]["status"] == "unknown"
+    assert fields["ui.inventory_open"] == {"status": "known", "value": False}
+    value["player.level"] = True
+    with pytest.raises(Failure, match="compact_field_type"):
+        validate_compact(json.dumps(value))
+    value["player.level"] = 10
+    value["target.name"] = "卡雷苟斯"
+    with pytest.raises(Failure, match="inconsistent_target"):
+        validate_compact(json.dumps(value))
 
 
 def test_private_token_file_and_fixture_provenance(tmp_path):
