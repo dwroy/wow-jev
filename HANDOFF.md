@@ -12,7 +12,13 @@
 
 computer-use技能已读并尝试初始化/重试/重置，均因sandboxCwd is not a local file URI: file:///home/dai/Projects/wow-jev失败，没有用插件操作桌面。直接Wow.exe启动曾停初始提示；用户指正应从战网“进入游戏”，负责人实际用已登录Battle.net.exe --exec=launch WoW启动新正式服并按一次Enter进入既有Dwroy11，不处理认证/充值。当前真实游戏 HWND0x340894/PID18128/3840×2160；旧0x12c0892/PID25160不能复用。角色在营地安全平地、满血、骑坐骑，任务状态已变化，不能继续把原三任务当当前唯一目标。原生输入保持focus/identity/有限释放；菜单首次焦点探测超时未输入，game-menu-2重试成功，GUI已把“与目标互动”设为G（延迟重绘才显示，后续F7没有替换G），E/S/D/F原移动不改；缓存文件尚未显示此新键、功能交互未验证，不能当NPC验收。设置证据及bindings-evidence在out/acceptance/retail-closure，最后只读截图已无设置面板，游戏目前非前台，不抢焦点。异步人工进入角色问题已由战网启动解决；新前台准备问题仅用于接下来有限NPC输入。
 
-17:31开始实际十分钟只读长跑soak-10m-1，当前运行中、未封存，不报告通过；Windows窗口非前台，角色营地场景，后台只读捕获正常，scope不自动扩展到输入。没有模型调用或输入执行器，每90秒以内轮换，待结束后检查所有源图/段回放/缺口/实际PID身份。WSL外部重启工具只读preflight/export实测通过；Ubuntu还发现acehr外项目的node_repl.exe PID425015，不能直接terminate。agent继续准备具体测试工具与命令，真实重启需先审查共享影响并取得具体授权。
+十分钟只读长跑soak-10m-1已封存accepted=true：7段逐段严格回放、492次capture ok、491张不同SHA图、0输入、前后同一PID/启动ticks/版本；所有样本focused=false。负责人复核每段首尾仍在营地角色场景，后台画面在本场景可变化，不推广最小化/所有遮挡模式。六个轮换缺口5.053–5.627秒；定位到5秒退出轮询后b0a54e1改250ms并通过27项录制回归，随后真实185秒soak-rotation-fast-1两段159ok样本/158图/0输入、唯一缺口1520ms。不能称无缝或严格1fps。
+
+新的brain-seed-observe-2实际客户区截图→冻结prompt→Seed→重新采样→严格Brain回放完成：21条/2图/1个有效模型回复（1808.847ms，2280input/79output tokens）/0输入，知识为空、game_effect=unverified；只证明只读规划链路。主out/runtime/game-data.sqlite已实际建立：11条reference_only断言、1次导入、1份安装profile；精确69933任务query not_found，初始化报告在retail-closure/game-database-initialization-1.json。
+
+负责人审查后集成Eye/NPC追加436263b（root1968677）和learning模板预检查138d80c，249项TS/typecheck通过。WSL外部重启工具58030bd/3a07ad5与安全审查修复eaeb516/7130cbc已在负责人分支（最近5cecb7e）集成，实际34组Windows机制模拟通过，0fixture输入/0重启；所有模块尚未合入主目录。独立审查已去掉凭历史mask释放全局W的P1，并补fresh raw receipt/session绑定、原lease期限前真实UP、export最终失败口径。外部Host默认interop IsProcessInJob=true；真实breakaway创建虽成功仍在job，不能当脱离。agent继续一次只读Explorer broker探测。Ubuntu还发现acehr外项目node_repl.exe PID425015，真实terminate仍需要具体共享进程授权，不自动执行。
+
+18:13以后最新只读截图已回到角色选择界面、Dwroy11仍被选中；原因未确认，不能继续沿用之前role-scene-confirmed条件。独立互动G已在bindings-cache.wtf实际持久为INTERACTTARGET（sha8dc57d…c6a7），E/S/D/F保持原移动；功能交互仍未验收。新游戏前台准备问题仍未收到回答。冻结live接入与独立审查在frozen-live-runtime进行，原生缓存初次执行前字节校验、--repo-root替换依赖loader两个实际P1正在修；不发布带已知问题版本，尚未正式frozen observe验收。阶段记录工作树docs/acceptance/retail-closure.md。
 
 接下来：把全部接入变化保存并完成负责人审查/无跳过回归；当前bank同名35–37/43稳定、39/40另一类，但仍缺独立名字/死亡正例；补当前NPC名字/对话校准与显式有限交互、新独立战斗实测、两对同条件真实版本效果+知识消费/迭代/回退、10分钟实际录制。Windows外部WSL重启host工具由retail_npc_perception继续准备，尚未执行；只有Ubuntu一个发行版且并行agent/其它项目可能活跃，真实terminate前需完成本项目保存/停进程/影响预检，再决定是否需用户针对共享进程的明确授权。杀Node不能当整发行版重启。源码/原失败/必要Windows产物清理前必须归档。
 
