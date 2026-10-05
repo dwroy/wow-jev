@@ -287,7 +287,7 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
     {
         SelfTesting = true;
         VerifyFacts(MockFacts()); int checkedCases = 1;
-        foreach (string failure in new[] { "same-instance", "old-controller", "no-held", "late-release", "still-held", "old-session", "stale-input", "wrong-distro", "different-observer", "incomplete-inventory", "fresh-partial", "fresh-not-released", "wrong-stop-cause", "guardian-killed", "host-fallback", "host-in-job", "host-job-unknown", "receipt-session-mismatch", "released-physical-down" })
+        foreach (string failure in new[] { "same-instance", "old-controller", "no-held", "late-release", "still-held", "old-session", "stale-input", "wrong-distro", "different-observer", "incomplete-inventory", "fresh-partial", "fresh-not-released", "wrong-stop-cause", "guardian-killed", "host-fallback", "host-in-job", "host-job-unknown", "receipt-session-mismatch", "released-physical-down", "released-physical-empty" })
         {
             var facts = MockFacts();
             if (failure == "same-instance") Map(facts["after"])["init_start_ticks"] = "100";
@@ -309,6 +309,7 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
             if (failure == "host-job-unknown") Map(facts["host_before"])["known"] = false;
             if (failure == "receipt-session-mismatch") Map(facts["fresh_receipt"])["session_id"] = Map(facts["owned_before"])["session_id"];
             if (failure == "released-physical-down") Map(facts["released_after"])["physical"] = MockPhysical(true);
+            if (failure == "released-physical-empty") Map(facts["released_after"])["physical"] = Obj("keys", Obj(), "buttons", Obj());
             bool rejected = false; try { VerifyFacts(facts); } catch (Failure) { rejected = true; }
             Require(rejected, "self_test_expected_rejection_missing"); checkedCases++;
         }
@@ -341,6 +342,17 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
                 if (scenario == "hash-tamper") File.AppendAllText(Path.Combine(root, "recorder.jsonl"), "{}\n");
                 bool rejected = false; try { Verify(root); } catch (Failure) { rejected = true; }
                 Require(rejected == (scenario != "valid"), "mock_physical_trace_result_mismatch"); checkedCases++;
+            }
+            finally { Directory.Delete(root, true); }
+        }
+        foreach (bool failCopy in new[] { false, true })
+        {
+            string root = Path.Combine(Path.GetTempPath(), "WowJevFinalExportMock-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
+            try
+            {
+                bool accepted = FinalizeOverall(root, true, true, false, delegate(string path) { if (failCopy) throw new IOException("synthetic_final_copy_failure"); });
+                Require(accepted == !failCopy && Boolean(Load(Path.Combine(root, "restart-overall.json")), "overall_accepted") == !failCopy, "final_export_failure_must_persist_and_return_false");
+                Require(File.Exists(Path.Combine(root, "restart-overall-attempt.json")) == failCopy, "attempted_status_preservation_mismatch"); checkedCases++;
             }
             finally { Directory.Delete(root, true); }
         }

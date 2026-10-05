@@ -55,10 +55,12 @@ Host 观察到 lease 清零、停止原因和至少三次真实 UP 后，才恢�
 
 Root 可以从 Windows 本地 `--verify <primary-directory>` 独立校验 raw recorder、lease、fresh-native 与 facts。校验 synthetic 结果只在 `--self-test` 输出 `scope=synthetic_mock_trace`，不会标成实测。
 
-本模块目前完成：Windows 编译、31 组机制/原始日志模拟边界（含错误发行版、旧 init、旧 controller 仍在、守护被杀、Host 兜底、实际键未 UP、源 hash 改写、新会话部分输入）、3 项 durable token/跨模式重放测试，以及 TypeScript typecheck。真实只读 preflight+长度/SHA export 已通过；真实 restart run 尚未执行。
+本模块目前完成：Windows 编译、34 组机制/原始日志模拟边界（含错误发行版、旧 init、旧 controller 仍在、守护被杀、Host 兜底、实际键未 UP、源 hash 改写、新会话部分输入）、3 项 durable token/跨模式重放测试，以及 TypeScript typecheck。真实只读 preflight+长度/SHA export 已通过；真实 restart run 尚未执行。
 
 本次最终准备包 Windows primary：`C:\Users\dai\AppData\Local\WowJevAcceptance\restart-preflight-03d73d5fc2e44ea7aabc0ea2a5ee6994`；可回读 export：`/home/dai/Projects/wow-jev/out/acceptance/retail-closure/restart-preflight-03d73d5fc2e44ea7aabc0ea2a5ee6994`。`export-ack-preflight.json` 已核验每项长度/SHA；本记录只证明只读预检与导出链路，重启未执行。
 
 追加实际只读 Host job 预检：`known=true, in_job=true`，启动路径记录在该准备包 `preflight.json` 的 `host_job`。这只是当前进程状态，不是重启后的存活证明。
 
 负责人独立审查修复：fresh receipt 必须完整出现在 raw fresh-native 日志，且 session_id 等于 fresh ready；原 lease deadline 前必须有至少三次真实连续 UP，released_after 的物理字段全部为 UP。原始 `restart-summary.json` 只记录 native_accepted 与 pending_export；最终 `restart-overall.json` 在恢复/证据 export 结果确定后才记录 overall_accepted，避免 export 失败留下 accepted=true。
+
+最终 overall 文件本身导出失败也返回失败，并将 Windows primary 的 `restart-overall.json` 写为 `overall_accepted=false/export_confirmed=false`；原候选文件保留为 `restart-overall-attempt.json`。之前 data export 的 ACK 不包含这份最终 overall，不能据此宣称整体完成。空的 physical keys/buttons 也不能证明所有输入已经 UP。

@@ -117,9 +117,32 @@ static partial class WslRestartAcceptance
     }
     static bool AllUp(Dictionary<string, object> physical)
     {
-        foreach (object value in Map(physical["keys"]).Values) if (!(value is bool) || (bool)value) return false;
-        foreach (object value in Map(physical["buttons"]).Values) if (!(value is bool) || (bool)value) return false;
+        var keys = Map(Need(physical, "keys")); var buttons = Map(Need(physical, "buttons"));
+        foreach (KeySpec key in KeyCatalog.All) if (!keys.ContainsKey(key.Name) || !(keys[key.Name] is bool) || (bool)keys[key.Name]) return false;
+        foreach (string button in new[] { "left", "right", "middle" }) if (!buttons.ContainsKey(button) || !(buttons[button] is bool) || (bool)buttons[button]) return false;
+        foreach (object value in keys.Values) if (!(value is bool) || (bool)value) return false;
+        foreach (object value in buttons.Values) if (!(value is bool) || (bool)value) return false;
         return true;
+    }
+    static bool FinalizeOverall(string root, bool nativeAccepted, bool dataExportConfirmed, bool fallbackUsed, Action<string> copyFinal)
+    {
+        string final = Path.Combine(root, "restart-overall.json");
+        var result = Obj("schema_version", 1, "scope", "native_acceptance_and_evidence_export", "native_accepted", nativeAccepted,
+            "export_confirmed", dataExportConfirmed, "overall_accepted", nativeAccepted && dataExportConfirmed,
+            "host_fallback_release_used", fallbackUsed, "primary_root", root, "export_root", ExportRoot);
+        Save(final, result);
+        if (!dataExportConfirmed) return false;
+        try { copyFinal(final); return nativeAccepted; }
+        catch (Exception error)
+        {
+            // Preserve the attempted file; only this program's final status is replaced with failure.
+            File.Move(final, Path.Combine(root, "restart-overall-attempt.json"));
+            result["export_confirmed"] = false; result["overall_accepted"] = false;
+            result["failure"] = "overall_summary_export_unconfirmed"; result["error_type"] = error.GetType().Name;
+            Save(final, result);
+            Console.WriteLine(Encode(Obj("type", "overall_summary_export_unconfirmed", "error_type", error.GetType().Name, "primary_root", root)));
+            return false;
+        }
     }
     static void WaitUntil(Func<bool> condition, int maximumMs, string failure)
     { long deadline = Qpc() + BoundedTimeout(maximumMs); while (Qpc() < deadline) { if (condition()) return; Thread.Sleep(20); } throw new Failure(failure); }
@@ -268,11 +291,9 @@ static partial class WslRestartAcceptance
         }
         bool nativeAccepted = accepted, exportConfirmed = false; RunDeadlineMs = 0;
         try { if (restartDispatched) { Query(wsl, new[] { "-d", "Ubuntu", "--exec", "/usr/bin/true" }, Encoding.UTF8); Save(Path.Combine(root, "recovery-snapshot.json"), WslSnapshot(wsl)); } Export(root, "final"); exportConfirmed = true; } catch (Exception error) { Console.WriteLine(Encode(Obj("type", "export_unconfirmed", "error_type", error.GetType().Name, "primary_root", root))); accepted = false; }
-        Save(Path.Combine(root, "restart-overall.json"), Obj("schema_version", 1, "scope", "native_acceptance_and_evidence_export", "native_accepted", nativeAccepted,
-            "export_confirmed", exportConfirmed, "overall_accepted", nativeAccepted && exportConfirmed, "host_fallback_release_used", fallbackUsed, "primary_root", root, "export_root", ExportRoot));
-        if (exportConfirmed) try { CopyVerified(Path.Combine(root, "restart-overall.json"), Path.Combine(ExportRoot, "restart-overall.json")); }
-        catch (Exception error) { Console.WriteLine(Encode(Obj("type", "overall_summary_export_unconfirmed", "error_type", error.GetType().Name, "primary_root", root))); }
-        accepted = nativeAccepted && exportConfirmed;
+        accepted = FinalizeOverall(root, nativeAccepted, exportConfirmed, fallbackUsed, delegate(string source) {
+            CopyVerified(source, Path.Combine(ExportRoot, "restart-overall.json"));
+        });
         Console.WriteLine(Encode(Obj("type", "restart_acceptance_finished", "accepted", accepted, "out", root, "restart_dispatched", restartDispatched, "game_inputs", 0, "failure", failure)));
         return accepted ? 0 : 2;
     }
