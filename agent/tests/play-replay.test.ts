@@ -157,3 +157,20 @@ test('already_satisfied is refused when the raw window is unfocused', async () =
     await rewrite(run.dir, rows); assert.equal((await replayRun(run.dir)).complete, true); await assert.rejects(replayPlayRun(run.dir), /already_satisfied_gate/);
   } finally { await run.cleanup(); }
 });
+
+test('late terminal receipt preserves the cancelled plan and conservative unknown counts', async () => {
+  const run = await fixture('live', { ...plan, steps: [plan.steps[0]!] });
+  try { await run.step(0, { cancelled: true }); await run.finish('cancelled'); const rows = await records(run.dir);
+    const index = rows.findIndex((row) => row.kind === 'native_input' && (row.data as { direction?: string }).direction === 'in');
+    const late = rows.splice(index, 1)[0]!;
+    const receipt = rows.find((row) => row.kind === 'execution_receipt')!.data as ExecutionReceipt;
+    receipt.input = { status: 'failed', counts_status: 'unknown', events_requested: null, events_inserted: null, reason: { code: 'cancelled_race' } }; receipt.timing.finished_at_ms = null;
+    const link = rows.find((row) => row.kind === 'action_link')!.data as { native_receipt_id: string | null; received_input_at_ms: number | null; before_observation_id: string; after_observation_id: string };
+    link.native_receipt_id = null; link.received_input_at_ms = null; link.after_observation_id = link.before_observation_id;
+    const step = (rows.find((row) => row.kind === 'event' && (row.data as { code?: string }).code === 'play.step_result')!.data as { result: SkillResult }).result;
+    step.receipt = structuredClone(receipt); step.after_observation_id = null;
+    const end = rows.findIndex((row) => row.kind === 'event' && (row.data as { code?: string }).code === 'play.plan_finished');
+    (rows[end]!.data as { result: PlayResult }).result.steps = [structuredClone(step)]; late.at_ms = rows[end]!.at_ms; rows.splice(end + 1, 0, late);
+    await rewrite(run.dir, rows); const result = await replayPlayRun(run.dir); assert.equal(result.status, 'cancelled'); assert.equal(result.complete, false); assert.equal(result.steps[0]!.receipt!.input.counts_status, 'unknown'); assert.equal(result.confirmed_effects, 0);
+  } finally { await run.cleanup(); }
+});
