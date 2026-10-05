@@ -49,7 +49,7 @@ function validReply(result: unknown, request: JevRequest, validateRaw?: JevRepla
   if (!object(result) || result.type !== 'jev_choice' || !identifier(result.id) || !['ok', 'failed', 'disabled'].includes(String(result.status)) ||
     !object(result.reason) || typeof result.reason.code !== 'string' || !result.reason.code || result.reason.code.length > 128 ||
     result.prompt_version !== 'jev-retail-v1' || typeof result.prompt_sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(result.prompt_sha256) ||
-    !Number.isSafeInteger(result.elapsed_ms) || Number(result.elapsed_ms) < 0 || !object(result.usage) ||
+    typeof result.elapsed_ms !== 'number' || !Number.isFinite(result.elapsed_ms) || result.elapsed_ms < 0 || result.elapsed_ms > Number.MAX_SAFE_INTEGER || !object(result.usage) ||
     ![null, 'string'].includes(result.raw_text === null ? null : typeof result.raw_text) ||
     result.status === 'ok' && !identifier(result.candidate_id) || result.status !== 'ok' && result.candidate_id !== null) fail('choice_shape');
   for (const key of ['input_tokens', 'output_tokens']) if (result.usage[key] !== null && (!Number.isSafeInteger(result.usage[key]) || Number(result.usage[key]) < 0)) fail('choice_usage');
@@ -81,6 +81,12 @@ export async function replayJevRun(directory: string, builders: JevReplayBuilder
   const config = journal.manifest.config;
   const goal = builders.parseJevGoal(config.jev_goal); const bindings = parseBindings(config.bindings);
   const mode = config.mode as CandidateContext['mode'];
+  const choiceSchema = journal.manifest.schemas['jev-choice-v1.schema.json'] ?
+    JSON.parse(await readFile(join(directory, 'schemas/jev-choice-v1.schema.json'), 'utf8')) as object : null;
+  const ajv = new Ajv({ strict: true, allErrors: true });
+  const resultSchema = choiceSchema ? ajv.compile(choiceSchema) : null;
+  const requestSchema = choiceSchema ? ajv.compile({ $ref: 'urn:wow-jev:choice-v1#/definitions/request' }) : null;
+  if (config.prompt_sha256 !== undefined && config.prompt_sha256 !== journal.manifest.extra_prompts?.['jev-retail-v1']?.sha256) fail('config_prompt_hash');
   const maxDecisions = config.max_decisions; const maxRun = config.max_run_ms;
   const maxAge = config.max_observation_age_ms ?? 750; const choiceTimeout = config.choice_timeout_ms ?? 15000; const waitMs = config.wait_ms ?? 250;
   if (!integer(maxDecisions, 20) || !integer(maxRun, 120000) || !integer(maxAge, 750) || !integer(choiceTimeout, 15000) || !integer(waitMs, 1000)) fail('options');
@@ -153,6 +159,7 @@ export async function replayJevRun(directory: string, builders: JevReplayBuilder
       } else if (event.code === 'jev.request') {
         const decision = requireDecision(event.decision_id); const request = event.request as JevRequest;
         if (decision.request || cancelled || !object(request) || request.protocol !== 'wow-jev' || request.version !== 1 || request.type !== 'selection_request' ||
+          requestSchema && !requestSchema(request) ||
           request.id !== decision.id || !equal(request.plan, { id: `plan-${decision.id}`, revision: goal.revision }) || !equal(request.goal, goal) ||
           !Number.isSafeInteger(request.at_ms) || request.at_ms > row.at_ms || !Number.isSafeInteger(request.deadline_ms) || request.deadline_ms < request.at_ms ||
           request.deadline_ms > request.at_ms + choiceTimeout || request.deadline_ms > startedAt! + maxRun) fail('request');
@@ -167,6 +174,7 @@ export async function replayJevRun(directory: string, builders: JevReplayBuilder
       } else if (event.code === 'jev.response') {
         const decision = requireDecision(event.decision_id);
         if (!decision.request || decision.reply || cancelled || event.request_id !== decision.request.id) fail('response_order');
+        if (mode === 'live' && resultSchema && !resultSchema(event.result)) fail('choice_frozen_schema');
         validReply(event.result, decision.request, builders.validateModelReply); decision.reply = event.result;
         const prompt = journal.manifest.extra_prompts?.['jev-retail-v1'];
         if (!prompt || event.result.prompt_sha256 !== prompt.sha256) fail('choice_prompt_version');
@@ -244,3 +252,6 @@ export async function replayJevRun(directory: string, builders: JevReplayBuilder
     confirmed_effects: plans.reduce((count, plan) => count + plan.confirmed_effects, 0), unverified_effects: plans.reduce((count, plan) => count + plan.unverified_effects, 0),
     waited: iterations.filter((iteration) => iteration.status === 'waited').length, source_verified: mode === 'live' && journal.source !== null };
 }
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { Ajv } from 'ajv';

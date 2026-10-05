@@ -33,7 +33,7 @@ const builders = { parseJevGoal: (raw: unknown) => structuredClone(raw) as JevGo
   candidatesHash: (candidates: JevCandidate[]) => hashBuffer(JSON.stringify(candidates)) };
 function reply(request: JevRequest, candidateId = 'wait'): JevChoiceResult {
   return { type: 'jev_choice', id: request.id, status: 'ok', candidate_id: candidateId, reason: { code: 'selected' }, model: 'test-only',
-    prompt_version: 'jev-retail-v1', prompt_sha256: promptHash, elapsed_ms: 1, usage: { input_tokens: 3, output_tokens: 2 },
+    prompt_version: 'jev-retail-v1', prompt_sha256: promptHash, elapsed_ms: 1.25, usage: { input_tokens: 3, output_tokens: 2 },
     raw_text: JSON.stringify({ request_id: request.id, candidate_id: candidateId, reason: 'test-only selection' }) };
 }
 async function setup(options: { decisions?: number; timeout?: number; maxRun?: number } = {}) {
