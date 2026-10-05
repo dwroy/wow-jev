@@ -59,7 +59,7 @@
 
 ### 第 3 步：代码 play 和肌肉记忆
 
-工程已实施并通过106项回归、五轮模拟/独立回放及真实专用记录窗口整链验收。正式服首轮因人工操作及面板覆盖，最后背包效果未确认而正确停止；分辨率随后变化，需要新校准及无干扰补测，未标整个阶段完成。记录见[acceptance/stage-3.md](acceptance/stage-3.md)，入口见[play-runtime.md](play-runtime.md)。
+已按有限代码计划范围完成：106项回归、五轮模拟/独立回放、真实专用记录窗口整链验收，以及最终4K正式服五轮25动作/10次背包效果确认。移动、转向、跳跃的自动效果仍unknown。两轮真实失败已保留，新布局固定背包按钮校准后补测通过。记录见[acceptance/stage-3.md](acceptance/stage-3.md)，入口见[play-runtime.md](play-runtime.md)。
 
 交付：主循环、调度、执行闸、效果验证；move_for、turn_for、jump、open_panel、close_panel、use_action_slot 等技能。
 

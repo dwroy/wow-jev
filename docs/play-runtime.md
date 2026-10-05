@@ -20,14 +20,14 @@ npm --prefix agent run play -- replay --run-dir /absolute/path/to/run
 
 当前角色向前为E，跳跃SPACE，背包B；转向用右键拖拽，不假设WASD。动作槽默认没有映射，use_action_slot需明确配置。改变角色键位时提供完整bindings文件，参考`profiles/play/retail-esdf.json`。
 
-先进入非战斗的空旷角色场景、下坐骑并关闭任务/设置/冒险指南，列出当前窗口并替换以下HWND/PID；游戏重启后不能复用旧身份。运行期间保持前台且不同时手动操作。以下背包校准只适用于此前2048×1536与相同UI布局；当前用户已切3840×2160，须生成新校准，不能直接用旧路径。
+先进入非战斗的空旷角色场景、下坐骑并关闭任务/设置/冒险指南，列出当前窗口并替换以下HWND/PID；游戏重启后不能复用旧身份。运行期间保持前台且不同时手动操作。以下校准已在当前3840×2160布局与B同时开闭全部背包的五轮中验收；分辨率、UI布局或独立单包操作变化时须重新校准。旧2048×1536校准不能用于4K。
 
 ```bash
 npm --prefix agent run input -- list
 
 npm --prefix agent run play -- live \
   --window 0xHWND --pid PID --live --role-scene-confirmed --rounds 1 \
-  --calibration /home/dai/Projects/wow-jev/out/acceptance/stage-2/calibration/retail-bag-v1/calibration.json
+  --calibration /home/dai/Projects/wow-jev/out/acceptance/stage-3/calibration/retail-bag-4k-buttons-v2/calibration.json
 ```
 
 默认最多30秒等待用户手动聚焦，不抢游戏焦点；角色场景确认是启动者的明确声明，不能由“截图可用”推为角色可操作。live必须显式确认，模型不参与本轮代码计划。计划最多50个有限步骤，原生单次技能默认最多1000ms，整轮默认上限60秒。
