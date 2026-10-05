@@ -81,3 +81,5 @@ npm --prefix agent test
 2026-10-05 本模块离线工程验证：`npm --prefix agent run typecheck`退出0；`npm --prefix agent test`退出0，166项通过/0失败/0跳过（其中11项iteration测试）。prompt/code行为测试使用临时Git仓库和真实worktree、固定编译器和实际测试进程。尚未在本模块运行正式服动作或模型请求，也未据此声称游戏收益；负责人仍需将真实learned事实、独立模型对照和任务代码启动验收加入阶段记录。
 
 补充验证：将测试父进程HOME设为`/nonexistent`实际复现全局Git身份丢失；修复后同条件11项iteration测试全部通过，typecheck退出0。固定测试环境保留全局Git配置的绝对路径，仍不继承API凭据。
+
+发布绑定补充：公共`publishEvaluated`也核对manifest对象与工具生成的原始manifest字节，封包时知识原字节SHA须继续等于已评估清单。2026-10-05 针对此接口替换知识/清单对象的回归加入后，专项12项全通过，typecheck退出0；没有为此重复无关全套测试。

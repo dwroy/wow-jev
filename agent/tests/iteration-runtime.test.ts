@@ -138,3 +138,19 @@ test('version manifests, unsafe refs, and recomputed unsigned package seals are 
   await writeFile(manifestFile, original); const sealFile = path.join(packageRoot, 'seal.json'); const envelope = JSON.parse(await readFile(sealFile, 'utf8')); envelope.seal.approved_by = 'forged'; await writeFile(sealFile, json(envelope)); await assert.rejects(f.runtime.registry.resolveForTask(), /signature/);
   assert.equal(snapshot.version.id, 'baseline'); assert.equal(snapshot.prompts['brain-v1'], oldPrompt);
 });
+
+test('public evaluated publication binds manifest object and knowledge bytes to the signed evaluation', async (t) => {
+  const f = await fixture(t); await f.baseline(); const manifest = await f.runtime.prepare(f.proposal('public-binding'), f.knowledgeFile); const report = await f.runtime.evaluate(manifest.id); assert.equal(report.passed, true);
+  await git(manifest.worktree, ['add', '--', promptFile]); await git(manifest.worktree, ['commit', '-qm', 'candidate before packaging\n\nCo-Authored-By: Codex GPT-6 <noreply@openai.com>']);
+  const codeCommit = (await git(manifest.worktree, ['rev-parse', 'HEAD'])).toString('utf8');
+  const manifestBytes = await readFile(path.join(f.runtime.candidatesRoot, manifest.id, 'manifest.json'));
+  const evaluationFile = path.join(f.runtime.candidatesRoot, manifest.id, 'evaluations', `${report.id}.json`);
+  const input = { versionId: 'public-release', repository: manifest.worktree, codeCommit, knowledgeFile: manifest.knowledge.file, prompts: [{ id: 'brain-v1', file: promptFile }], approvedBy: 'codex', activate: true, parentId: 'baseline', evaluation: { file: evaluationFile, sha256: sha256(await readFile(evaluationFile)) } };
+  const proof = { candidatesRoot: f.runtime.candidatesRoot, evaluationId: report.id, manifestBytes, manifest, sourceSha256: manifest.source_sha256 };
+  const changedManifest = structuredClone(manifest); changedManifest.knowledge.id = 'replaced-object';
+  await assert.rejects(f.runtime.registry.publishEvaluated(input, { ...proof, manifest: changedManifest }), /object\/bytes mismatch/);
+  const replacedKnowledge = structuredClone(f.snapshot); replacedKnowledge.id = 'valid-but-not-evaluated'; await writeFile(manifest.knowledge.file, json(replacedKnowledge));
+  await assert.rejects(f.runtime.registry.publishEvaluated(input, proof), /knowledge differs/); assert.equal(await f.runtime.registry.currentId(), 'baseline');
+  await writeFile(manifest.knowledge.file, json(f.snapshot));
+  const published = await f.runtime.registry.publishEvaluated(input, proof); assert.equal(published.knowledge.sha256, manifest.knowledge.sha256); assert.equal((await f.runtime.registry.resolveForTask()).version.id, 'public-release');
+});

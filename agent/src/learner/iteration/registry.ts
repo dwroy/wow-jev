@@ -56,14 +56,15 @@ export class RuntimeVersionRegistry {
     assert(await directoryHashCandidate(input.repository, proof.manifest.proposal.changes.map((change) => change.path)) === proof.sourceSha256, 'candidate changed before packaging');
     assert(input.evaluation.file === path.join(proof.candidatesRoot, proof.manifest.id, 'evaluations', `${proof.evaluationId}.json`), 'evaluation artifact identity mismatch');
     assert(input.codeCommit === (await git(input.repository, ['rev-parse', 'HEAD'])).toString('utf8'), 'package code commit differs from evaluated worktree');
-    return this.#publishPackage(input, proof.sourceSha256);
+    return this.#publishPackage(input, proof.sourceSha256, proof.manifest.knowledge.sha256);
   }
-  async #publishPackage(input: PackageInput, expectedCodeSourceHash?: string): Promise<RuntimeVersion> {
+  async #publishPackage(input: PackageInput, expectedCodeSourceHash?: string, expectedKnowledgeHash?: string): Promise<RuntimeVersion> {
     await this.init(); id(input.versionId); id(input.approvedBy);
     if (input.parentId !== null) await this.resolveForTask(input.parentId);
     const target = this.versionPath(input.versionId);
     try { await lstat(target); throw new Error('duplicate version id'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     const knowledgeBytes = await regularFile(input.knowledgeFile);
+    assert(expectedKnowledgeHash === undefined || sha256(knowledgeBytes) === expectedKnowledgeHash, 'knowledge differs from evaluated manifest');
     const knowledge: unknown = JSON.parse(knowledgeBytes.toString('utf8')); validateKnowledge(knowledge);
     assert(input.prompts.length > 0, 'runtime requires at least one prompt');
     const promptIds = new Set<string>(); const promptFiles = new Set<string>();

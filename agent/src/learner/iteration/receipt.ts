@@ -5,6 +5,7 @@ import { assert, exact, hash, id, json, regularFile, sha256 } from './util.js';
 
 export async function verifyReceipt(candidatesRoot: string, evaluationId: string, manifestBytes: Buffer, manifest: CandidateManifest, sourceSha256: string): Promise<EvaluationReceipt> {
   id(evaluationId);
+  assert(sha256(json(manifest)) === sha256(manifestBytes), 'evaluation manifest object/bytes mismatch');
   const value: unknown = JSON.parse((await regularFile(path.join(candidatesRoot, manifest.id, 'evaluations', `${evaluationId}.json`))).toString('utf8'));
   exact(value, ['report', 'signature'], 'evaluation receipt'); hash(value.signature);
   const key = await regularFile(path.join(candidatesRoot, '.evaluation-key')); assert(key.length === 32, 'invalid evaluation signing key');
