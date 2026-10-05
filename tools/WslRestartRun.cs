@@ -247,8 +247,8 @@ static partial class WslRestartAcceptance
                     var state = lease.Read();
                     if (Integer(state, "held_keys_mask") != 0 || Integer(state, "held_mouse_mask") != 0)
                         using (var own = new LeaseStore(oldSession, false)) { own.ReleaseOwned("acceptance_cleanup"); fallbackUsed = true; }
-                    if (facts.ContainsKey("owned_before") && !facts.ContainsKey("released_after") && Native.IsKeyDown(KeyCatalog.Get("W")))
-                    { Native.ReleaseOwned(new LeaseSnapshot { HeldKeysMask = KeyCatalog.Get("W").Mask }); fallbackUsed = true; }
+                    if (Integer(state, "held_keys_mask") == 0 && Native.IsKeyDown(KeyCatalog.Get("W")))
+                        facts["cleanup_ownership_unconfirmed"] = "physical_down_without_current_owned_mask";
                 }
                 catch { }
             }
@@ -262,12 +262,17 @@ static partial class WslRestartAcceptance
                 recorder.Dispose();
             }
             if (!File.Exists(Path.Combine(root, "restart-facts.json"))) Save(Path.Combine(root, "restart-facts.partial.json"), facts);
-            Save(Path.Combine(root, "restart-summary.json"), Obj("schema_version", 1, "scope", "actual_ubuntu_distro_restart", "accepted", accepted, "release", accepted ? "confirmed" : "unconfirmed",
+            Save(Path.Combine(root, "restart-summary.json"), Obj("schema_version", 1, "scope", "actual_ubuntu_distro_restart", "native_accepted", accepted, "overall_accepted", null, "overall_status", "pending_export", "release", accepted ? "confirmed" : "unconfirmed",
                 "restart_dispatched", restartDispatched, "host_fallback_release_used", fallbackUsed, "native_actor_survival", facts.ContainsKey("native_actors_after_terminate") ? facts["native_actors_after_terminate"] : null, "failure", failure, "window", window, "old_session_id", oldSession, "fresh_session_id", freshSession, "duration_windows_qpc_ms", Qpc() - begin,
                 "input_counts", accepted ? "old hold observed; old terminal counts may be unavailable; fresh pulse exactly 2" : "unknown; inspect raw native and recorder logs", "game_inputs", 0));
         }
-        RunDeadlineMs = 0;
-        try { if (restartDispatched) { Query(wsl, new[] { "-d", "Ubuntu", "--exec", "/usr/bin/true" }, Encoding.UTF8); Save(Path.Combine(root, "recovery-snapshot.json"), WslSnapshot(wsl)); } Export(root, "final"); } catch (Exception error) { Console.WriteLine(Encode(Obj("type", "export_unconfirmed", "error_type", error.GetType().Name, "primary_root", root))); accepted = false; }
+        bool nativeAccepted = accepted, exportConfirmed = false; RunDeadlineMs = 0;
+        try { if (restartDispatched) { Query(wsl, new[] { "-d", "Ubuntu", "--exec", "/usr/bin/true" }, Encoding.UTF8); Save(Path.Combine(root, "recovery-snapshot.json"), WslSnapshot(wsl)); } Export(root, "final"); exportConfirmed = true; } catch (Exception error) { Console.WriteLine(Encode(Obj("type", "export_unconfirmed", "error_type", error.GetType().Name, "primary_root", root))); accepted = false; }
+        Save(Path.Combine(root, "restart-overall.json"), Obj("schema_version", 1, "scope", "native_acceptance_and_evidence_export", "native_accepted", nativeAccepted,
+            "export_confirmed", exportConfirmed, "overall_accepted", nativeAccepted && exportConfirmed, "host_fallback_release_used", fallbackUsed, "primary_root", root, "export_root", ExportRoot));
+        if (exportConfirmed) try { CopyVerified(Path.Combine(root, "restart-overall.json"), Path.Combine(ExportRoot, "restart-overall.json")); }
+        catch (Exception error) { Console.WriteLine(Encode(Obj("type", "overall_summary_export_unconfirmed", "error_type", error.GetType().Name, "primary_root", root))); }
+        accepted = nativeAccepted && exportConfirmed;
         Console.WriteLine(Encode(Obj("type", "restart_acceptance_finished", "accepted", accepted, "out", root, "restart_dispatched", restartDispatched, "game_inputs", 0, "failure", failure)));
         return accepted ? 0 : 2;
     }

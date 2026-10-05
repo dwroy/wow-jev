@@ -51,12 +51,14 @@ Host 观察到 lease 清零、停止原因和至少三次真实 UP 后，才恢�
 
 `preflight.json` / `ready-plan.json`、`lease-old.jsonl` / `recorder.jsonl`、旧/新 controller/native 消息、PID 与启动 ticks、完整或 partial facts、`restart-summary.json` 都先写 Windows primary。controller 交换文件在显式 export 的 `controller/` 子目录，重启前关键版本/ready/命令与日志快照已校验复制至 primary，不能用 WSL 停机期间的 UNC 写入替代外部证据。重启恢复后 export 再比较长度/SHA；失败保留 primary，不覆写历史失败，也不把没有 ACK 的复制当成功。
 
-等待与输入各自有有限期限，正常测试整体预算 90 秒，清理及恢复/export 有独立短期限。任何未知释放、源日志校验失败、原 production watchdog 存活不可确认、旧 token 可复活、新输入不完整，都保持 failed/unconfirmed。Host 兜底最多释放已明确归本次测试所有的 W/lease UP，只清理本程序新建的进程与窗口；`host_fallback_release_used=true` 绝不计入生产看门狗验收通过。
+等待与输入各自有有限期限，正常测试整体预算 90 秒，清理及恢复/export 有独立短期限。任何未知释放、源日志校验失败、原 production watchdog 存活不可确认、旧 token 可复活、新输入不完整，都保持 failed/unconfirmed。Host 兜底只调用本 UUID 当前实时 `LeaseStore.ReleaseOwned`；不会从历史 owned_before 或物理 Wdown 合成所有权。ledger 不可读、mask 已为零但物理仍 down 都保持 unconfirmed，只清理本程序新建的进程与窗口；`host_fallback_release_used=true` 绝不计入生产看门狗验收通过。
 
 Root 可以从 Windows 本地 `--verify <primary-directory>` 独立校验 raw recorder、lease、fresh-native 与 facts。校验 synthetic 结果只在 `--self-test` 输出 `scope=synthetic_mock_trace`，不会标成实测。
 
-本模块目前完成：Windows 编译、26 组机制/原始日志模拟边界（含错误发行版、旧 init、旧 controller 仍在、守护被杀、Host 兜底、实际键未 UP、源 hash 改写、新会话部分输入）、3 项 durable token/跨模式重放测试，以及 TypeScript typecheck。真实只读 preflight+长度/SHA export 已通过；真实 restart run 尚未执行。
+本模块目前完成：Windows 编译、31 组机制/原始日志模拟边界（含错误发行版、旧 init、旧 controller 仍在、守护被杀、Host 兜底、实际键未 UP、源 hash 改写、新会话部分输入）、3 项 durable token/跨模式重放测试，以及 TypeScript typecheck。真实只读 preflight+长度/SHA export 已通过；真实 restart run 尚未执行。
 
 本次最终准备包 Windows primary：`C:\Users\dai\AppData\Local\WowJevAcceptance\restart-preflight-03d73d5fc2e44ea7aabc0ea2a5ee6994`；可回读 export：`/home/dai/Projects/wow-jev/out/acceptance/retail-closure/restart-preflight-03d73d5fc2e44ea7aabc0ea2a5ee6994`。`export-ack-preflight.json` 已核验每项长度/SHA；本记录只证明只读预检与导出链路，重启未执行。
 
 追加实际只读 Host job 预检：`known=true, in_job=true`，启动路径记录在该准备包 `preflight.json` 的 `host_job`。这只是当前进程状态，不是重启后的存活证明。
+
+负责人独立审查修复：fresh receipt 必须完整出现在 raw fresh-native 日志，且 session_id 等于 fresh ready；原 lease deadline 前必须有至少三次真实连续 UP，released_after 的物理字段全部为 UP。原始 `restart-summary.json` 只记录 native_accepted 与 pending_export；最终 `restart-overall.json` 在恢复/证据 export 结果确定后才记录 overall_accepted，避免 export 失败留下 accepted=true。

@@ -189,8 +189,9 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
         Ticks(actors, "executor_start_ticks"); Ticks(actors, "watchdog_start_ticks");
         long pulseStart = Integer(facts, "fresh_pulse_started_windows_qpc_ms"), pulseEnd = Integer(facts, "fresh_pulse_finished_windows_qpc_ms");
         Require(pulseStart > releasedAt && pulseEnd >= pulseStart && pulseEnd - pulseStart <= 5000, "fresh_pulse_clock_invalid");
+        Require(AllUp(Map(Need(released, "physical"))), "released_physical_state_not_up");
         var receipt = Map(Need(facts, "fresh_receipt")); var input = Map(Need(receipt, "input"));
-        Require(Text(receipt, "id") == "recovery-pulse" && Text(receipt, "status") == "completed" && Integer(input, "events_requested") == 2 && Integer(input, "events_inserted") == 2 && Boolean(input, "released"), "fresh_pulse_not_confirmed");
+        Require(Text(receipt, "protocol") == "wow-input" && Integer(receipt, "version") == 1 && Text(receipt, "type") == "receipt" && Text(receipt, "op") == "execute" && GuidText(receipt, "session_id") == GuidText(fresh, "session_id") && Text(receipt, "id") == "recovery-pulse" && Text(receipt, "status") == "completed" && Integer(input, "events_requested") == 2 && Integer(input, "events_inserted") == 2 && Boolean(input, "released"), "fresh_pulse_not_confirmed");
         Require(Boolean(facts, "old_task_resumed") == false && Integer(facts, "stale_input_events_inserted") == 0, "old_task_resumed_or_inserted_input");
     }
     static string EvidencePath(string root, Dictionary<string, object> source)
@@ -202,8 +203,9 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
     static void VerifyRecorder(string path, Dictionary<string, object> facts)
     {
         long stopAt = Integer(Map(Need(facts, "termination")), "started_windows_qpc_ms"), releaseAt = Integer(Map(Need(facts, "released_after")), "observed_windows_qpc_ms");
-        bool held = false, ownDown = false, ready = false, freshDown = false; int up = 0, freshUp = 0; long previous = -1;
+        bool held = false, ownDown = false, ready = false, freshDown = false, oldUpConfirmed = false; int up = 0, freshUp = 0; long previous = -1;
         long pulseStart = Integer(facts, "fresh_pulse_started_windows_qpc_ms"), pulseEnd = Integer(facts, "fresh_pulse_finished_windows_qpc_ms");
+        long originalDeadline = Integer(Map(Need(facts, "owned_before")), "lease_deadline_windows_qpc_ms");
         var recorder = Map(Need(facts, "recorder")); long pid = Integer(recorder, "pid"); string hwnd = Text(recorder, "hwnd");
         foreach (string line in File.ReadLines(path))
         {
@@ -218,6 +220,7 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
                     long at = Integer(row, "at_native_ms");
                     if (at <= stopAt) ownDown = true;
                     else if (at >= pulseStart && at <= pulseEnd) freshDown = true;
+                    else if (at < releaseAt && row.ContainsKey("repeat") && Boolean(row, "repeat")) { /* OS autorepeat during the still-held fault interval is not a new DOWN. */ }
                     else throw new Failure("unplanned_down_after_restart");
                 }
             }
@@ -229,10 +232,11 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
             bool any = false; foreach (string key in new[] { "W", "SPACE", "CTRL", "SHIFT", "ALT", "F10" }) if (!(key == "W" && now >= pulseStart && now <= pulseEnd)) any |= Boolean(keys, key);
             foreach (string button in new[] { "left", "right", "middle" }) any |= Boolean(buttons, button);
             Require(!any, "physical_input_still_down_or_resumed");
-            if (now < pulseStart) up++;
+            if (now < pulseStart && now < originalDeadline) { up++; if (up >= 3) oldUpConfirmed = true; }
+            else if (now < pulseStart) up = 0;
             if (now > pulseEnd) freshUp++;
         }
-        Require(ready && ownDown && held && up >= 3 && freshDown && freshUp >= 3, "physical_release_samples_insufficient");
+        Require(ready && ownDown && held && oldUpConfirmed && freshDown && freshUp >= 3, "physical_release_samples_insufficient");
         var freshWindow = Map(Need(Map(Need(facts, "fresh_ready")), "window"));
         Require(Integer(freshWindow, "pid") == pid && Text(freshWindow, "hwnd") == hwnd, "fresh_session_not_dedicated_recorder");
     }
@@ -248,15 +252,16 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
             if (Encode(packet) == Encode(Need(facts, "released_after"))) releasedPacket = true;
         }
         Require(heldPacket && releasedPacket, "lease_facts_not_in_raw_log");
-        string freshLog = EvidencePath(root, Map(Need(facts, "fresh_native_log"))); bool found = false;
+        string freshLog = EvidencePath(root, Map(Need(facts, "fresh_native_log"))); bool found = false, foundReceipt = false;
         foreach (string line in File.ReadLines(freshLog))
         {
             Require(line.Length <= 65536, "native_line_too_large"); var row = Map(Decode(line));
             if (row.ContainsKey("type") && Object.Equals(row["type"], "ready") && Encode(row) == Encode(Need(facts, "fresh_ready"))) found = true;
+            if (row.ContainsKey("type") && Object.Equals(row["type"], "receipt") && Encode(row) == Encode(Need(facts, "fresh_receipt"))) foundReceipt = true;
             if (row.ContainsKey("input") && Integer(Map(row["input"]), "events_inserted") > 0)
-                Require(Text(row, "id") == "recovery-pulse" && Text(row, "status") == "completed" && Integer(Map(row["input"]), "events_inserted") == 2 && Boolean(Map(row["input"]), "released"), "unexpected_fresh_input");
+                Require(GuidText(row, "session_id") == GuidText(Map(Need(facts, "fresh_ready")), "session_id") && Text(row, "id") == "recovery-pulse" && Text(row, "status") == "completed" && Integer(Map(row["input"]), "events_inserted") == 2 && Boolean(Map(row["input"]), "released"), "unexpected_fresh_input");
         }
-        Require(found, "fresh_ready_not_in_raw_log");
+        Require(found && foundReceipt, "fresh_ready_or_terminal_receipt_not_in_raw_log");
         Console.WriteLine(Encode(Obj("type", "restart_evidence_verified", "restart_facts_sha256", Hash(Path.Combine(root, "restart-facts.json")), "scope", SelfTesting ? "synthetic_mock_trace" : "recorded_restart_evidence", "physical_release", SelfTesting ? "validated_from_synthetic_states" : "confirmed_from_three_samples", "live_test_executed_by_this_tool", false))); return 0;
     }
     static Dictionary<string, object> MockFacts()
@@ -267,20 +272,22 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
             "host_before", Obj("pid", 80, "start_ticks", "12345", "known", true, "in_job", false), "host_after", Obj("pid", 80, "start_ticks", "12345", "known", true, "in_job", false),
             "termination", Obj("executable", "wsl.exe", "arguments", new object[] { "--terminate", "Ubuntu" }, "exit_code", 0, "started_windows_qpc_ms", 1500, "finished_windows_qpc_ms", 1700),
             "owned_before", Obj("session_id", old, "held_keys_mask", 4194304, "held_mouse_mask", 0, "watchdog_ready", true, "observed_windows_qpc_ms", 1400, "lease_deadline_windows_qpc_ms", 6000),
-            "released_after", Obj("session_id", old, "held_keys_mask", 0, "held_mouse_mask", 0, "stop_requested", true, "stop_reason", "controller_heartbeat_expired", "observed_windows_qpc_ms", 2500),
+            "released_after", Obj("session_id", old, "held_keys_mask", 0, "held_mouse_mask", 0, "stop_requested", true, "stop_reason", "controller_heartbeat_expired", "observed_windows_qpc_ms", 2500, "physical", MockPhysical(false)),
             "fresh_ready", Obj("protocol", "wow-input", "version", 1, "type", "ready", "session_id", fresh, "executor_pid", 800, "watchdog_pid", 801, "window", Obj("pid", 900, "hwnd", "0x123")),
             "fresh_actor_identity", Obj("executor_pid", 800, "watchdog_pid", 801, "executor_start_ticks", "12346", "watchdog_start_ticks", "12347", "watchdog_ready", true, "held_keys_mask", 0, "held_mouse_mask", 0),
             "fresh_pulse_started_windows_qpc_ms", 3000, "fresh_pulse_finished_windows_qpc_ms", 3200,
-            "fresh_receipt", Obj("id", "recovery-pulse", "status", "completed", "input", Obj("events_requested", 2, "events_inserted", 2, "released", true)),
+            "fresh_receipt", Obj("protocol", "wow-input", "version", 1, "type", "receipt", "op", "execute", "session_id", fresh, "id", "recovery-pulse", "status", "completed", "input", Obj("events_requested", 2, "events_inserted", 2, "released", true)),
             "old_task_resumed", false, "stale_input_events_inserted", 0);
     }
+    static object MockPhysical(bool down)
+    { var keys = new Dictionary<string, object>(); foreach (var key in KeyCatalog.All) keys[key.Name] = key.Name == "W" && down; return Obj("keys", keys, "buttons", Obj("left", false, "right", false, "middle", false)); }
     static object MockState(int at, bool down)
     { return Obj("type", "recorder_state", "at_native_ms", at, "output_dropped", 0, "keys", Obj("W", down, "SPACE", false, "CTRL", false, "SHIFT", false, "ALT", false, "F10", false), "buttons", Obj("left", false, "right", false, "middle", false)); }
     static int SelfTest()
     {
         SelfTesting = true;
         VerifyFacts(MockFacts()); int checkedCases = 1;
-        foreach (string failure in new[] { "same-instance", "old-controller", "no-held", "late-release", "still-held", "old-session", "stale-input", "wrong-distro", "different-observer", "incomplete-inventory", "fresh-partial", "fresh-not-released", "wrong-stop-cause", "guardian-killed", "host-fallback", "host-in-job", "host-job-unknown" })
+        foreach (string failure in new[] { "same-instance", "old-controller", "no-held", "late-release", "still-held", "old-session", "stale-input", "wrong-distro", "different-observer", "incomplete-inventory", "fresh-partial", "fresh-not-released", "wrong-stop-cause", "guardian-killed", "host-fallback", "host-in-job", "host-job-unknown", "receipt-session-mismatch", "released-physical-down" })
         {
             var facts = MockFacts();
             if (failure == "same-instance") Map(facts["after"])["init_start_ticks"] = "100";
@@ -300,10 +307,12 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
             if (failure == "host-fallback") facts["host_fallback_release_used"] = true;
             if (failure == "host-in-job") Map(facts["host_before"])["in_job"] = true;
             if (failure == "host-job-unknown") Map(facts["host_before"])["known"] = false;
+            if (failure == "receipt-session-mismatch") Map(facts["fresh_receipt"])["session_id"] = Map(facts["owned_before"])["session_id"];
+            if (failure == "released-physical-down") Map(facts["released_after"])["physical"] = MockPhysical(true);
             bool rejected = false; try { VerifyFacts(facts); } catch (Failure) { rejected = true; }
             Require(rejected, "self_test_expected_rejection_missing"); checkedCases++;
         }
-        foreach (string scenario in new[] { "valid", "still-down", "foreign-down", "stale-down", "missing-held", "missing-up", "hash-tamper", "missing-lease-packet" })
+        foreach (string scenario in new[] { "valid", "still-down", "foreign-down", "stale-down", "missing-held", "missing-up", "hash-tamper", "missing-lease-packet", "missing-terminal", "raw-receipt-other-session", "late-up-samples" })
         {
             string root = Path.Combine(Path.GetTempPath(), "WowJevRestartMock-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
             try
@@ -312,14 +321,18 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
                 var rows = new List<object>(); rows.Add(Obj("type", "recorder_ready", "pid", 900, "hwnd", "0x123"));
                 rows.Add(Obj("type", "recorder_event", "window", "primary", "hwnd", "0x123", "event", "key_down", "key", "W", "at_native_ms", 1400));
                 if (scenario != "missing-held") rows.Add(MockState(1450, true));
-                rows.Add(MockState(2600, scenario == "still-down")); rows.Add(MockState(2700, false)); rows.Add(MockState(2800, false));
-                rows.Add(Obj("type", "recorder_event", "window", "primary", "hwnd", "0x123", "event", "key_down", "key", "W", "at_native_ms", 3100));
-                rows.Add(MockState(3150, true)); rows.Add(MockState(3210, false));
-                if (scenario != "missing-up") { rows.Add(MockState(3300, false)); rows.Add(MockState(3400, false)); }
+                int shift = scenario == "late-up-samples" ? 4000 : 0;
+                if (shift > 0) { facts["fresh_pulse_started_windows_qpc_ms"] = 7000; facts["fresh_pulse_finished_windows_qpc_ms"] = 7200; }
+                rows.Add(MockState(2600 + shift, scenario == "still-down")); rows.Add(MockState(2700 + shift, false)); rows.Add(MockState(2800 + shift, false));
+                rows.Add(Obj("type", "recorder_event", "window", "primary", "hwnd", "0x123", "event", "key_down", "key", "W", "at_native_ms", 3100 + shift));
+                rows.Add(MockState(3150 + shift, true)); rows.Add(MockState(3210 + shift, false));
+                if (scenario != "missing-up") { rows.Add(MockState(3300 + shift, false)); rows.Add(MockState(3400 + shift, false)); }
                 if (scenario == "foreign-down") rows.Add(Obj("type", "recorder_event", "window", "primary", "hwnd", "0x123", "event", "mouse_down", "at_native_ms", 3500));
                 if (scenario == "stale-down") rows.Add(Obj("type", "recorder_event", "window", "primary", "hwnd", "0x123", "event", "key_down", "key", "W", "at_native_ms", 3500));
                 using (var file = new StreamWriter(Path.Combine(root, "recorder.jsonl"), false, new UTF8Encoding(false))) foreach (object row in rows) file.WriteLine(Encode(row));
-                File.WriteAllText(Path.Combine(root, "fresh-native.jsonl"), Encode(facts["fresh_ready"]) + "\n" + Encode(facts["fresh_receipt"]) + "\n");
+                var rawReceipt = Map(Decode(Encode(facts["fresh_receipt"])));
+                if (scenario == "raw-receipt-other-session") rawReceipt["session_id"] = Map(facts["owned_before"])["session_id"];
+                File.WriteAllText(Path.Combine(root, "fresh-native.jsonl"), Encode(facts["fresh_ready"]) + "\n" + (scenario == "missing-terminal" ? "" : Encode(rawReceipt) + "\n"));
                 File.WriteAllText(Path.Combine(root, "lease-old.jsonl"), Encode(facts["owned_before"]) + "\n" + (scenario == "missing-lease-packet" ? "" : Encode(facts["released_after"]) + "\n"));
                 facts["recorder"] = Obj("pid", 900, "hwnd", "0x123", "file", "recorder.jsonl", "sha256", Hash(Path.Combine(root, "recorder.jsonl")));
                 facts["fresh_native_log"] = Obj("file", "fresh-native.jsonl", "sha256", Hash(Path.Combine(root, "fresh-native.jsonl")));
