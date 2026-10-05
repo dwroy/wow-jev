@@ -4,7 +4,9 @@
 
 ## 最新决定与下一阶段
 
-**最新用户目标与小闭环（19:41）**：用户明确以已知攻略扫任务、自主打怪/拾取快速升级；先体验 NPC 互动小闭环。已通过 Battle.net 正常入口启动12.1.0.69933并进入角色，辅助选中/靠近森德拉克斯并取得真实对话图。`out/acceptance/npc-loop-1/automatic-local-1` 是0模型调用的实际程序运行：6949ms、名字/关闭对话证据unknown、等待后停止、0输入/0效果/释放confirmed，严格回放通过，未证明自动互动。相同捕获/冻结校准对照确认原Bitmap字形555与对应JPEG90字形456，在线unknown、JPEG离线known；不能把JPEG模板自匹配当直播准确率。v2对话头像ROI改进已冻结但名字仍为JPEG，下一轮必须取真实NPC无损源图。无损WinEye存档在`.worktrees/lossless-eye`由agent实施、负责人待验收合并。用户已自行离开NPC打怪；此时停止输入，补录30秒只读27观察/26图/0动作并离线复核新死亡事件。已异步请求用户方便时回NPC旁准备约30秒，不依赖无回复继续输入。详见`docs/acceptance/npc-loop.md`，旧“不存在WoW窗口”是上一阶段状态，不覆盖本轮。
+**最新用户目标与小闭环**：用户明确以已知攻略扫任务、自主打怪/拾取快速升级；先体验 NPC 互动小闭环。已通过 Battle.net 正常入口启动12.1.0.69933并进入角色，辅助选中/靠近森德拉克斯并取得真实对话图。`out/acceptance/npc-loop-1/automatic-local-1` 是0模型调用的实际程序运行：6949ms、名字/关闭对话证据unknown、等待后停止、0输入/0效果/释放confirmed，严格回放通过，未证明自动互动。相同捕获/冻结校准对照确认原Bitmap字形555与对应JPEG90字形456，在线unknown、JPEG离线known；不能把JPEG模板自匹配当直播准确率。v2对话头像ROI改进已冻结但名字仍为JPEG，下一轮必须取真实NPC无损源图。用户随后手动打怪；此时停止输入，补录30秒只读27观察/26图/0动作，独立复核取得1个新的4K死亡目标选择事件（非新击杀），全部相邻帧只计1事件。target.dead仅真值已知20图评分：known正确15/错误0/CVunknown5，另6图视觉unknown不计准确率；旧错误汇总与纠正summary-v2均保留。
+
+无损WinEye存档和旧JPEG启动兼容补丁已负责人审查，以34ff5e8/6d4fd96合入；agent完整266项TS、typecheck及6组Windows实际codec/配额通过，主目录四原生模块重建和typecheck通过。主目录尝试真实PNG observe时未检测到可用WoW窗口，保留原失败，未截游戏/未发送输入；同帧游戏PNG实测及NPC自动G仍待现场。300个必要实施产物/SHA归档到out/acceptance/npc-loop-1/lossless-integration-1，确认无活动进程/工作树clean后正常remove，分支保留；没有push。用户最新要讨论整系统架构/运行流程，正在对话中解释；不要新增架构规划文件。已异步请求用户方便时回NPC旁准备约30秒，不依赖无回复继续输入。详见docs/acceptance/npc-loop.md、lossless-eye.md。
 
 **当前交付（18:40后）**：本轮增补已由负责人以bbd76b9本地合入codex/agent-system，f4a4937的版本probe修复也已接入；最终docs补充d16cef8。主目录四个Windows原生模块重建、typecheck和main-demo-1纯模拟/严格回放通过；集成260项TS全量通过，109项Python/真实Windows感知与数据库、27项录制/长跑回归、34组Windows重启机制模拟及Host helper13项边界分别通过。冻结启动独立审查关闭已发现P1，真实259源码只读两轮各21条/2观察/0输入，首编译→缓存复用、四exe同SHA；最终f4窗口补测因旧HWND/PID消失拒绝，不能冒充通过。没有推送，没有执行实际WSL重启。
 

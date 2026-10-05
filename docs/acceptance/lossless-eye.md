@@ -20,3 +20,9 @@ bash tools/eye_artifact_check.sh out/acceptance/lossless-eye/native-codecs-new
 ```
 
 本轮测试不包含实际 PrintWindow 或 WoW 采样；它直接验证实际 WinEye Save 方法对同一 Bitmap 的编码/配额行为。负责人另行完成实际游戏的同帧 PNG 观察、离线回读和名字校准；本记录不宣称游戏名字识别或自动 NPC 动作已验收。
+
+## 负责人集成
+
+以34ff5e8/6d4fd96本地合入，最后兼容补丁只在PNG时向原生进程传新flag，默认与显式JPEG均能使用旧WinEye启动参数。最终完整266项TS零跳过及typecheck通过；负责人主目录四原生模块重建/typecheck通过。真实WoW只读PNG复测未检测到可用窗口，未采图、未输入，仍待现场，不算通过。
+
+确认无活动进程并保存代码后工作树正常清理，实施分支保留。300个必要ignored产物及SHA归档在主目录`out/acceptance/npc-loop-1/lossless-integration-1/implementation-artifacts.tar.gz`、`implementation-artifact-manifest.json`；原工作树路径是实施时来源记录。

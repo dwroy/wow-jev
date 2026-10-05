@@ -33,4 +33,8 @@ v2 收紧对话 ROI 到彩色头像并补充近处关闭背景，阈值和陌生
 
 发现用户重新操作游戏后，负责人停止输入，仅采集 `manual-combat-readonly-1` 的30秒用户手动游戏：27次观察、26张图、0动作，Eye严格回放通过。独立标签复核另存该 run 的 `readonly-review/`；这不是自动打怪或自动升级证据。
 
-当前无损存档支持在独立工作树实施，验收合并后补充实际入口和检查结果。NPC 自动互动仍待新现场条件，不能把本轮标为完成。
+只读复核取得1个新的4K死亡目标选择事件，未看到存活到死亡的新击杀。26张图中，target.present已知正确21、错误0、unknown5；player.in_combat已知正确26、错误0。target.dead只对真值已知20张计分：已知正确15、错误0、CV unknown5；另6张视觉unknown单列未评分。原统计把这6张遮蔽在CV unknown中，旧汇总保留，正确口径为`readonly-review/summary-v2.md`。全部15张连续死亡图只计1个事件，不是总体准确率或用户确认金标准。
+
+无损存档支持和旧JPEG启动兼容已以34ff5e8/6d4fd96审查合入。agent完整266项TS、typecheck及6组Windows实际codec/配额通过；负责人重建主目录四原生模块并通过typecheck。实际PNG observe尝试未检测到可用WoW窗口，失败保留，不能称同帧游戏实测通过。300个必要产物及SHA归档在`out/acceptance/npc-loop-1/lossless-integration-1/implementation-artifacts.tar.gz`与manifest，工作树正常移除、分支保留。
+
+下次只读校准入口加`--save --artifact-format png`，`system observe/live`也支持该格式；默认仍为JPEG，PNG暂不与Seed组合。NPC自动互动仍待新现场条件和真实无损模板，不能把本轮标为完成。
