@@ -86,3 +86,22 @@ test('public registry observe/live preserve PNG in actual frozen child arguments
     }
   } finally { await rm(temp, { recursive: true, force: true }); }
 });
+
+
+test('implicit and explicit JPEG omit new native flags and remain compatible with a legacy eye process', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'wow-legacy-eye-default-'));
+  try {
+    const received = join(temp, 'received.json'), wrapper = join(temp, 'legacy-eye.mjs');
+    await writeFile(wrapper, `import {writeFileSync} from 'node:fs';const [mock,localExport]=process.argv.slice(2,4);const args=process.argv.slice(4);writeFileSync(${JSON.stringify(received)},JSON.stringify(args));if(args.includes('--artifact-format'))process.exit(17);process.argv.splice(2,2,'steady',localExport);await import(mock);`);
+    const validator = await loadEyeValidator(join(repo, 'protocol/native-eye-v1.schema.json'));
+    for (const format of [undefined, 'jpeg'] as const) {
+      const native = await NativeEyeClient.start({ executable: process.execPath, prefixArgs: [wrapper, mock, temp], window: '0xabc', expectedPid: 42,
+        cwd: repo, now: () => 0, exportWindowsPath: 'C:\\export', ...(format ? { artifactFormat: format } : {}) }, validator);
+      try {
+        assert.equal(native.ready!.window.pid, 42);
+        const args = JSON.parse(await readFile(received, 'utf8')) as string[]; assert.equal(args.includes('--artifact-format'), false);
+        assert.equal((await native.sample(false)).sample.artifact, null);
+      } finally { await native.close(); }
+    }
+  } finally { await rm(temp, { recursive: true, force: true }); }
+});

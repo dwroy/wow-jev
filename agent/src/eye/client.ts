@@ -30,7 +30,7 @@ export class NativeEyeClient {
     const args = [...(options.prefixArgs ?? []), 'serve', '--window', options.window, '--expected-pid', String(options.expectedPid), '--session', this.sessionId,
       ...(options.calibrationWindowsPath ? ['--calibration', options.calibrationWindowsPath] : []), ...(options.combatCalibrationWindowsPath ? ['--combat-calibration', options.combatCalibrationWindowsPath] : []),
       ...(options.npcCalibrationWindowsPath ? ['--npc-calibration', options.npcCalibrationWindowsPath] : []), ...(options.exportWindowsPath ? ['--export-dir', options.exportWindowsPath] : []),
-      ...(options.artifactFormat ? ['--artifact-format', options.artifactFormat] : [])];
+      ...(options.artifactFormat === 'png' ? ['--artifact-format', 'png'] : [])];
     this.child = spawn(options.executable, args, { cwd: options.cwd, shell: false, windowsHide: true, detached: false, stdio: ['pipe', 'pipe', 'pipe'] });
     this.started = new Promise((resolve, reject) => { this.startResolve = resolve; this.startReject = reject; });
     this.startupTimer = setTimeout(() => this.fail(new Error('eye_startup_timeout')), options.startupTimeoutMs ?? 5000);
