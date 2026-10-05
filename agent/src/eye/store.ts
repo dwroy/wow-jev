@@ -132,7 +132,7 @@ export class EyeRunStore {
         }
       }
       if (bundle.signature?.mask === 'name-bank-v1') {
-        if (!Array.isArray(bundle.signature.names) || !bundle.signature.names.length || bundle.signature.names.length > 64 ||
+        if (!Array.isArray(bundle.signature.names) || !bundle.signature.names.length || bundle.signature.names.length > 32 ||
             !Array.isArray(bundle.signature.reject_templates) || !bundle.signature.reject_templates.length || bundle.signature.reject_templates.length > 16) throw new Error('invalid_identity_bank');
         const identities = bundle.signature.names.flatMap((entry) => {
           if (!Array.isArray(entry.templates) || entry.templates.length < 1 || entry.templates.length > 16) throw new Error('invalid_identity_templates');

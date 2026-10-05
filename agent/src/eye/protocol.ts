@@ -39,6 +39,7 @@ export function assertEye(value: unknown, validator: EyeValidator): asserts valu
       (value.detectors.target_present?.status !== 'known' || value.detectors.target_present.value !== true)) throw new Error('eye_target_dependency');
     if (value.detectors.target_name?.status === 'known' && value.detectors.target_signature?.status !== 'known') throw new Error('eye_target_name_without_identity');
     if (value.detectors.target_signature?.status === 'known' && value.detectors.target_signature.calibration_id !== value.detectors.target_present?.calibration_id) throw new Error('eye_identity_calibration_mismatch');
+    if (value.detectors.target_dead?.status === 'known' && value.detectors.target_dead.calibration_id !== value.detectors.target_present?.calibration_id) throw new Error('eye_target_calibration_mismatch');
     if (value.detectors.target_name?.status === 'known') {
       const name = value.detectors.target_name, signature = value.detectors.target_signature!;
       if (name.calibration_id !== signature.calibration_id || createHash('sha256').update(`wow-visible-name-v1\0${name.value}`).digest('hex') !== signature.value) throw new Error('eye_name_identity_mismatch');
