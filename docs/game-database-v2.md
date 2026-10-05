@@ -78,3 +78,15 @@ const data = await world.lookup(version, [
 24任务与依赖、1978→2022/2023/2024/2025地图作者层次生成129实体/779参考断言。逐字段/逐任务报告记录raw覆盖、normalized unsupported、冲突及缺失。ATT的provider仅作类型明确的作者线索，不代替已核starter或finisher；条件threshold/父继承/历史移除保留。TDB的credit/event、ID/order/storage/flags和count分开，隐藏/可选项不总计。宽位掩码为十进制字符串并带原SQL类型，避免JS舍入。
 
 SQL小证据内含原字节及parent dump/archive SHA、offset/line/tuple locator；导入完整校验父源，读取只校验小包。每条raw记录保留其VerifiedBuild，混合聚合build为unknown。当前国服69933已核实覆盖为0，精确query仍not_found；全部local_only，参考覆盖不授权自动任务或输入。可接、楼层、位面和可通行路线在后续查询中继续unknown/unsupported。
+
+## 角色条件与规划查询
+
+只读入口（项目venv）：
+
+```bash
+python -m game_database.v2.query_cli --pack /本次世界包目录 --sha256 /输出的manifestSHA --version game-data/profiles/retail-cn-12.1.0.69933.json --references search --text 练手 --namespace retail
+```
+
+SHA参数填写输出的64位值。省略`--references`按六维精确查询。子命令还有availability/achievement/encounter（`--entity` typed-key JSON）、condition（`--ast`）、region/near（`--map` typed-key JSON与显式floor/coordinate-space/transform）、routes（`--from-entity`/`--to-entity`/重复`--movement-mode`/`--capabilities`）。context JSON用character/account/context分组，每事实要求state/value/evidence。
+
+可选`--runtime-db FILE --runtime-context FILE`只读运行库；context必需character_id/account_id/as_of_clock/maximum_age，可选fact_bindings。Provider与查询的world SHA及全部六维客户端必须相同，缺绑定或运行时被替换会拒绝。缺失/迟到/不同clock/不完整状态均unknown，目标完成不是历史交付。所有结果automatic_action_eligible=false，路线can_traverse=false，索引只选候选；楼层/位面/变换/精度和原字段证据继续复核。

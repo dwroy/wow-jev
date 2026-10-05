@@ -17,7 +17,7 @@
 
 ## 里程碑状态
 
-一、二已完成离线验收；三集成中；四待实施。运行库固定修补后的SQLite；世界包与v1接口分开，尚无v2发布或当前客户端已核实覆盖。
+一、二、三已完成离线验收；四实施中。运行库固定修补后的SQLite；世界包与v1接口分开，尚无v2发布或当前客户端已核实覆盖。
 
 ## 步骤1a：世界包与兼容迁移
 
@@ -64,3 +64,19 @@
 独立审查复现symlink父目录越界写、cache中断半文件、首行build代表混合数组、coverage漏unsupported；已补原子no-replace/写前拒绝、同内容幂等、混合build及normalized/raw覆盖反例，复核无剩余P1/P2。unsupported不作source withdrawal，名称delta按locale/condition区分。原候选39d6…、raw失败和审查过程保留，最终使用reviewed包。
 
 实施树证据 `out/acceptance/game-database-v2/milestone-2/{cli-result-reviewed.json,reviewed-summary.json,bridge-validation.json}`；主checkoutff-only集成后重新生成本机验收。尚无真实游戏任务、导航、模型或输入效果验证。
+
+## 步骤3：条件、进度与规划查询
+
+165Python（旧接口/包/运行/来源106+规划及CLI59）全部通过，无skip。独立审查真实复现跨provider世界/六维客户端污染、pending掩盖确定冲突、独立边/难度与楼层/false位面误冲突，修正后反例通过；引用原始assertion/SHA不改写。三值unknown阻塞，turned_in/completed_confirmed与目标完成分开，账号/角色显式所有权、同clock新鲜度和event幂等沿用M1。
+
+M2实际包5f762a…2774再次打开查验：当前69933 ID可接/中文/区域均not_found；reference可接unknown、练手返回65451/70124歧义，IDs=[]且applicable=false。合成世界覆盖楼层、位面、精度、变换、距离边界、路线counterexample/能力以及代表成就/副本；不宣称真实地图可达或副本机制核实。
+
+实际129实体/779断言包Python查询基线：
+
+| 查询 | 新建连接p50/p95 ms（20次） | 复用连接p50/p95 ms（50次） |
+| --- | --- | --- |
+| ID参考可接 | 11.618 / 13.212 | 0.967 / 1.600 |
+| 中文双字参考 | 17.475 / 21.170 | 5.068 / 7.146 |
+| 区域参考 | 40.984 / 48.948 | 24.587 / 30.708 |
+
+`out/acceptance/game-database-v2/milestone-3/{real-source-queries,query-baseline}.json`保留完整来源/blockers/测量。OS缓存未清除，区分新连接与复用连接，非物理冷缓存；不含TS进程启动成本，不设数据规模性能承诺。

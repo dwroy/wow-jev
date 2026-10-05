@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 里程碑三完成：角色条件与只读规划查询。** 独立模块集成三值AND/OR/NOT、精确世界/客户端的账号与角色进度、历史交付/目标完成区分、解锁/跳过、中文双字检索、RTree候选复核、楼层/位面/变换、路线及合成成就/副本样例。165项Python通过、0skip；新增59项规划/实际CLI测试。独立复核发现并关闭跨世界/客户端provider污染、未知候选掩盖已知冲突、独立路线/难度/楼层/位面误冲突，保留原来源而按关系身份和空间适用范围判断。
+
+入口 `python -m game_database.v2.query_cli --pack DIR --sha256 SHA --version game-data/profiles/retail-cn-12.1.0.69933.json --references search --text 练手 --namespace retail`；条件、区域/近点/路线及runtime只读进度入口见 `docs/game-database-v2.md`。真实M2包练手返回两个ID歧义，参考IDs不采纳、可接truth unknown；当前69933三类查询not_found。原包/schema和v1SHA未改。ID/中文/区域新建及复用连接p50/p95已测，OS缓存未清除，不宣称物理冷缓存或广域性能。合成副本数据不冒称真实机制。
+
+下一步里程碑四：`.worktrees/game-db-execution` 负责版本/任务闭环，独立world-task与learning树负责不可执行世界规划提示和严格layers证据来源；v2 RuntimeVersion固定world+knowledge，旧v1保留原格式。全部仍为离线模拟/只读，本轮未操作游戏、读取凭据或push。
+
 **2026-10-06 里程碑二完成：固定ATT/TDB苏醒海岸参考种子。** `.worktrees/game-db-foundation` 集成静态Lua/SQL适配、固定源锁、24任务选择、四主区UI地图层次、小原始字节摘取链、逐任务覆盖/冲突/缺失及增量语义；不执行来源Lua/SQL。固定实际原件首尾完整SHA验证，97POI/181点等保留来源build，mixed row build不以首行代表全数组。独立审查的symlink越界缓存、非原子缓存和raw覆盖冒充规范目标支持均关闭并有反例。
 
 106项Python数据库/来源回归通过，14TS及typecheck已在步骤2a通过；实际CLI生成129实体/779断言，全reference_only/local_only，证据1944426字节。最终包SHA `5f762a251e9fb301ee3c8e50d9bbbc31fefc8bf2a67b686a60ef8360bb1c2774`，实际TS桥读练手材料/数量及uint64字符串正确，当前69933 exact not_found。24名称/作者provider/UI点，faction已知8/未知16；23任务raw目标/逐项count、1缺失；规范动作目标23unsupported/1unknown，starter/finisher和当前客户端已核实均0。计数不累加隐藏/可选项，Type0不推kill。

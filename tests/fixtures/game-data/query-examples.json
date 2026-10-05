@@ -1,0 +1,471 @@
+{
+  "client_version": {
+    "branch": "retail",
+    "build": 69933,
+    "expansion": "midnight",
+    "locale": "zh_CN",
+    "patch": "12.1.0",
+    "region": "cn"
+  },
+  "entities": [
+    {
+      "kind": "quest",
+      "namespace": "retail",
+      "native_id": 1001
+    },
+    {
+      "kind": "quest",
+      "namespace": "retail",
+      "native_id": 1002
+    },
+    {
+      "kind": "quest",
+      "namespace": "retail",
+      "native_id": 1003
+    },
+    {
+      "kind": "creature",
+      "namespace": "retail",
+      "native_id": 2001
+    },
+    {
+      "kind": "creature",
+      "namespace": "retail",
+      "native_id": 2002
+    },
+    {
+      "kind": "creature",
+      "namespace": "retail",
+      "native_id": 2003
+    },
+    {
+      "kind": "creature",
+      "namespace": "retail",
+      "native_id": 2004
+    },
+    {
+      "kind": "creature",
+      "namespace": "retail",
+      "native_id": 2005
+    },
+    {
+      "kind": "creature",
+      "namespace": "retail",
+      "native_id": 2006
+    },
+    {
+      "kind": "creature",
+      "namespace": "retail",
+      "native_id": 2007
+    },
+    {
+      "kind": "creature",
+      "namespace": "retail",
+      "native_id": 2008
+    },
+    {
+      "kind": "achievement",
+      "namespace": "retail",
+      "native_id": 3001
+    },
+    {
+      "kind": "encounter",
+      "namespace": "retail",
+      "native_id": 4001
+    },
+    {
+      "kind": "instance",
+      "namespace": "retail",
+      "native_id": 5001
+    },
+    {
+      "kind": "spell",
+      "namespace": "retail",
+      "native_id": 6001
+    },
+    {
+      "kind": "zone",
+      "namespace": "retail",
+      "native_id": 7001
+    },
+    {
+      "kind": "ui_map",
+      "namespace": "retail",
+      "native_id": 9001
+    },
+    {
+      "kind": "world_map",
+      "namespace": "retail",
+      "native_id": 9002
+    }
+  ],
+  "fields": [
+    {
+      "entity": {
+        "kind": "quest",
+        "namespace": "retail",
+        "native_id": 1001
+      },
+      "predicate": "name",
+      "value": "Synthetic 练手材料"
+    },
+    {
+      "entity": {
+        "kind": "quest",
+        "namespace": "retail",
+        "native_id": 1002
+      },
+      "predicate": "name",
+      "value": "Synthetic 练手材料"
+    },
+    {
+      "entity": {
+        "kind": "quest",
+        "namespace": "retail",
+        "native_id": 1003
+      },
+      "predicate": "name",
+      "value": "Synthetic 材练料手"
+    },
+    {
+      "entity": {
+        "kind": "quest",
+        "namespace": "retail",
+        "native_id": 1001
+      },
+      "predicate": "alias",
+      "value": "Ｓｙｎｔｈｅｔｉｃ ＮＰＣ"
+    },
+    {
+      "entity": {
+        "kind": "quest",
+        "namespace": "retail",
+        "native_id": 1001
+      },
+      "predicate": "quest.condition",
+      "value": {
+        "args": [
+          {
+            "entity": {
+              "kind": "quest",
+              "namespace": "retail",
+              "native_id": 1002
+            },
+            "op": "quest_completed",
+            "scope": "character"
+          },
+          {
+            "cmp": "eq",
+            "key": "campaign_skip",
+            "op": "fact",
+            "scope": "account",
+            "value": true
+          }
+        ],
+        "op": "or"
+      }
+    },
+    {
+      "entity": {
+        "kind": "achievement",
+        "namespace": "retail",
+        "native_id": 3001
+      },
+      "predicate": "achievement.criteria",
+      "value": {
+        "entity": {
+          "kind": "achievement",
+          "namespace": "retail",
+          "native_id": 3001
+        },
+        "op": "unlock",
+        "scope": "account"
+      }
+    },
+    {
+      "entity": {
+        "kind": "encounter",
+        "namespace": "retail",
+        "native_id": 4001
+      },
+      "predicate": "encounter.mechanic",
+      "value": {
+        "condition": {
+          "cmp": "eq",
+          "key": "class",
+          "op": "fact",
+          "scope": "character",
+          "value": "Paladin"
+        },
+        "description": "Synthetic interrupt example; not a game mechanic",
+        "difficulty": "mythic",
+        "instance": {
+          "kind": "instance",
+          "namespace": "retail",
+          "native_id": 5001
+        },
+        "phase": "SyntheticPhase1",
+        "roles": [
+          "tank"
+        ],
+        "season": "SyntheticSeason1",
+        "spell": {
+          "kind": "spell",
+          "namespace": "retail",
+          "native_id": 6001
+        }
+      }
+    },
+    {
+      "entity": {
+        "kind": "creature",
+        "namespace": "retail",
+        "native_id": 2001
+      },
+      "predicate": "locations",
+      "value": [
+        {
+          "accuracy": 0,
+          "coordinate_space": "ui_percent",
+          "floor": 1,
+          "map": {
+            "kind": "ui_map",
+            "namespace": "retail",
+            "native_id": 9001
+          },
+          "phase": {
+            "op": "true"
+          },
+          "transform_revision": null,
+          "x": 10,
+          "y": 10,
+          "z": null
+        }
+      ]
+    },
+    {
+      "entity": {
+        "kind": "creature",
+        "namespace": "retail",
+        "native_id": 2002
+      },
+      "predicate": "locations",
+      "value": [
+        {
+          "accuracy": 0,
+          "coordinate_space": "ui_percent",
+          "floor": 1,
+          "map": {
+            "kind": "ui_map",
+            "namespace": "retail",
+            "native_id": 9001
+          },
+          "phase": {
+            "op": "true"
+          },
+          "transform_revision": null,
+          "x": 12,
+          "y": 10,
+          "z": null
+        }
+      ]
+    },
+    {
+      "entity": {
+        "kind": "creature",
+        "namespace": "retail",
+        "native_id": 2003
+      },
+      "predicate": "locations",
+      "value": [
+        {
+          "accuracy": 0,
+          "coordinate_space": "ui_percent",
+          "floor": 2,
+          "map": {
+            "kind": "ui_map",
+            "namespace": "retail",
+            "native_id": 9001
+          },
+          "phase": {
+            "op": "true"
+          },
+          "transform_revision": null,
+          "x": 10.5,
+          "y": 10,
+          "z": null
+        }
+      ]
+    },
+    {
+      "entity": {
+        "kind": "creature",
+        "namespace": "retail",
+        "native_id": 2004
+      },
+      "predicate": "locations",
+      "value": [
+        {
+          "accuracy": 0,
+          "coordinate_space": "ui_percent",
+          "floor": 1,
+          "map": {
+            "kind": "ui_map",
+            "namespace": "retail",
+            "native_id": 9001
+          },
+          "phase": {
+            "op": "unknown"
+          },
+          "transform_revision": null,
+          "x": 10.5,
+          "y": 10,
+          "z": null
+        }
+      ]
+    },
+    {
+      "entity": {
+        "kind": "creature",
+        "namespace": "retail",
+        "native_id": 2005
+      },
+      "predicate": "locations",
+      "value": [
+        {
+          "accuracy": 0,
+          "coordinate_space": "ui_percent",
+          "floor": 1,
+          "map": {
+            "kind": "ui_map",
+            "namespace": "retail",
+            "native_id": 9001
+          },
+          "phase": {
+            "cmp": "eq",
+            "key": "phase",
+            "op": "fact",
+            "scope": "context",
+            "value": "other"
+          },
+          "transform_revision": null,
+          "x": 10.1,
+          "y": 10,
+          "z": null
+        }
+      ]
+    },
+    {
+      "entity": {
+        "kind": "creature",
+        "namespace": "retail",
+        "native_id": 2006
+      },
+      "predicate": "locations",
+      "value": [
+        {
+          "accuracy": 0,
+          "coordinate_space": "plugin_texture",
+          "floor": 1,
+          "map": {
+            "kind": "ui_map",
+            "namespace": "retail",
+            "native_id": 9001
+          },
+          "phase": {
+            "op": "true"
+          },
+          "transform_revision": "texture-r1",
+          "x": 10,
+          "y": 10,
+          "z": null
+        }
+      ]
+    },
+    {
+      "entity": {
+        "kind": "creature",
+        "namespace": "retail",
+        "native_id": 2007
+      },
+      "predicate": "locations",
+      "value": [
+        {
+          "accuracy": null,
+          "coordinate_space": "ui_percent",
+          "floor": null,
+          "map": {
+            "kind": "ui_map",
+            "namespace": "retail",
+            "native_id": 9001
+          },
+          "phase": {
+            "op": "true"
+          },
+          "transform_revision": null,
+          "x": 10,
+          "y": 10,
+          "z": null
+        }
+      ]
+    },
+    {
+      "entity": {
+        "kind": "creature",
+        "namespace": "retail",
+        "native_id": 2008
+      },
+      "predicate": "locations",
+      "value": [
+        {
+          "accuracy": 0,
+          "coordinate_space": "world",
+          "floor": 1,
+          "map": {
+            "kind": "world_map",
+            "namespace": "retail",
+            "native_id": 9002
+          },
+          "phase": {
+            "op": "true"
+          },
+          "transform_revision": null,
+          "x": -10,
+          "y": -20,
+          "z": null
+        }
+      ]
+    }
+  ],
+  "note": "Synthetic offline query examples only. No real achievement, encounter, route or current-client verification is claimed.",
+  "route": {
+    "condition": {
+      "op": "true"
+    },
+    "direction": "forward",
+    "entity": {
+      "kind": "zone",
+      "namespace": "retail",
+      "native_id": 7001
+    },
+    "estimated_seconds": 4,
+    "failure_counterexamples": [],
+    "from_entity": {
+      "kind": "creature",
+      "namespace": "retail",
+      "native_id": 2001
+    },
+    "movement_mode": "ground",
+    "required_capabilities": [
+      "ground"
+    ],
+    "revision": "SyntheticRoute-v1",
+    "risk_cost": 1,
+    "to_entity": {
+      "kind": "creature",
+      "namespace": "retail",
+      "native_id": 2002
+    },
+    "verification_status": "verified"
+  }
+}
