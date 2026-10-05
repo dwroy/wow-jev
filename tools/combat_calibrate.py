@@ -14,6 +14,90 @@ from PIL import Image
 KEYS = {"target_present", "target_dead", "player_in_combat"}
 
 
+def visible_name_signature(name):
+    """A visible UI-name class, deliberately not an individual unit identifier."""
+    return hashlib.sha256(("wow-visible-name-v1\0" + name).encode("utf-8")).hexdigest()
+
+
+def glyph_distance(first, second):
+    """Jaccard distance over ink, not mean RGB distance over a sparse background."""
+    a, b = first.tobytes()[::3], second.tobytes()[::3]
+    union = sum(bool(x) or bool(y) for x, y in zip(a, b))
+    return sum(bool(x) != bool(y) for x, y in zip(a, b)) / union if union else 1.0
+
+
+def local_glyph_distance(first, second, tile_width):
+    distances = []
+    for x in range(0, first.width, tile_width):
+        box = (x, 0, min(x + tile_width, first.width), first.height)
+        a, b = first.crop(box), second.crop(box)
+        if any(a.tobytes()) or any(b.tobytes()):
+            distances.append(glyph_distance(a, b))
+    return max(distances, default=1.0)
+
+
+def name_bank(signature, size, templates):
+    exact(signature, {"roi", "mask", "pixel_mode", "min_ink_pixels", "tile_width", "thresholds", "names", "reject_sources"})
+    box = region(signature["roi"], size)
+    pixels = (box[2] - box[0]) * (box[3] - box[1])
+    minimum = signature["min_ink_pixels"]
+    if pixels > 16384 or signature["pixel_mode"] != "yellow-glyph-v1" or type(minimum) is not int or not 8 <= minimum <= pixels:
+        raise CalibrationError("名字bank的ROI、字形或墨迹门槛不合法")
+    tile_width = signature["tile_width"]
+    if type(tile_width) is not int or not 1 <= tile_width <= min(64, box[2] - box[0]):
+        raise CalibrationError("名字bank tile_width必须是1..min(64,ROI宽度)整数")
+    exact(signature["thresholds"], {"max_distance", "max_local_distance", "min_margin"})
+    maximum = threshold(signature["thresholds"]["max_distance"], "max_distance")
+    local_maximum = threshold(signature["thresholds"]["max_local_distance"], "max_local_distance")
+    margin = threshold(signature["thresholds"]["min_margin"], "min_margin")
+    if maximum > .25 or local_maximum > .25:
+        raise CalibrationError("名字bank距离门槛必须<=0.25")
+    names = signature["names"]
+    if type(names) is not list or not 1 <= len(names) <= 32:
+        raise CalibrationError("名字bank要求1..32个显式名字")
+    labels, sources, classes, features = set(), set(), [], []
+
+    def crops(paths, prefix, require_ink):
+        if type(paths) is not list or not 1 <= len(paths) <= 16 or any(type(path) is not str for path in paths) or len(set(paths)) != len(paths):
+            raise CalibrationError("名字bank每类要求1..16张不重复绝对源图")
+        result, masks = [], []
+        for index, path in enumerate(paths):
+            if path in sources:
+                raise CalibrationError("名字bank类间源图不能重复")
+            sources.add(path)
+            image, source_hash = load_source(path)
+            if image.size != size:
+                raise CalibrationError("名字bank源图客户区尺寸必须相同")
+            crop = image.crop(box)
+            mask = feature(crop, signature["pixel_mode"])
+            if require_ink and sum(bool(pixel) for pixel in mask.tobytes()[::3]) < minimum:
+                raise CalibrationError("名字bank源图字形墨迹不足")
+            metadata = {"file": f"{prefix}-{index}.png", "source_sha256": source_hash}
+            templates.append((metadata["file"], crop, metadata))
+            result.append(metadata)
+            masks.append(mask)
+        return result, masks
+
+    for index, definition in enumerate(names):
+        exact(definition, {"name", "sources"})
+        name = definition["name"]
+        if type(name) is not str or not 1 <= len(name) <= 128 or name != name.strip() or any(ord(char) < 32 for char in name) or name in labels:
+            raise CalibrationError("名字bank要求唯一、无首尾空白的显式名字")
+        labels.add(name)
+        entries, masks = crops(definition["sources"], f"target-name-{index}", True)
+        classes.append({"name": name, "signature": visible_name_signature(name), "templates": entries})
+        features.append(masks)
+    rejects, reject_features = crops(signature["reject_sources"], "target-name-reject", False)
+    for index, masks in enumerate(features):
+        alternatives = reject_features + [mask for other, group in enumerate(features) if other != index for mask in group]
+        if any(glyph_distance(a, b) < margin for a in masks for b in alternatives):
+            raise CalibrationError("名字bank已标注类或拒绝类不可分")
+    return {"roi": dict(signature["roi"]), "mask": "name-bank-v1", "pixel_mode": signature["pixel_mode"],
+            "min_ink_pixels": minimum, "tile_width": tile_width,
+            "thresholds": {"max_distance": maximum, "max_local_distance": local_maximum, "min_margin": margin},
+            "names": classes, "reject_templates": rejects}
+
+
 def exact(value, required, optional=()):
     if type(value) is not dict or set(value) - set(required) - set(optional) or set(required) - set(value):
         raise CalibrationError("字段集合不符合 combat calibration 契约")
@@ -92,12 +176,15 @@ def generate(spec, out_dir):
     bundle = {"version": 1, "kind": "combat-ui", "id": spec["id"], "client_width": size[0], "client_height": size[1], "detectors": result}
     if "signature" in spec:
         signature = spec["signature"]
-        exact(signature, {"roi", "mask", "min_ink_pixels"})
-        box = region(signature["roi"], size)
-        pixels = (box[2] - box[0]) * (box[3] - box[1])
-        if pixels > 16384 or signature["mask"] != "yellow-mask-v1" or type(signature["min_ink_pixels"]) is not int or not 8 <= signature["min_ink_pixels"] <= pixels:
-            raise CalibrationError("签名字形ROI或墨迹门槛不合法")
-        bundle["signature"] = signature
+        if type(signature) is dict and signature.get("mask") == "name-bank-v1":
+            bundle["signature"] = name_bank(signature, size, templates)
+        else:
+            exact(signature, {"roi", "mask", "min_ink_pixels"})
+            box = region(signature["roi"], size)
+            pixels = (box[2] - box[0]) * (box[3] - box[1])
+            if pixels > 16384 or signature["mask"] != "yellow-mask-v1" or type(signature["min_ink_pixels"]) is not int or not 8 <= signature["min_ink_pixels"] <= pixels:
+                raise CalibrationError("签名字形ROI或墨迹门槛不合法")
+            bundle["signature"] = signature
     out = Path(out_dir)
     if not out.is_absolute():
         raise CalibrationError("输出目录必须是绝对路径")
