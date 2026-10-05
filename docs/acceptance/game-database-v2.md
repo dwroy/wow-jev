@@ -47,3 +47,7 @@
 | 中文同名参考（ambiguous） | 2.292 / 3.105 | 0.841 / 1.769 |
 
 区域查询此阶段unsupported，里程碑三补测；没有据此设广域数据性能承诺。里程碑一完成原子/幂等、篡改、缺字段、跨版本、备份恢复、批量桥与旧接口验收，尚不包含任何模型/Windows/游戏输入、当前游戏核实数据或执行学习闭环。
+
+## 步骤2a：双语参考文本
+
+实源接入前修正同entity的en_US/zh_CN文本冲突归类。name/alias/description按locale选择，未知语言只保留候选、不采纳；数值参考允许保留来自不同source locale的来源，精确六维接口不变。84Python/14TS及typecheck通过，0skip。初次新TS测试数组未标tuple被noUncheckedIndexedAccess正确拒绝，改为显式const tuple后typecheck通过，未放宽编译设置。原世界包schema字节及v1断言SHA不变；旧包继续固定SHA读取。

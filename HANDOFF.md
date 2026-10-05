@@ -4,6 +4,10 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 里程碑二，步骤2a完成：参考文本的语言隔离。** 双语ATT/TDB源准备发现按ID references会把同一实体中英文name误判为同字段冲突。已按source locale筛选name/alias/description，未知locale保留原候选但不采纳为请求语言，数值字段参考与六维精确query不变；Python与TS字段采纳校验同步。84Python/14TS及typecheck通过，无skip；尚未发布M2实源种子。
+
+source适配器在 `.worktrees/game-db-seeds` 实施，固定原件每次正式导入重新核完整父SHA，SQL原tuple摘取逐byte-range比对，不执行Lua/SQL。并行独立 `.worktrees/game-db-queries` 准备M3三值条件、角色/账号、中文短词与空间候选，集成验收仍按二→三顺序。源provider不推为已核starter/finisher，uint64位掩码保留十进制字符串；TDBcredit不推为杀怪，unsupported不冒称作者withdrawn或游戏不存在。
+
 **2026-10-06 里程碑一完成：运行库、批量桥与基础库联合验收。** 在独立工作树集成APSW单写WAL运行库、run/event缺口索引、严格原观察绑定的角色/账号进度、经验候选/评估/不可变注册、Backup API备份恢复及runtime CLI；新增schema-v2和固定世界SHA的TS批量只读桥。83项Python、13项TS（含旧v1回归）全部通过无skip，typecheck通过；真实WAL未checkpoint备份、第二writer拒绝、SIGKILL后恢复和CLI恢复均验证。经验注册仍需里程碑四接通layers/既有知识快照，不宣称执行学习闭环已完成。
 
 独立桥审查复现“字段/断言同时改写而沿用旧SHA”和“conflict总状态冒充found”已修正；精确canonical字节SHA、source绑定、规则版本和总状态均核验，覆盖Python1.0/Unicode及有效重复键反例，不以JS重序列化字节冒充Python原SHA。主checkout已验收世界包46Python；本步骤按ff-only集成后复核83Python/13TS。体验与证据见 `docs/game-database-v2.md`、`docs/acceptance/game-database-v2.md`。

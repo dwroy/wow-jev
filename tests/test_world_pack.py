@@ -266,4 +266,22 @@ def test_v1_unknown_locale_kept_without_inventing_language(tmp_path):
     built=build_pack(world,tmp_path/'world',evidence_root=tmp_path)
     with WorldPack(built['directory'],expected_sha256=built['world_pack_sha256']) as p:
         assert p.connection.execute('SELECT COUNT(*) FROM localized_text').fetchone()[0]==0
-        assert p.lookup(version(),selector(),references=True)['entities'][0]['fields']['name']['value']==old['name']
+        name=p.lookup(version(),selector(),references=True)['entities'][0]['fields']['name']
+        assert name['status']=='unknown' and name['value'] is None and name['assertion_ids']==[]
+        assert name['assertions'][0]['value']==old['name']
+
+
+def test_reference_text_locales_are_not_field_conflicts(tmp_path):
+    english=version(region=None,locale='en_US',build=None,patch=None,expansion=None)
+    chinese=version(region=None,locale='zh_CN',build=None,patch=None,expansion=None)
+    with GameDatabase(tmp_path/'old.sqlite') as db:
+        db.import_bundle(bundle(assertion(name='Primal Proto-Whelp',v=english,known=False,facts={'count':8}),assertion(name='原始始祖雏龙',v=chinese,known=False,facts={'count':8})))
+        world=migrate_v1(db)
+    built=build_pack(world,tmp_path/'world',evidence_root=tmp_path)
+    with WorldPack(built['directory'],expected_sha256=built['world_pack_sha256']) as p:
+        for locale,name in [('zh_CN','原始始祖雏龙'),('en_US','Primal Proto-Whelp')]:
+            result=p.lookup(version(locale=locale),selector(),references=True)
+            fields=result['entities'][0]['fields']
+            assert fields['name']['status']=='known' and fields['name']['value']==name
+            assert fields['count']['status']=='known' and fields['count']['value']==8
+            assert len(fields['count']['assertion_ids'])==2

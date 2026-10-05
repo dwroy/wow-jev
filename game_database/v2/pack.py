@@ -260,7 +260,7 @@ class WorldPack:
     def __exit__(self, *_):
         self.close()
 
-    def _fields(self, key: dict, version: dict | None, predicates: list[str] | None = None) -> list[dict]:
+    def _fields(self, key: dict, version: dict | None, predicates: list[str] | None = None, *, locale: str | None = None) -> list[dict]:
         rows = self.connection.execute('SELECT sha256,payload FROM assertion WHERE namespace=? AND kind=? AND native_id=? ORDER BY predicate,sha256', (key['namespace'], key['kind'], key['native_id']))
         records = []
         for row in rows:
@@ -275,6 +275,8 @@ class WorldPack:
             source = parse_json(source_raw)
             if canonical_sha256(source) != a['source_sha256']:
                 raise ValidationError('world: source revision hash mismatch')
+            if locale is not None and a['predicate'] in {'name','alias','description'} and source['source_version']['locale'] not in (None,locale):
+                continue
             records.append({'assertion_sha256': row['sha256'], 'assertion_canonical': row['payload'], 'source_canonical': source_raw, 'source_revision': source, **a})
         return records
 
@@ -308,9 +310,9 @@ class WorldPack:
             raise ValidationError('query: candidate limit')
         for candidate in keys:
             key = dict(candidate)
-            records = self._fields(key, None if references else v, selector['predicates'])
+            records = self._fields(key, None if references else v, selector['predicates'], locale=v['locale'] if references else None)
             if selector['name'] is not None:
-                names = self._fields(key, None if references else v, ['name', 'alias'])
+                names = self._fields(key, None if references else v, ['name', 'alias'], locale=v['locale'] if references else None)
                 if not any(a['state'] == 'known' and normalized(a['value']) == normalized(selector['name']) for a in names):
                     continue
             if not records:
@@ -320,7 +322,7 @@ class WorldPack:
                 fields[a['predicate']].append(a)
             resolved = {}
             for p, assertions in sorted(fields.items()):
-                active = [a for a in assertions if a['condition'] == {'op': 'true'}]
+                active = [a for a in assertions if a['condition'] == {'op': 'true'} and (p not in {'name','alias','description'} or v['locale'] is not None and a['source_revision']['source_version']['locale'] == v['locale'])]
                 values = {canonical({'state': a['state'], 'value': a['value']}) for a in active}
                 status = 'unknown' if not active else 'conflict' if len(values) > 1 else active[0]['state']
                 resolved[p] = {'status': status, 'value': active[0]['value'] if status == 'known' else None, 'assertion_ids': sorted(a['assertion_sha256'] for a in active) if status != 'conflict' else [], 'assertions': assertions}

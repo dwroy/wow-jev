@@ -6,7 +6,7 @@
 
 `game_database/v2/` 接受受控中间格式，来源Lua/SQL不在业务库执行。实体键为 `{namespace,kind,native_id}`，名称只是带locale的断言。来源版本、代码/数据/图像许可、第三方来源、原件SHA、locator、源时间、条件和六维适用性分别保留。来源版本声明不自动证明当前国服适用性。
 
-每个字段有独立断言与SHA；相同条件下的同字段冲突返回conflict，其它字段继续可查。unknown、unsupported、not_present分开。未提供的请求字段返回unknown。`assertion_ids`只列采纳的断言；冲突或条件未明确为true时不采纳，完整候选仍在assertions。本地核实证明必须绑定包中已校验的原件SHA；没有对应原件不冒称核实。
+本地化name/alias/description按请求locale解析；未知语言保留原候选并返回unknown，中英文不互为同字段冲突。数值参考字段可保留不同source locale的来源。每个字段有独立断言与SHA；相同条件下的同字段冲突返回conflict，其它字段继续可查。unknown、unsupported、not_present分开。未提供的请求字段返回unknown。`assertion_ids`只列采纳的断言；冲突或条件未明确为true时不采纳，完整候选仍在assertions。本地核实证明必须绑定包中已校验的原件SHA；没有对应原件不冒称核实。
 
 世界包先在输出目录内staging构建，校验原件、外键、完整性和领域类型，完成checkpoint/DELETE模式后计算SQLite SHA，再原子发布到manifest SHA目录。重复构建同一输入返回同一包；失败清理本次staging，不覆盖旧包。发布文件只读，读取必须传预期manifest SHA，并校验manifest、SQLite、schema/rule及来源原件；不能把SHA检查改成“读取当前包”。manifest不嵌自身SHA，其canonical JSON原字节SHA就是world_pack_sha256。
 

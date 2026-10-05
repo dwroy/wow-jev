@@ -23,7 +23,7 @@ function canonical(value: unknown): string {
 }
 
 /** Synthetic offline data, built and queried by the actual Python/SQLite implementation. */
-async function fixture(options: { largeValue?: boolean; unsafeId?: boolean; floatEvidence?: boolean } = {}) {
+async function fixture(options: { largeValue?: boolean; unsafeId?: boolean; floatEvidence?: boolean; localeEvidence?: boolean } = {}) {
   const dir = await mkdtemp(join(tmpdir(), "world-data-test-"));
   try {
     const repository = join(dir, "repository");
@@ -49,8 +49,12 @@ async function fixture(options: { largeValue?: boolean; unsafeId?: boolean; floa
       assertion(1001, "faction", "known", "Alliance"), assertion(1001, "faction", "known", "Horde", reference),
       { ...assertion(1001, "conditional", "known", 99), condition: { op: "false" } },
     ];
+    const languageSources = options.localeEvidence ? [source("fixture-en-US", { ...version, locale: "en_US" }), source("fixture-unknown-locale", { ...version, locale: null })] : [];
+    if (options.localeEvidence) assertions.push(
+      assertion(1001, "name", "known", "Practice Materials", languageSources[0]!, false),
+      assertion(1001, "description", "known", "Unknown language source text", languageSources[1]!, false));
     if (options.largeValue) assertions.push(assertion(1001, "description", "known", "文".repeat(65000)));
-    const bundle = { schema_version: 2, scope: "offline-test", sources: [current, old, reference], artifacts: [{ sha256: hash(artifact), path: "source.txt", media_type: "text/plain" }],
+    const bundle = { schema_version: 2, scope: "offline-test", sources: [current, old, reference, ...languageSources], artifacts: [{ sha256: hash(artifact), path: "source.txt", media_type: "text/plain" }],
       entities: [1001, 1002].map(nativeId => ({ key: key(nativeId), content_expansion: "dragonflight" })), assertions, migration: [] };
     const addFloat = options.floatEvidence ? "; a=b['assertions'][2].copy(); a['predicate']='measurement'; a['value']={'ratio':1.0,'label':'中文🗺️𝄞é'}; b['assertions'].append(a)" : "";
     const code = `import json,sys; from game_database.v2.pack import build_pack; b=json.load(sys.stdin)${addFloat}; print(json.dumps(build_pack(b,sys.argv[1],evidence_root=sys.argv[2])))`;
@@ -251,4 +255,20 @@ test("v1 seed/精确查询与参考接口在新增世界桥后保持原语义", 
     assert.equal((await client.stats()).reference_only, 11); assert.equal((await client.lookup(version, { kind: "quest", entity_id: 70123 })).status, "not_found");
     assert.equal((await client.references("retail", "zh_CN", { kind: "quest", name: "练手材料" })).status, "references");
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+
+test("参考文本按locale解析，中英文不是冲突，未知语言保留原候选", async () => {
+  const f = await fixture({ localeEvidence: true });
+  try {
+    for (const [locale, name] of [["zh_CN", "练手材料"], ["en_US", "Practice Materials"], [null, null]] as const) {
+      const result = await f.client().references({ ...version, locale }, [selector(1001, ["name", "description"])]);
+      const fields = result.results[0]!.entities[0]!.fields;
+      assert.equal(fields.name!.status, locale === null ? "unknown" : "known"); assert.equal(fields.name!.value, name);
+      assert.equal(fields.description!.status, "unknown"); assert.equal(fields.description!.value, null);
+      assert.deepEqual(fields.description!.assertion_ids, []);
+      assert.equal(fields.description!.assertions[0]!.value, "Unknown language source text");
+      assert.equal(fields.description!.assertions[0]!.source_revision.source_version.locale, null);
+    }
+  } finally { await f.cleanup(); }
 });

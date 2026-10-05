@@ -187,7 +187,7 @@ export class WorldDataClient {
         if (selector.predicates && !same(Object.keys(entity.fields).sort(), [...new Set(selector.predicates)].sort())) throw new Error("predicates");
         for (const [predicate, field] of Object.entries(entity.fields)) {
           field.assertions.forEach(assertAssertionBytes);
-          const active = field.assertions.filter(a => same(a.condition, { op: "true" }));
+          const active = field.assertions.filter(a => same(a.condition, { op: "true" }) && (!["name", "alias", "description"].includes(predicate) || version.locale !== null && a.source_revision.source_version.locale === version.locale));
           const values = new Set(active.map(a => canonical({ state: a.state, value: a.value })));
           const status = active.length === 0 ? "unknown" : values.size > 1 ? "conflict" : active[0]!.state;
           const adopted = status === "conflict" ? [] : active.map(a => a.assertion_sha256).sort();
