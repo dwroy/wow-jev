@@ -23,8 +23,15 @@ export function consultKnowledge(snapshot: KnowledgeSnapshot, goal: BrainGoal, p
   const calibration = observation.fields['ui.inventory_calibration_id'];
   if (calibration?.status === 'known' && typeof calibration.value === 'string') scope.calibration_id = calibration.value;
   const sources = new Map(snapshot.sources.map((source) => [source.id, source]));
+  // Same applicability dimensions as knowledge.queryKnowledge. Other scope keys describe
+  // the evidence/result (for example inventory_open_after/name_source), not live preconditions.
+  const applicableKeys = ['goal_kind', 'target_name', 'scene', 'layout', 'calibration_id', 'skill', 'panel', 'test_target'];
   return snapshot.facts.filter((fact) => fact.evidence.length > 0 &&
-    Object.entries(fact.scope).every(([key, value]) => key === 'journal_complete' ? fact.evidence.every((evidence) => sources.get(evidence.source_id)?.complete === value) : key === 'mode' ? fact.evidence.every((evidence) => sources.get(evidence.source_id)?.mode === value) : value === null || scope[key] === value) &&
+    applicableKeys.every((key) => fact.scope[key] === undefined || fact.scope[key] === null || fact.scope[key] === scope[key]) &&
+    ['journal_complete', 'mode'].every((key) => fact.scope[key] === undefined || fact.scope[key] === null || fact.evidence.every((evidence) => {
+      const source = sources.get(evidence.source_id);
+      return key === 'journal_complete' ? source?.complete === fact.scope[key] : source?.mode === fact.scope[key];
+    })) &&
     Object.keys(fact.scope).length > 0 && fact.evidence.every((evidence) => {
       const source = sources.get(evidence.source_id);
       return source?.complete === true && (source.mode === mode || mode === 'simulated' && source.mode === 'live') && evidence.record_seq >= 0 &&
