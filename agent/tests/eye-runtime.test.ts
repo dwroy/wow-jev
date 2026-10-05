@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
@@ -16,6 +16,7 @@ import { replayRun } from '../src/eye/replay.js';
 import { EyeRuntime } from '../src/eye/runtime.js';
 import { loadSeedValidator, SeedClient } from '../src/eye/seed.js';
 import { EyeRunStore } from '../src/eye/store.js';
+import { hashBuffer } from '../src/eye/store.js';
 const repo = fileURLToPath(new URL('../..', import.meta.url));
 const mock = fileURLToPath(new URL('fixtures/mock-eye.mjs', import.meta.url));
 const seedMock = fileURLToPath(new URL('fixtures/mock-seed.mjs', import.meta.url));
@@ -136,4 +137,31 @@ test('native client timeout and duplicate sample sequence are bounded failures',
   try { await assert.rejects(run.native.sample(), /eye_request_timeout/); } finally { await run.cleanup(); }
   const repeated = await setup('duplicate_seq');
   try { await repeated.native.sample(); await assert.rejects(repeated.native.sample(), /eye_stale/); } finally { await repeated.cleanup(); }
+});
+
+test('frozen combat context is reconstructed and a forged Seed target source is rejected', async () => {
+  const run = await setup('combat_switch', true);
+  try {
+    await run.runtime.collect(true); await run.runtime.collect(false); await run.finish();
+    // This mock uses schema-only JPEG/template bytes, never claiming real image classification.
+    const folder = join(run.dir, 'combat-calibration'); await mkdir(folder);
+    const positive = Buffer.from('mock-positive-template'); const negative = Buffer.from('mock-negative-template');
+    await writeFile(join(folder, 'positive.png'), positive); await writeFile(join(folder, 'negative.png'), negative);
+    const templates = { positive: [{ file: 'positive.png', sha256: hashBuffer(positive), source_sha256: 'a'.repeat(64) }], negative: [{ file: 'negative.png', sha256: hashBuffer(negative), source_sha256: 'b'.repeat(64) }] };
+    const definition = { roi: { x: 1, y: 1, width: 10, height: 10 }, thresholds: { max_distance: 0.12, min_margin: 0.04 }, templates };
+    const bundle = JSON.stringify({ version: 1, kind: 'combat-ui', id: 'combat-mock', client_width: 800, client_height: 600,
+      detectors: { target_present: definition, target_dead: definition, player_in_combat: definition }, signature: { roi: definition.roi, mask: 'yellow-mask-v1', min_ink_pixels: 8 } });
+    await writeFile(join(folder, 'calibration.json'), bundle);
+    const data = await records(run.dir); const manifest = JSON.parse(await readFile(join(run.dir, 'manifest.json'), 'utf8'));
+    manifest.combat_calibration = { id: 'combat-mock', files: { 'calibration.json': hashBuffer(bundle), 'positive.png': hashBuffer(positive), 'negative.png': hashBuffer(negative) } };
+    await chmod(join(run.dir, 'manifest.json'), 0o600); await writeFile(join(run.dir, 'manifest.json'), JSON.stringify(manifest));
+    data[0].data = manifest; await rewrite(run.dir, data);
+    const result = data.find((row) => row.kind === 'seed_result'); assert.ok(result.data.source.target_context);
+    assert.ok(result.data.adoption.rejected.some((row: { field: string; reason: string }) => row.field === 'target.name' && row.reason === 'target_context_changed'));
+    assert.equal((await replayRun(run.dir)).complete, true);
+    const forged = structuredClone(data); forged.find((row) => row.kind === 'seed_result').data.source.target_context.epoch += 1;
+    await rewrite(run.dir, forged); await assert.rejects(replayRun(run.dir), /seed_source_target_context/);
+    await rewrite(run.dir, data); await writeFile(join(folder, 'positive.png'), 'changed');
+    await assert.rejects(replayRun(run.dir), /combat_calibration_hash_mismatch/);
+  } finally { await run.cleanup(); }
 });

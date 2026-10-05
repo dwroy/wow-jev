@@ -3,13 +3,14 @@ import { Ajv, type ValidateFunction } from 'ajv';
 export interface EyeWindow { hwnd: string; pid: number; client_width: number; client_height: number; focused: boolean }
 export interface EyeReason { code: string; message?: string }
 export interface EyeClock { domain: 'windows-qpc'; at_ms: number }
+export interface EyeDetector<T = boolean> { status: 'known' | 'unknown' | 'unavailable'; value: T | null; confidence: number; reason?: EyeReason; calibration_id: string | null }
 export interface EyeCommand { protocol: 'wow-eye'; version: 1; type: 'command'; session_id: string; id: string; op: 'sample' | 'shutdown'; save?: boolean }
 export interface EyeReady { protocol: 'wow-eye'; version: 1; type: 'ready'; session_id: string; capture_pid: number; window: EyeWindow; artifact_root: string; export_root: string | null; local_clock: EyeClock; capture_method: 'printwindow' }
 export interface EyeSample {
   protocol: 'wow-eye'; version: 1; type: 'sample'; session_id: string; id: string; seq: number; window: EyeWindow;
   capture: { status: 'ok' | 'unavailable'; started_qpc_ms: number; finished_qpc_ms: number; method: 'printwindow'; reason?: EyeReason };
   metrics: { mean_luma: number | null; variance_luma: number | null; frame_delta: number | null };
-  detectors: { inventory_open: { status: 'known' | 'unknown' | 'unavailable'; value: boolean | null; confidence: number; reason?: EyeReason; calibration_id: string | null } };
+  detectors: { inventory_open: EyeDetector; target_present?: EyeDetector; target_dead?: EyeDetector; player_in_combat?: EyeDetector; target_signature?: EyeDetector<string> };
   artifact: null | { id: string; windows_path: string; exported_windows_path?: string; sha256: string; width: number; height: number };
   local_clock: EyeClock;
 }
@@ -25,8 +26,17 @@ export function assertEye(value: unknown, validator: EyeValidator): asserts valu
   if (!validator(value)) throw new Error(`eye_schema: ${(validator.errors ?? []).map((error) => `${error.instancePath} ${error.message}`).join('; ')}`);
   if (value.type === 'sample') {
     if (value.capture.started_qpc_ms > value.capture.finished_qpc_ms || value.capture.finished_qpc_ms > value.local_clock.at_ms) throw new Error('eye_windows_clock_order');
-    const detector = value.detectors.inventory_open;
-    if (detector.status === 'known' && typeof detector.value !== 'boolean' || detector.status !== 'known' && detector.value !== null) throw new Error('eye_detector_value');
+  }
+  if (value.type === 'sample' || value.type === 'offline_result') {
+    for (const [key, detector] of Object.entries(value.detectors)) {
+      if (!detector) continue;
+      if (detector.status === 'known' && typeof detector.value !== (key === 'target_signature' ? 'string' : 'boolean') || detector.status !== 'known' && detector.value !== null) throw new Error('eye_detector_value');
+      if (key !== 'inventory_open' && detector.status === 'known' && detector.calibration_id === null) throw new Error('eye_combat_detector_without_calibration');
+    }
+    if ((value.detectors.target_dead?.status === 'known' || value.detectors.target_signature?.status === 'known') &&
+      (value.detectors.target_present?.status !== 'known' || value.detectors.target_present.value !== true)) throw new Error('eye_target_dependency');
+    const failed = value.type === 'sample' ? value.capture.status !== 'ok' : value.frame_status !== 'ok';
+    if (failed && ['target_present', 'target_dead', 'target_signature', 'player_in_combat'].some((key) => value.detectors[key as keyof EyeSample['detectors']]?.status === 'known')) throw new Error('eye_combat_capture_unavailable');
   }
 }
 export interface SampleBracket { sample: EyeSample; started_at_ms: number; received_at_ms: number }

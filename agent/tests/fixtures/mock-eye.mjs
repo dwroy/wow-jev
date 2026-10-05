@@ -37,6 +37,10 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     metrics: { mean_luma: 50, variance_luma: 100, frame_delta: 0.1 },
     detectors: { inventory_open: { status: 'known', value: toggled, confidence: 0.95, calibration_id: scenario === 'calibration_switch' && current > 0 ? 'other' : 'calibration-test' } },
     artifact, local_clock: clock() };
+  if (scenario === 'combat_switch') {
+    const known = (value) => ({ status: 'known', value, confidence: 1, calibration_id: 'combat-mock' });
+    Object.assign(sample.detectors, { target_present: known(true), target_dead: known(false), player_in_combat: known(false), target_signature: known((current === 0 ? 'a' : 'b').repeat(64)) });
+  }
   emit(sample);
 });
 process.stdin.on('end', () => process.exit(0));

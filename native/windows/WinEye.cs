@@ -24,7 +24,7 @@ static class WinEye
 
     sealed class Options
     {
-        public string Mode, Session, Calibration, Image, ExportDirectory;
+        public string Mode, Session, Calibration, Combat, Image, ExportDirectory;
         public IntPtr Window;
         public int Pid;
         public static Options Parse(string[] args)
@@ -46,6 +46,7 @@ static class WinEye
                 else if (args[i] == "--session" && options.Mode == "serve") options.Session = value;
                 else if (args[i] == "--export-dir" && options.Mode == "serve") options.ExportDirectory = Absolute(value);
                 else if (args[i] == "--calibration") options.Calibration = Absolute(value);
+                else if (args[i] == "--combat-calibration") options.Combat = Absolute(value);
                 else if (args[i] == "--image" && options.Mode == "classify") options.Image = Absolute(value);
                 else throw new EyeFailure("invalid_options");
             }
@@ -69,6 +70,7 @@ static class WinEye
     {
         readonly Options options;
         readonly InventoryCalibration calibration;
+        readonly CombatCalibration combat;
         readonly long targetStart;
         readonly string artifactRoot;
         readonly HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
@@ -87,6 +89,7 @@ static class WinEye
         {
             this.options = options;
             calibration = options.Calibration == null ? null : new InventoryCalibration(options.Calibration);
+            combat = options.Combat == null ? null : new CombatCalibration(options.Combat);
             WindowInfo window = CheckWindow();
             targetStart = Native.GetProcessStartTicks(options.Pid);
             artifactRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WowJevEye", options.Session);
@@ -208,7 +211,8 @@ static class WinEye
                     Dictionary<string, object> message = Envelope("sample");
                     message["id"] = id; message["seq"] = seq; message["window"] = WindowJson(after);
                     message["capture"] = capture; message["metrics"] = metricJson;
-                    message["detectors"] = EyeJson.Obj("inventory_open", detector); message["artifact"] = artifact;
+                    Dictionary<string, object> detectors = combat == null ? CombatCalibration.Unsupported(failure ?? "calibration_unavailable") : combat.Detect(image, failure);
+                    detectors["inventory_open"] = detector; message["detectors"] = detectors; message["artifact"] = artifact;
                     lock (state) { if (!ending) Emit(message); }
                 }
             }
@@ -304,6 +308,7 @@ static class WinEye
     static int Classify(Options options)
     {
         InventoryCalibration calibration = options.Calibration == null ? null : new InventoryCalibration(options.Calibration);
+        CombatCalibration combat = options.Combat == null ? null : new CombatCalibration(options.Combat);
         FileInfo file = new FileInfo(options.Image);
         if (!file.Exists || file.Length < 1 || file.Length > 64L * 1024 * 1024 || (file.Attributes & FileAttributes.ReparsePoint) != 0) throw new EyeFailure("invalid_image_file");
         using (Bitmap image = new Bitmap(options.Image))
@@ -312,10 +317,12 @@ static class WinEye
             FrameMetrics metrics = new FrameMetrics(image);
             object detector = metrics.Empty ? InventoryCalibration.Unsupported("empty_or_near_black_frame") :
                 calibration == null ? InventoryCalibration.Unsupported("calibration_unavailable") : calibration.Detect(image);
+            Dictionary<string, object> detectors = combat == null ? CombatCalibration.Unsupported("calibration_unavailable") : combat.Detect(image, metrics.Empty ? "empty_or_near_black_frame" : null);
+            detectors["inventory_open"] = detector;
             Console.WriteLine(new JavaScriptSerializer().Serialize(EyeJson.Obj("protocol", "wow-eye", "version", 1, "type", "offline_result",
                 "image", EyeJson.Obj("width", image.Width, "height", image.Height, "sha256", EyeJson.Hash(options.Image)),
                 "frame_status", metrics.Empty ? "unavailable" : "ok", "metrics", metrics.Json(null),
-                "detectors", EyeJson.Obj("inventory_open", detector), "local_clock", LocalClock())));
+                "detectors", detectors, "local_clock", LocalClock())));
         }
         return 0;
     }

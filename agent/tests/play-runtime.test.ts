@@ -9,6 +9,7 @@ import type { LogKind } from '../src/eye/store.js';
 import type { NativeAction, NativeReady, NativeReceipt } from '../src/hand/protocol.js';
 import { CodePlay } from '../src/play/runtime.js';
 import type { CompiledSkill, PlayPlan, PlayPorts, SkillStep } from '../src/play/types.js';
+import { compileSkill } from '../src/reflex/skills.js';
 
 const session = '11111111-1111-4111-8111-111111111111';
 const ready: NativeReady = { protocol: 'wow-input', version: 1, type: 'ready', session_id: session,
@@ -249,4 +250,42 @@ test('cancellation while persisting step-start still closes that step with a zer
   assert.equal(s.calls.length, 0);
   const codes = s.rows.filter((r) => r.kind === 'event').map((r) => (r.data as { code: string }).code);
   assert.deepEqual(codes, ['play.plan_started', 'play.step_started', 'play.step_result', 'play.plan_finished']);
+});
+
+test('live wait records elapsed time and two observations without hand, focus, intent or input receipt', async () => {
+  const s = await setup(); delete s.ports.hand; const collect = s.ports.collect;
+  s.ports.collect = async (save) => { const result = await collect(save); result.observation.window!.focused = false;
+    result.observation.fields['window.focused']!.value = false; result.bracket.sample.window.focused = false; return result; };
+  s.ports.compile = (step, before) => compileSkill(step, before);
+  const result = await s.play.run(plan({ id: 'wait', name: 'wait', duration_ms: 25 }));
+  assert.equal(result.status, 'completed'); assert.equal(result.steps[0]!.receipt, null); assert.equal(result.steps[0]!.action_id, null);
+  assert.notEqual(result.steps[0]!.before_observation_id, result.steps[0]!.after_observation_id);
+  assert.equal(s.rows.some((row) => ['action_intent', 'execution_receipt'].includes(row.kind)), false);
+  const events = s.rows.filter((row) => row.kind === 'event').map((row) => row.data as { code: string; started_at_ms: number; finished_at_ms: number });
+  const done = events.find((event) => event.code === 'play.wait_finished')!;
+  assert.ok(done.finished_at_ms - done.started_at_ms >= 25); assert.equal(s.calls.length, 0);
+});
+test('cancel interrupts wait-only without acquiring native ownership or inventing a receipt', async () => {
+  const s = await setup(); delete s.ports.hand; s.ports.compile = (step, before) => compileSkill(step, before);
+  const append = s.ports.append; let entered!: () => void; const began = new Promise<void>((resolve) => { entered = resolve; });
+  s.ports.append = async (...args) => { await append(...args); if (args[0] === 'event' && (args[1] as { code?: string }).code === 'play.wait_started') entered(); };
+  const running = s.play.run(plan({ id: 'wait', name: 'wait', duration_ms: 1000 })); await began; const start = performance.now();
+  assert.deepEqual(await s.play.cancel('manual_cancel'), { release: 'confirmed' }); const result = await running;
+  assert.equal(result.status, 'cancelled'); assert.equal(result.steps[0]!.status, 'cancelled'); assert.ok(performance.now() - start < 250);
+  assert.equal(s.rows.some((row) => ['action_intent', 'execution_receipt'].includes(row.kind)), false); assert.equal(s.calls.length, 0);
+});
+test('Jev actor identity and extra candidate conditions survive both live gates', async () => {
+  for (const delayed of [false, true]) {
+    const s = await setup(); const collect = s.ports.collect; const originalCompile = s.ports.compile; const append = s.ports.append;
+    s.ports.collect = async (save) => { const result = await collect(save); result.observation.fields['target.signature'] = {
+      status: 'known', value: 'target-a', source: 'cv', captured_at_ms: result.observation.at_ms, source_observation_id: result.observation.id }; return result; };
+    s.ports.compile = (step, before) => { const compiled = originalCompile(step, before); return { ...compiled,
+      conditions: [...compiled.conditions, { field: 'target.signature', op: 'eq', value: 'target-a', max_age_ms: 100 }] }; };
+    s.ports.append = async (...args) => { await append(...args); if (delayed && args[0] === 'action_intent') s.bump(150); };
+    const play = new CodePlay(s.ports, { runId: 'test-run', mode: 'live', actor: 'jev', decisionId: 'decision-test' }, s.validator);
+    const result = await play.run(plan(move())); assert.equal(result.status, delayed ? 'failed' : 'completed'); assert.equal(s.calls.length, delayed ? 0 : 1);
+    const intent = s.rows.find((row) => row.kind === 'action_intent')!.data as ActionIntent;
+    assert.equal(intent.actor, 'jev'); assert.equal(intent.decision_id, 'decision-test');
+    assert.ok(intent.conditions.some((condition) => condition.field === 'target.signature'));
+  }
 });

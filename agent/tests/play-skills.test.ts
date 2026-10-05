@@ -33,6 +33,13 @@ test('retail profile preserves verified ESDF forward and leaves action slots unb
   assert.throws(() => compileSkill(step({ name: 'use_action_slot', slot: '1', duration_ms: 100 }), collected()), /slot_unbound/);
 });
 
+test('wait is finite and compiles without capture/focus preconditions or native input', () => {
+  const valid = step({ name: 'wait', duration_ms: 1000 });
+  assert.deepEqual(parsePlan({ id: 'wait-plan', revision: 1, steps: [valid] }).steps[0], valid);
+  assert.deepEqual(compileSkill(valid, collected()), { action: null, conditions: [], effect: { kind: 'wait', duration_ms: 1000 } });
+  for (const duration of [0, 1001, 1.5, Infinity]) assert.throws(() => compileSkill(step({ name: 'wait', duration_ms: duration }), collected()), /wait_duration/);
+});
+
 test('explicit rebound keys and slot map compile without falling back to default or inherited shortcuts', () => {
   const bindings = parseBindings({ forward: 'R', jump: 'J', inventory: 'I', action_slots: { primary: 'W', secondary: 'A' } });
   for (const [skill, key] of [[{ name: 'move_for', duration_ms: 100 }, 'R'], [{ name: 'jump', duration_ms: 100 }, 'J'],

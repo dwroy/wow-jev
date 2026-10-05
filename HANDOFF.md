@@ -4,7 +4,13 @@
 
 ## 最新决定与下一阶段
 
-用户在战斗素材对照后决定继续使用Seed。在线视觉方案沿用Seed+CV，本地Qwen不接入在线状态，优化暂缓；xdwin2既有服务或隧道未停止。本轮代码play不调用模型。
+用户在战斗素材对照后决定继续使用Seed。在线视觉方案沿用Seed+CV，本地Qwen不接入在线状态，优化暂缓；xdwin2既有服务或隧道未停止。代码play与纯模拟仍不调用模型；新Jev入口仅在显式Seed+上传开关时启用选择worker。
+
+第4阶段工程已实现并集成候选/选择/重新采样/CodePlay/严格多计划回放与可取消wait；三个模块在stage-4-cv/choice/runtime工作树并行，负责人stage-4-jev统筹。五次纯模拟4动作+1等待通过，真实Seed离线probe3/3选择符合预期、耗时1349–1737ms；该probe观察/候选人为构造、零输入，不能当在线CV或正式服动作验收。入口docs/jev-runtime.md，分项验收docs/acceptance/stage-4.md，原始证据主out/acceptance/stage-4。
+
+当前战斗CV使用旧2048×1536语料46图，两名Agent盲标且不是用户确认人类金标准。训练combat-01/02为20图，独立留出26图；目标存在42/46 known正确（留出22/26），战斗46/46。死亡v1的两个误判保留，v2紧阈值留出召回2/10；v3仅训练组选黄色死亡字形+独立绿血条证据，规则/代码/原生程序先冻结后评估，留出7/10已知标签正确召回、未输出错误known且16个unknown保持unknown。仍未满足95%完整门槛，不能自动打怪。
+
+本轮当前未检测到可用WoW窗口，4K只读战斗补录未开始（capture-4k-1）；需用户打开游戏后录选中/清除目标、打怪、死亡后保留目标，建立独立当前4K战斗校准，再验收只读在线Jev/Seed和有限正式服输入。2048模板在4K返回unknown且不降级为Seed执行条件。第4阶段整体尚未验收，第5步执行大脑暂未进入实现。
 
 第0–3阶段已按各阶段有限范围验收。第3阶段CodePlay/统一gate/有限技能/CLI/跨终端cancel/严格计划回放已实现：106项TS测试+typecheck、25步模拟回放、真实专用窗口五轮25动作、已满足零输入、跨终端取消与失焦实际停止/物理释放/回放。正式服最终retail-3在3840×2160完成五轮25动作、127/127事件且全released，10次背包变化confirmed、15次运动效果保持unknown，关闭释放与独立严格回放均通过；保存50张前后源图。接口见docs/play-runtime.md，证据及真实失败修复见docs/acceptance/stage-3.md与主out/acceptance/stage-3。
 
@@ -14,7 +20,7 @@
 
 原始native-1在输入前拒新fixture候选已修；native-2失焦原生failed与后续断连cancel造成计划/步骤终态冲突已修，focus-retest-1通过且不改写关闭ACK缺失(unconfirmed)。原失败保留。90秒录制轮换、整WSL重启、真实游戏移动效果和自动弹窗检测仍不外推。
 
-第4阶段Jev动作选择之前需补可校准的目标框、目标死亡和战斗标记检测；本轮Seed在战斗标记上大量unknown，不能当可靠动作条件。任务对话补录按用户“稍后补任务”安排，不阻塞第3阶段代码计划；后续仍为Jev小脑、执行大脑、学习/经验、代码与prompt迭代。
+第4阶段已补战斗CV实现与来源失效，但当前布局/覆盖率尚需上述实测。任务对话补录按用户“稍后补任务”安排，后续仍为Jev验收、执行大脑、学习/经验、代码与prompt迭代。
 
 ## 当前增补：xdwin2 视觉服务
 
@@ -57,6 +63,6 @@ WSL运行TypeScript编排和Python低频视觉，Windows运行C#5/.NET4截图、
 
 ## 接续
 
-第3阶段可按`docs/play-runtime.md`体验纯模拟与当前4K正式服有限代码序列，眼单独观察仍见`docs/eye-runtime.md`。下一阶段拆成战斗CV/融合、Jev候选选择、决策调度/回放三模块：先冻结target.present/target.dead/player.in_combat来源与失效契约，再并行实施。模型返回后须重新采样，不能直接使用请求前旧观察；Seed只能选候选ID，仍通过统一CodePlay执行闸与手。当前actor写死code、在线无target.dead、CV优先仅背包、无wait技能，均需第4阶段补齐。
+第3阶段可按`docs/play-runtime.md`体验纯模拟与当前4K正式服有限代码序列，眼单独观察仍见`docs/eye-runtime.md`。第4阶段可按`docs/jev-runtime.md`体验纯模拟与只读入口；待当前4K战斗补录、独立校准与有限正式服Jev验收后再进入第5步。actor=jev必需decision_id，模型只选候选ID、返回后重新采样，再复用统一CodePlay与手。默认槽位为空，goal observe或字段未知只wait；不能把离线模型probe的manual观察用于live动作。
 
 对移动、跳跃、转向暂不自动确认游戏效果；背包CV仅在已验收布局适用。个人长期记忆按 `/home/dai/agent-memory/SPEC.md` 操作，进度只写项目文件。

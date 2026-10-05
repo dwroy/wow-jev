@@ -202,6 +202,7 @@
         "plan": { "$ref": "#/definitions/plan" },
         "based_on_observation_id": { "$ref": "#/definitions/identifier" },
         "actor": { "enum": ["code", "jev", "brain"] },
+        "decision_id": { "$ref": "#/definitions/identifier" },
         "mode": { "enum": ["simulated", "live"] },
         "window_token": {
           "oneOf": [{ "type": "null" }, { "$ref": "#/definitions/identifier" }]

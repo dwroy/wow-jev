@@ -146,3 +146,14 @@ test('transport failure can record unknown counts without inventing zero input',
   assert.equal(validator({ ...receipt, input: { ...receipt.input, status: 'sent' } }), false);
   assert.equal(validator({ ...receipt, input: { ...receipt.input, counts_status: 'known' } }), false);
 });
+
+test('Jev intents require a bounded decision identity and code intents retain their old contract', async () => {
+  const validator = await loadProtocolValidator(schemaPath);
+  const code = createDemo('jev-decision-contract')[1];
+  assert.ok(code?.type === 'action_intent');
+  assert.ok(validateMessage(code, validator).ok);
+  assert.equal(validateMessage({ ...code, actor: 'jev' }, validator).ok, false);
+  assert.ok(validateMessage({ ...code, actor: 'jev', decision_id: 'decision-1' }, validator).ok);
+  assert.equal(validateMessage({ ...code, decision_id: 'decision-1' }, validator).ok, false);
+  assert.equal(validator({ ...code, actor: 'jev', decision_id: '../outside' }), false);
+});

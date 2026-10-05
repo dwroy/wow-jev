@@ -46,7 +46,7 @@ export class EyeRuntime {
     await this.writeObservation(observation);
     if (!this.stopping && this.options.seed && artifact && bracket.sample.capture.status === 'ok' && !this.options.seed.busy && this.options.now() - this.lastSeed >= (this.options.seedIntervalMs ?? 3000)) {
       this.lastSeed = this.options.now();
-      const source: SourceImage = { captured_at_ms: bracket.started_at_ms, received_at_ms: bracket.received_at_ms, source_observation_id: observation.id, artifact_id: artifact.id, source_qpc_ms: bracket.sample.capture.started_qpc_ms };
+      const source: SourceImage = { captured_at_ms: bracket.started_at_ms, received_at_ms: bracket.received_at_ms, source_observation_id: observation.id, artifact_id: artifact.id, source_qpc_ms: bracket.sample.capture.started_qpc_ms, ...this.state.seedSourceContext() };
       const job = this.options.seed.look(join(this.store.dir, artifact.path)).then((raw) => this.commit(async () => {
         const adoptionAt = this.options.now();
         const adoption = this.state.applySeed(raw, source, adoptionAt);
