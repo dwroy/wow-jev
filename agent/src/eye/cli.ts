@@ -11,7 +11,7 @@ import { NativeInputClient } from '../hand/client.js';
 import { waitForTargetFocus } from '../hand/focus.js';
 import { nativePaths } from '../hand/paths.js';
 import { assertNativeMessage, loadNativeValidator, type NativeAction } from '../hand/protocol.js';
-import { NativeEyeClient } from './client.js';
+import { NativeEyeClient, parseEyeArtifactFormat } from './client.js';
 import { loadEyeValidator } from './protocol.js';
 import { replayRun } from './replay.js';
 import { EyeRuntime } from './runtime.js';
@@ -24,6 +24,7 @@ npm run eye -- observe --window 0xHWND --pid PID [--duration-ms 10000] [--save] 
 npm run eye -- replay --run-dir DIR
 npm run eye -- record-action --window 0xHWND --pid PID --live --action JSON_OR_FILE [--expect-inventory-open true|false]
 
+--artifact-format jpeg|png 选择低频采样存档，默认jpeg；png保留同帧CV原始像素，observe仍需--save；png不可与--seed组合。
 --native-root DIR 可使用集成构建。Seed默认不启动；--seed 要求--save，worker默认disabled。
 纯游戏图上传须同时 --seed --allow-game-image-upload；只允许绑定已列出的WoW候选。
 record-action只执行一次有限动作，默认5秒等用户手动聚焦，不抢焦点。
@@ -37,7 +38,7 @@ async function main(): Promise<number> {
     help: { type: 'boolean' }, window: { type: 'string' }, pid: { type: 'string' }, 'run-dir': { type: 'string' },
     'repo-root': { type: 'string' }, 'native-root': { type: 'string' }, calibration: { type: 'string' }, 'combat-calibration': { type: 'string' }, 'npc-calibration': { type: 'string' },
     'duration-ms': { type: 'string' }, 'interval-ms': { type: 'string' }, 'cv-max-age-ms': { type: 'string' }, 'seed-max-age-ms': { type: 'string' },
-    save: { type: 'boolean' }, 'save-interval-ms': { type: 'string' }, seed: { type: 'boolean' }, 'allow-game-image-upload': { type: 'boolean' },
+    save: { type: 'boolean' }, 'artifact-format': { type: 'string' }, 'save-interval-ms': { type: 'string' }, seed: { type: 'boolean' }, 'allow-game-image-upload': { type: 'boolean' },
     python: { type: 'string' }, 'seed-env-file': { type: 'string' }, 'seed-interval-ms': { type: 'string' },
     live: { type: 'boolean' }, action: { type: 'string' }, 'expect-inventory-open': { type: 'string' }, 'wait-focus-ms': { type: 'string' },
   } });
@@ -47,6 +48,8 @@ async function main(): Promise<number> {
     if (!values['run-dir']) throw new Error('replay 需要 --run-dir');
     print(await replayRun(values['run-dir'])); return 0;
   }
+  const artifactFormat = parseEyeArtifactFormat(values['artifact-format']);
+  if (artifactFormat === 'png' && values.seed) throw new Error('eye_png_seed_unsupported');
   const repo = resolve(values['repo-root'] ?? fileURLToPath(new URL('../../..', import.meta.url))); const nativeRoot = resolve(values['native-root'] ?? repo);
   if (!values.window || !/^0x[0-9a-fA-F]{1,16}$/.test(values.window) || !values.pid || !/^[1-9][0-9]*$/.test(values.pid)) throw new Error('明确指定 --window HWND 与 --pid');
   const pid = integer(values.pid, 0, 1, 2147483647);
@@ -78,7 +81,7 @@ async function main(): Promise<number> {
   const runId = `eye-${randomUUID()}`; const dir = resolve(values['run-dir'] ?? join(repo, 'out/eye', runId));
   const promptPath = join(repo, 'perception/prompts/eye-retail-v1.txt');
   const config: Record<string, unknown> = { mode, window: values.window, expected_pid: pid, duration_ms: duration, interval_ms: interval,
-    cv_max_age_ms: cvAge, seed_max_age_ms: seedAge, seed_interval_ms: seedInterval, save, save_interval_ms: saveInterval, seed_enabled: values.seed ?? false,
+    cv_max_age_ms: cvAge, seed_max_age_ms: seedAge, seed_interval_ms: seedInterval, save, artifact_format: artifactFormat, save_interval_ms: saveInterval, seed_enabled: values.seed ?? false,
     allow_game_image_upload: values['allow-game-image-upload'] ?? false, native_root: nativeRoot, node_version: process.version,
     python: values.python ?? 'python3', calibration_path: calibrationPath ?? null, combat_calibration_path: combatCalibrationPath ?? null, npc_calibration_path: npcCalibrationPath ?? null, action, expected_inventory_open: expected ?? null };
   const store = await EyeRunStore.create({ dir, runId, repo, nativeRoot, schemaPaths, config, promptSha256: await hashFile(promptPath),
@@ -101,7 +104,7 @@ async function main(): Promise<number> {
       const game = listed.stdout.split(/\r?\n/).filter((line) => line.trim()).map((line) => JSON.parse(line) as { hwnd: string; pid: number; proc: string });
       if (!game.some((row) => /^wow(?:classic|classict|b)?$/i.test(row.proc) && row.pid === pid && BigInt(row.hwnd) === BigInt(values.window!))) throw new Error('上传仅允许指定WoW窗口，不上传桌面或其它应用');
     }
-    eye = await NativeEyeClient.start({ executable, window: values.window, expectedPid: pid, cwd: repo, now, exportWindowsPath,
+    eye = await NativeEyeClient.start({ executable, window: values.window, expectedPid: pid, cwd: repo, now, exportWindowsPath, artifactFormat,
       ...(calibrationWindowsPath ? { calibrationWindowsPath } : {}),
       ...(combatCalibrationWindowsPath ? { combatCalibrationWindowsPath } : {}), ...(npcCalibrationWindowsPath ? { npcCalibrationWindowsPath } : {}),
       onMessage: (direction, message) => { void store.append('native_eye', { direction, message }, now()).catch(() => {}); } }, eyeValidator);

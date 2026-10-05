@@ -27,7 +27,10 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
   const toggled = scenario === 'toggle' || scenario === 'calibration_switch' ? current > 0 : scenario === 'late_render' ? current > 1 : false;
   let artifact = null;
   if (command.save) {
-    const name = `frame-${current}.jpg`; const bytes = Buffer.from([255, 216, 255, current, 255, 217]);
+    const png = arg('--artifact-format') === 'png';
+    const name = `frame-${current}.${png ? 'png' : 'jpg'}`;
+    // Schema/transport fixture bytes; the real Windows codec test verifies pixels.
+    const bytes = png ? Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, current]) : Buffer.from([255, 216, 255, current, 255, 217]);
     writeFileSync(join(localExport, name), bytes, { flag: 'wx' });
     artifact = { id: `frame-${current}`, windows_path: 'C:\\native-local\\' + name,
       exported_windows_path: exportRoot + '\\' + name, sha256: createHash('sha256').update(bytes).digest('hex'), width: 800, height: 600 };

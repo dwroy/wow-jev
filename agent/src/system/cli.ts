@@ -11,6 +11,7 @@ import type { BrainExecuteContext, BrainGoal, BrainPlanner, BrainResult } from '
 import { loadProtocolValidator } from '../core/protocol.js';
 import { runCommand } from '../core/process.js';
 import { EyeRunStore, hashFile } from '../eye/store.js';
+import { parseEyeArtifactFormat } from '../eye/client.js';
 import { loadKnowledgeSnapshot, createKnowledgeSnapshot, knowledgeSha256 } from '../knowledge/index.js';
 import { IterationRuntime, RuntimeVersionRegistry } from '../learner/iteration/index.js';
 import { JevLoop } from '../jev/runtime.js';
@@ -46,6 +47,7 @@ npm run system -- version --registry DIR
 npm run system -- rollback --registry DIR --version-id ID
 
 demo始终模拟、不调用API/Windows/凭据；registry模式真正执行已批准的冻结代码。
+live/observe可用--artifact-format png保存同帧无损证据，默认jpeg；png不可与--seed组合。
 observe只读采样；live使用Windows原生眼和手，必须核对实际正式服12.x客户端版本并保持前台。
 live/observe的registry模式必须包含冻结启动支持；从批准C#源码编译并复用签名NativeBuild，日志绑定实际二进制。禁止外部native-root及伪造版本/hash覆盖。
 NPC交互需要名字bank、NPC对话校准及显式键位；interact_npc最多一次有限探测，未知距离不支持自动接近。
@@ -76,7 +78,7 @@ async function main(): Promise<number> {
     calibration: { type: 'string' }, 'combat-calibration': { type: 'string' }, 'npc-calibration': { type: 'string' },
     live: { type: 'boolean' }, 'role-scene-confirmed': { type: 'boolean' }, seed: { type: 'boolean' }, 'allow-game-image-upload': { type: 'boolean' },
     'wait-focus-ms': { type: 'string' }, 'native-root': { type: 'string' }, python: { type: 'string' }, 'seed-env-file': { type: 'string' },
-    'client-profile': { type: 'string' }, 'evaluation-context': { type: 'string' }, 'session-id': { type: 'string' },
+    'artifact-format': { type: 'string' }, 'client-profile': { type: 'string' }, 'evaluation-context': { type: 'string' }, 'session-id': { type: 'string' },
   } });
   if (values.help) { process.stdout.write(HELP); return 0; }
   const mode = positionals[0];
@@ -93,6 +95,7 @@ async function main(): Promise<number> {
     print(await requestPlayControl(values['session-id'], mode)); return 0;
   }
   if (mode === 'live' || mode === 'observe') {
+    if (parseEyeArtifactFormat(values['artifact-format']) === 'png' && values.seed) throw new Error('system_png_seed_unsupported');
     if (values.registry) {
       if (values['runtime-version-file'] || values['knowledge-file'] || values['knowledge-sha256'] || values['prompt-file'] || values['native-root'] || values['executing-source-sha256']) throw new Error('system_registry_snapshot_cannot_be_overridden');
       const snapshot = await new RuntimeVersionRegistry(resolve(values.registry)).resolveForTask(values['version-id']);
@@ -101,7 +104,7 @@ async function main(): Promise<number> {
       const fileFlags = ['goal', 'bindings', 'calibration', 'combat-calibration', 'npc-calibration', 'client-profile', 'evaluation-context', 'seed-env-file'] as const;
       for (const flag of fileFlags) if (values[flag]) args.push(`--${flag}`, resolve(values[flag]!));
       if (values.seed && !values['seed-env-file']) args.push('--seed-env-file', join(homedir(), '.config/wow-jev/api.env'));
-      for (const flag of ['window', 'pid', 'decisions', 'max-run-ms', 'wait-focus-ms', 'python'] as const) if (values[flag]) args.push(`--${flag}`, values[flag]!);
+      for (const flag of ['window', 'pid', 'decisions', 'max-run-ms', 'wait-focus-ms', 'python', 'artifact-format'] as const) if (values[flag]) args.push(`--${flag}`, values[flag]!);
       for (const flag of ['live', 'role-scene-confirmed', 'seed', 'allow-game-image-upload'] as const) if (values[flag]) args.push(`--${flag}`);
       args.push('--run-dir', resolve(dirs[0] ?? join(repo, 'out/system', `brain-${randomUUID()}`)));
       return launchFrozenTask(snapshot, repo, args, resolve(values.registry));
@@ -110,7 +113,7 @@ async function main(): Promise<number> {
     return runLiveSystem(values, repo, mode === 'observe', frozen);
   }
   if (['window', 'pid', 'goal', 'bindings', 'calibration', 'combat-calibration', 'npc-calibration', 'live', 'role-scene-confirmed', 'seed', 'allow-game-image-upload',
-    'client-profile', 'evaluation-context', 'session-id', 'native-root', 'wait-focus-ms', 'seed-env-file'].some((key) => values[key as keyof typeof values] !== undefined)) throw new Error('system_live_options_only');
+    'artifact-format', 'client-profile', 'evaluation-context', 'session-id', 'native-root', 'wait-focus-ms', 'seed-env-file'].some((key) => values[key as keyof typeof values] !== undefined)) throw new Error('system_live_options_only');
   if (mode === 'learn') {
     if (!values['knowledge-dir'] || !values['out-dir']) throw new Error('system_learning_destinations_required');
     print(await reviewRuns(dirs, values['knowledge-dir'], values['out-dir'])); return 0;

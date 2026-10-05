@@ -25,6 +25,7 @@ static class WinEye
     sealed class Options
     {
         public string Mode, Session, Calibration, Combat, Npc, Image, ExportDirectory;
+        public string ArtifactFormat = "jpeg";
         public IntPtr Window;
         public int Pid;
         public static Options Parse(string[] args)
@@ -45,6 +46,8 @@ static class WinEye
                 { if (!Int32.TryParse(value, out options.Pid) || options.Pid <= 0) throw new EyeFailure("invalid_pid"); }
                 else if (args[i] == "--session" && options.Mode == "serve") options.Session = value;
                 else if (args[i] == "--export-dir" && options.Mode == "serve") options.ExportDirectory = Absolute(value);
+                else if (args[i] == "--artifact-format" && options.Mode == "serve")
+                { if (value != "jpeg" && value != "png") throw new EyeFailure("invalid_artifact_format"); options.ArtifactFormat = value; }
                 else if (args[i] == "--calibration") options.Calibration = Absolute(value);
                 else if (args[i] == "--combat-calibration") options.Combat = Absolute(value);
                 else if (args[i] == "--npc-calibration") options.Npc = Absolute(value);
@@ -231,22 +234,32 @@ static class WinEye
                 (new DirectoryInfo(Path.GetDirectoryName(artifactRoot)).Attributes & FileAttributes.ReparsePoint) != 0) throw new EyeFailure("unsafe_artifact_directory");
             if (savedFiles == 0)
             {
-                foreach (string existing in Directory.GetFiles(artifactRoot, "*.jpg"))
-                { FileInfo info = new FileInfo(existing); savedFiles++; savedBytes += info.Length; }
+                foreach (string existing in Directory.GetFiles(artifactRoot))
+                {
+                    string extension = Path.GetExtension(existing);
+                    if (!String.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) && !String.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)) continue;
+                    FileInfo info = new FileInfo(existing); savedFiles++; savedBytes += info.Length;
+                }
             }
             if (savedFiles >= MaxFiles || savedBytes >= MaxArtifactBytes) throw new EyeFailure("artifact_quota_exceeded");
             string token = Guid.NewGuid().ToString("N");
-            string path = Path.Combine(artifactRoot, "capture-" + token + ".jpg");
+            string path = Path.Combine(artifactRoot, "capture-" + token + (options.ArtifactFormat == "png" ? ".png" : ".jpg"));
             string exported = null;
             bool exportCreated = false;
             try
             {
-                ImageCodecInfo encoder = null;
-                foreach (ImageCodecInfo item in ImageCodecInfo.GetImageEncoders()) if (item.MimeType == "image/jpeg") encoder = item;
-                if (encoder == null) throw new EyeFailure("jpeg_encoder_unavailable");
-                using (EncoderParameters parameters = new EncoderParameters(1))
                 using (FileStream file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                { parameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 90L); image.Save(file, encoder, parameters); }
+                {
+                    if (options.ArtifactFormat == "png") image.Save(file, ImageFormat.Png);
+                    else
+                    {
+                        ImageCodecInfo encoder = null;
+                        foreach (ImageCodecInfo item in ImageCodecInfo.GetImageEncoders()) if (item.MimeType == "image/jpeg") encoder = item;
+                        if (encoder == null) throw new EyeFailure("jpeg_encoder_unavailable");
+                        using (EncoderParameters parameters = new EncoderParameters(1))
+                        { parameters.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 90L); image.Save(file, encoder, parameters); }
+                    }
+                }
                 long bytes = new FileInfo(path).Length;
                 if (bytes > 64L * 1024 * 1024 || bytes + savedBytes > MaxArtifactBytes) throw new EyeFailure("artifact_quota_exceeded");
                 string sha = EyeJson.Hash(path);
@@ -256,7 +269,7 @@ static class WinEye
                     if ((new DirectoryInfo(options.ExportDirectory).Attributes & FileAttributes.ReparsePoint) != 0) throw new EyeFailure("unsafe_export_directory");
                     exported = Path.Combine(options.ExportDirectory, Path.GetFileName(path));
                     // CreateNew never overwrites an existing user's file. Only
-                    // explicit low-frequency JPEGs cross this export boundary.
+                    // explicit low-frequency artifacts cross this export boundary.
                     using (FileStream destination = new FileStream(exported, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     {
                         exportCreated = true;

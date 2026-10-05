@@ -233,7 +233,15 @@ export class EyeRunStore {
     const info = await lstat(source); if (!info.isFile() || info.size < 1 || info.size > 64 * 1024 * 1024) throw new Error('artifact_size_or_type');
     const actualRelative = relative(await realpath(root), await realpath(source));
     if (!actualRelative || actualRelative === '..' || actualRelative.startsWith(`..${sep}`) || isAbsolute(actualRelative)) throw new Error('artifact_realpath_escape');
-    const filename = `${artifact.id.replace(/:/g, '_')}.jpg`;
+    const extension = win32.extname(selectedWindowsPath).toLowerCase();
+    if (!['.jpg', '.png'].includes(extension) || win32.extname(artifact.windows_path).toLowerCase() !== extension) throw new Error('artifact_format_invalid');
+    const file = await open(source, 'r');
+    const signature = Buffer.alloc(8);
+    try { await file.read(signature, 0, signature.length, 0); } finally { await file.close(); }
+    const png = signature.equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const jpeg = signature[0] === 255 && signature[1] === 216 && signature[2] === 255;
+    if (extension === '.png' ? !png : !jpeg) throw new Error('artifact_format_mismatch');
+    const filename = `${artifact.id.replace(/:/g, '_')}${extension}`;
     const destination = join(this.dir, 'artifacts', filename);
     await copyFile(source, destination, constants.COPYFILE_EXCL);
     if (await hashFile(destination) !== artifact.sha256) throw new Error('artifact_hash_mismatch');

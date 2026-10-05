@@ -8,7 +8,7 @@ import { parseBrainGoal } from '../brain/execution/routes.js';
 import type { BrainExecuteContext, BrainPlanner, BrainResult } from '../brain/execution/types.js';
 import { runCommand } from '../core/process.js';
 import { loadProtocolValidator } from '../core/protocol.js';
-import { NativeEyeClient } from '../eye/client.js';
+import { NativeEyeClient, parseEyeArtifactFormat } from '../eye/client.js';
 import { loadEyeValidator } from '../eye/protocol.js';
 import { EyeRuntime, type Collected } from '../eye/runtime.js';
 import { EyeRunStore, hashFile, hashBuffer, wslPath } from '../eye/store.js';
@@ -52,6 +52,8 @@ export async function runLiveSystem(values: Options, repo: string, observeOnly =
   if (!observeOnly && (!values.live || !values['role-scene-confirmed'] || !text(values, 'goal'))) throw new Error('system_live_explicit_scene_goal_required');
   if (observeOnly && (values.live || values['role-scene-confirmed'])) throw new Error('system_observe_input_options');
   if (values.seed && !values['allow-game-image-upload'] || values['allow-game-image-upload'] && !values.seed) throw new Error('system_live_seed_upload_pair_required');
+  const artifactFormat = parseEyeArtifactFormat(values['artifact-format']);
+  if (artifactFormat === 'png' && values.seed) throw new Error('system_png_seed_unsupported');
   const window = text(values, 'window'), pid = Number(text(values, 'pid'));
   if (!window || !/^0x[0-9a-fA-F]{1,16}$/.test(window) || !Number.isSafeInteger(pid) || pid < 1 || pid > 2147483647) throw new Error('system_live_binding_required');
   const profileFile = text(values, 'client-profile');
@@ -105,7 +107,7 @@ export async function runLiveSystem(values: Options, repo: string, observeOnly =
     ...(text(values, 'calibration') ? { calibrationPath: resolve(text(values, 'calibration')!) } : {}),
     ...(text(values, 'combat-calibration') ? { combatCalibrationPath: resolve(text(values, 'combat-calibration')!) } : {}),
     ...(text(values, 'npc-calibration') ? { npcCalibrationPath: resolve(text(values, 'npc-calibration')!) } : {}),
-    config: { mode: 'live', actor: 'brain', brain_goal: goal, bindings, client_version: version, client_instance: clientInstance, evaluation_context: context,
+    config: { mode: 'live', artifact_format: artifactFormat, actor: 'brain', brain_goal: goal, bindings, client_version: version, client_instance: clientInstance, evaluation_context: context,
       client_profile_sha256: hashBuffer(profileBytes), frozen_client_profile_file: 'client-profile.json', runtime_version: runtimeVersion, knowledge_snapshot: snapshot,
       frozen_knowledge_file: 'knowledge.json', frozen_runtime_version_file: 'runtime-version.json', inner_jev_options: inner,
       max_run_ms: maxRunMs, max_decisions: maxDecisions, planner_timeout_ms: 15000, max_observation_age_ms: 750, cv_max_age_ms: 750, wait_ms: 250,
@@ -143,7 +145,7 @@ export async function runLiveSystem(values: Options, repo: string, observeOnly =
       await waitForTargetFocus(join(nativeRoot, 'native/windows/bin/WinInput.exe'), window, pid, repo, integer(values, 'wait-focus-ms', 30000, 30000), runCommand, startup.signal);
     }
     if (stopped) throw new Error('system_live_start_cancelled');
-    eye = await NativeEyeClient.start({ executable: join(nativeRoot, 'native/windows/bin/WinEye.exe'), window, expectedPid: pid, cwd: repo, now,
+    eye = await NativeEyeClient.start({ executable: join(nativeRoot, 'native/windows/bin/WinEye.exe'), window, expectedPid: pid, cwd: repo, now, artifactFormat,
       exportWindowsPath: await wslPath(join(dir, 'native-export'), 'w'),
       ...(store.manifest.calibration ? { calibrationWindowsPath: await wslPath(join(dir, 'calibration/calibration.json'), 'w') } : {}),
       ...(store.manifest.combat_calibration ? { combatCalibrationWindowsPath: await wslPath(join(dir, 'combat-calibration/calibration.json'), 'w') } : {}),

@@ -2,6 +2,10 @@
 
 Windows 的 `WinEye.exe` 只截取绑定窗口的客户区，在本地做 CV；TypeScript 保存统一状态和证据，Python 在启用后异步调用 Seed。感知程序不发送输入，也不改变焦点。
 
+低频证据默认仍为 JPEG90。`observe --save --artifact-format png` 或 `record-action --artifact-format png` 会把本次执行 CV 的同一张 Bitmap 无损保存为 PNG；高频 `save=false` 仍仅返回 JSON。PNG 用于构建名字模板及原像素离线复核，不能把 JPEG 模板的离线自匹配当作在线原图准确率。PNG/JPEG 共同使用每会话 128 张、128 MiB 总量及单图 64 MiB 配额，复制后的扩展名与编码一致，继续核验 SHA 与显式导出。
+
+当前 Seed worker 只接收 JPEG；PNG 与 `--seed` 组合在启动前明确拒绝。使用 PNG 校准证据时不启用模型，默认 JPEG+Seed 原路径保持可用。
+
 ## 只读观察
 
 先构建，再列出当前游戏窗口；游戏重启后 HWND/PID 可能改变。

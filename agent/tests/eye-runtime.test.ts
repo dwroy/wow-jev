@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { loadProtocolValidator } from '../src/core/protocol.js';
 import type { NativeInputClient } from '../src/hand/client.js';
 import type { NativeAction, NativeReceipt } from '../src/hand/protocol.js';
-import { NativeEyeClient } from '../src/eye/client.js';
+import { NativeEyeClient, type EyeArtifactFormat } from '../src/eye/client.js';
 import { loadEyeValidator } from '../src/eye/protocol.js';
 import { replayRun } from '../src/eye/replay.js';
 import { EyeRuntime } from '../src/eye/runtime.js';
@@ -21,7 +21,7 @@ const repo = fileURLToPath(new URL('../..', import.meta.url));
 const mock = fileURLToPath(new URL('fixtures/mock-eye.mjs', import.meta.url));
 const seedMock = fileURLToPath(new URL('fixtures/mock-seed.mjs', import.meta.url));
 const session = '11111111-1111-4111-8111-111111111111';
-async function setup(scenario = 'steady', seedEnabled = false) {
+async function setup(scenario = 'steady', seedEnabled = false, artifactFormat?: EyeArtifactFormat) {
   const base = await mkdtemp(join(tmpdir(), 'wow-eye-run-')); const dir = join(base, 'run'); let offset = 0;
   const schemas: Record<string, string> = {};
   for (const name of ['agent-v1.schema.json', 'native-input-v1.schema.json', 'native-eye-v1.schema.json', 'eye-log-v1.schema.json']) schemas[name] = join(repo, 'protocol', name);
@@ -29,7 +29,7 @@ async function setup(scenario = 'steady', seedEnabled = false) {
   const store = await EyeRunStore.create({ dir, runId: 'test-run', repo, schemaPaths: schemas, config: { mode: 'mock', cv_max_age_ms: 1500, seed_max_age_ms: 5000 }, promptSha256: 'a'.repeat(64) });
   const origin = performance.now(); const now = () => Math.floor(performance.now() - origin) + offset;
   const native = await NativeEyeClient.start({ executable: process.execPath, prefixArgs: [mock, scenario, join(dir, 'native-export')], window: '0xabc', expectedPid: 42,
-    cwd: repo, sessionId: session, now, exportWindowsPath: 'C:\\export', sampleTimeoutMs: 200, onMessage: (direction, message) => { void store.append('native_eye', { direction, message }, now()).catch(() => {}); } }, await loadEyeValidator(schemas['native-eye-v1.schema.json']!));
+    cwd: repo, sessionId: session, now, ...(artifactFormat ? { artifactFormat } : {}), exportWindowsPath: 'C:\\export', sampleTimeoutMs: 200, onMessage: (direction, message) => { void store.append('native_eye', { direction, message }, now()).catch(() => {}); } }, await loadEyeValidator(schemas['native-eye-v1.schema.json']!));
   const seed = seedEnabled ? new SeedClient({ python: process.execPath, worker: seedMock, cwd: repo, timeoutMs: 1000 }, await loadSeedValidator(schemas['seed-result-v1.schema.json']!)) : undefined;
   const runtime = new EyeRuntime(native, store, await loadProtocolValidator(schemas['agent-v1.schema.json']!), { now, effectWaitMs: 0, seedIntervalMs: 0, ...(seed ? { seed } : {}) });
   let closed = false;
@@ -163,5 +163,38 @@ test('frozen combat context is reconstructed and a forged Seed target source is 
     await rewrite(run.dir, forged); await assert.rejects(replayRun(run.dir), /seed_source_target_context/);
     await rewrite(run.dir, data); await writeFile(join(folder, 'positive.png'), 'changed');
     await assert.rejects(replayRun(run.dir), /combat_calibration_hash_mismatch/);
+  } finally { await run.cleanup(); }
+});
+
+test('PNG option reaches the native process, retains PNG extension and strictly replays; default remains JPEG', async () => {
+  for (const format of [undefined, 'png'] as const) {
+    const run = await setup('steady', false, format);
+    try {
+      const saved = await run.runtime.collect(true); const unsaved = await run.runtime.collect(false);
+      assert.match(saved.artifact!.path, format === 'png' ? /\.png$/ : /\.jpg$/);
+      const bytes = await readFile(join(run.dir, saved.artifact!.path));
+      assert.deepEqual([...bytes.subarray(0, format === 'png' ? 8 : 3)], format === 'png' ? [137, 80, 78, 71, 13, 10, 26, 10] : [255, 216, 255]);
+      assert.equal(unsaved.artifact, null); assert.equal(unsaved.bracket.sample.artifact, null);
+      await run.finish(); assert.equal((await replayRun(run.dir)).artifacts, 1);
+    } finally { await run.cleanup(); }
+  }
+});
+
+test('artifact copy rejects encoding/extension mismatch and unknown extensions before publishing a copied artifact', async () => {
+  const run = await setup();
+  try {
+    const sample = (await run.native.sample(true)).sample;
+    const exported = sample.artifact!.exported_windows_path!;
+    const source = join(run.dir, 'native-export/frame-0.jpg');
+    await writeFile(source, Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    sample.artifact!.sha256 = hashBuffer(await readFile(source));
+    const mapping = { windowsRoot: 'C:\\export', localRoot: join(run.dir, 'native-export') };
+    await assert.rejects(run.store.copyArtifact(sample, 'C:\\native-local', undefined, mapping), /artifact_format_mismatch/);
+    sample.artifact!.windows_path = 'C:\\native-local\\frame-0.png';
+    await assert.rejects(run.store.copyArtifact(sample, 'C:\\native-local', undefined, mapping), /artifact_format_invalid/);
+    sample.artifact!.windows_path = 'C:\\native-local\\frame-0.gif';
+    sample.artifact!.exported_windows_path = exported.replace('.jpg', '.gif');
+    await writeFile(join(run.dir, 'native-export/frame-0.gif'), 'not an image');
+    await assert.rejects(run.store.copyArtifact(sample, 'C:\\native-local', undefined, mapping), /artifact_format_invalid/);
   } finally { await run.cleanup(); }
 });

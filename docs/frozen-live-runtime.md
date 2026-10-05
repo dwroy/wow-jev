@@ -10,6 +10,8 @@ npm --prefix agent run system -- observe \
   --run-dir /absolute/persistent-run
 ```
 
+`system observe` 和 `system live` 可指定 `--artifact-format png`，registry 父入口会将格式传给冻结子任务，并由 WinEye 保存执行 CV 的同一帧无损证据。默认仍是 JPEG90；格式写入 manifest。PNG 用于本地名字模板和原像素离线复核，PNG+`--seed` 在启动前拒绝；默认 JPEG+Seed 路径保持可用。JPEG 的离线模板自匹配不能充当在线原图的准确率验收。
+
 真实输入仍需 `live --live --role-scene-confirmed --goal FILE`，并经过已有统一 gate、有限执行、取消与 Windows 释放看门狗。observe 不创建输入执行器，不抢焦点。模型仍需 `--seed --allow-game-image-upload` 两个开关；API key 不从父环境继承，启用模型时只把显式凭据文件路径传给需要的 worker。冻结启动保留 Windows/WSL interop 所需环境项，后台截图和版本探针按原有真实适用条件验证。
 
 旧发布包可能只有模拟入口，不能用它改变标签后运行当前 main 的 live 实现。真实冻结模式要求发布包内含本启动实现和 Jev prompt；不支持时返回明确错误。用户不能用 `--executing-source-sha256`、`--runtime-version-file` 或 `--native-root` 冒充已批准版本。registry 中的外部 goal、bindings、校准、客户端 profile、评价 context 和 Seed env-file 在父入口先变成绝对路径，再传给子任务。inline live 仍提供原入口，其日志不宣称来自已发布冻结包。
