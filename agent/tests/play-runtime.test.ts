@@ -289,3 +289,43 @@ test('Jev actor identity and extra candidate conditions survive both live gates'
     assert.ok(intent.conditions.some((condition) => condition.field === 'target.signature'));
   }
 });
+
+test('early timer wake-up retries remaining coordinator time before collecting a wait result', async () => {
+  const s = await setup(); delete s.ports.hand; let clock = 100; let seq = 0;
+  const captured: number[] = []; const timerRequests: number[] = [];
+  s.ports.now = () => clock;
+  s.ports.collect = async () => { captured.push(clock); return frame(seq++, clock, false); };
+  s.ports.compile = (step, before) => compileSkill(step, before);
+  const play = new CodePlay(s.ports, { runId: 'test-run', mode: 'live' }, s.validator, async (milliseconds) => {
+    timerRequests.push(milliseconds);
+    // Reproduce a timer that wakes when floor(monotonic time) is one millisecond short.
+    clock += timerRequests.length === 1 ? milliseconds - 1 : milliseconds;
+  });
+  const result = await play.run(plan({ id: 'wait', name: 'wait', duration_ms: 25 }));
+  assert.equal(result.status, 'completed'); assert.deepEqual(timerRequests, [25, 1]); assert.deepEqual(captured, [100, 125]);
+  const done = s.rows.find(row => row.kind === 'event' && (row.data as { code?: string }).code === 'play.wait_finished')!.data as { started_at_ms: number; finished_at_ms: number; after_observation_id: string };
+  assert.ok(done.finished_at_ms - done.started_at_ms >= 25); assert.equal(done.after_observation_id, 'observation-1');
+  assert.equal(s.calls.length, 0); assert.equal(s.rows.some(row => row.kind === 'action_intent' || row.kind === 'execution_receipt'), false);
+});
+test('wait rejects an early returned capture without upgrading its source timestamp', async () => {
+  const s = await setup(); delete s.ports.hand; let clock = 100; let seq = 0; let source: Collected | undefined;
+  s.ports.now = () => clock; s.ports.compile = (step, before) => compileSkill(step, before);
+  s.ports.collect = async () => { source = frame(seq, seq++ === 0 ? clock : 124, false); return source; };
+  const play = new CodePlay(s.ports, { runId: 'test-run', mode: 'live' }, s.validator, async milliseconds => { clock += milliseconds; });
+  const result = await play.run(plan({ id: 'wait', name: 'wait', duration_ms: 25 }));
+  assert.equal(result.status, 'failed'); assert.equal(result.steps[0]!.reason, 'wait_post_observation_early'); assert.equal(source!.observation.at_ms, 124);
+  const done = s.rows.find(row => row.kind === 'event' && (row.data as { code?: string }).code === 'play.wait_finished')!.data as { status: string };
+  assert.equal(done.status, 'failed'); assert.equal(s.calls.length, 0);
+});
+test('cancel interrupts the remainder after an early timer wake-up', async () => {
+  const s = await setup(); delete s.ports.hand; let clock = 100; let seq = 0; let timers = 0;
+  let entered!: () => void; const retrying = new Promise<void>(resolve => { entered = resolve; });
+  s.ports.now = () => clock; s.ports.collect = async () => frame(seq++, clock, false); s.ports.compile = (step, before) => compileSkill(step, before);
+  const play = new CodePlay(s.ports, { runId: 'test-run', mode: 'live' }, s.validator, async milliseconds => {
+    if (++timers === 1) { clock += milliseconds - 1; return; }
+    entered(); return new Promise<void>(() => {});
+  });
+  const running = play.run(plan({ id: 'wait', name: 'wait', duration_ms: 25 })); await retrying;
+  assert.deepEqual(await play.cancel('manual_cancel'), { release: 'confirmed' }); const result = await running;
+  assert.equal(result.status, 'cancelled'); assert.equal(result.steps[0]!.after_observation_id, null); assert.equal(timers, 2); assert.equal(seq, 1); assert.equal(s.calls.length, 0);
+});

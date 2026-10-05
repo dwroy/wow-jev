@@ -40,7 +40,8 @@ export class CodePlay {
   private maxAge: number;
   private effectWait: number;
   private effectPoll: number;
-  constructor(private ports: PlayPorts, private options: PlayOptions, private validator?: ProtocolValidator) {
+  constructor(private ports: PlayPorts, private options: PlayOptions, private validator?: ProtocolValidator,
+    private waitTimer: (milliseconds: number) => Promise<void> = (milliseconds) => delay(milliseconds)) {
     this.maxRun = validOption(options.maxRunMs, 60000, 120000);
     this.maxAge = validOption(options.maxObservationAgeMs, 750, 1500);
     this.effectWait = validOption(options.effectWaitMs, 1500, 1500, 0);
@@ -87,6 +88,16 @@ export class CodePlay {
   private async active<T>(work: Promise<T>): Promise<T> {
     if (this.stop) throw this.stop;
     return Promise.race([work, this.stopped.then((stop) => { throw stop; })]);
+  }
+  private async waitUntil(deadline: number): Promise<void> {
+    for (;;) {
+      const now = this.ports.now();
+      if (!Number.isSafeInteger(now) || now < 0) throw new Error('wait_clock_invalid');
+      const remaining = deadline - now;
+      if (remaining <= 0) return;
+      // Timer completion is a wake-up hint; only the coordinator clock proves elapsed time.
+      await this.active(this.waitTimer(remaining));
+    }
   }
   private async append(kind: LogKind, data: unknown): Promise<void> {
     try { await this.active(this.ports.append(kind, data, this.ports.now())); }
@@ -177,8 +188,9 @@ export class CodePlay {
         await this.append('event', { code: 'play.wait_started', plan: { id: plan.id, revision: plan.revision }, step_id: step.id,
           before_observation_id: before.observation.id, duration_ms: step.duration_ms, started_at_ms: start });
         try {
-          await this.active(delay(step.duration_ms));
+          await this.waitUntil(start + step.duration_ms);
           after = await this.active(this.ports.collect(true));
+          if (!Number.isSafeInteger(after.observation.at_ms) || after.observation.at_ms < start + step.duration_ms) throw new Error('wait_post_observation_early');
           status = 'completed';
         } catch (error) {
           reason = detail(error); status = error instanceof Stopped && error.status === 'cancelled' ? 'cancelled' : 'failed';
