@@ -74,7 +74,12 @@ async function fixture(mode: 'simulated' | 'live', p = plan, scenario = 'steady'
     await event('play.plan_finished', { result: { plan: id(p), status, steps: results, ...(status === 'cancelled' ? { reason: 'cancelled' } : {}) } });
     await native?.close(); await append('run_end', { status: status === 'completed' ? 'complete' : status }); await store.close();
   }
-  return { dir, step, finish, cleanup: async () => { await native?.close(); await store.close(); await rm(base, { recursive: true, force: true }); } };
+  async function startupCancelled() {
+    await observation(); await append('event', { code: 'cli_failed', detail: 'play_cancelled_during_startup' });
+    await native?.close(); await append('run_end', { status: 'failed' }); await store.close();
+    const rows = await records(dir); await rewrite(dir, rows.filter((row) => row.kind !== 'event' || (row.data as { code?: string }).code !== 'play.plan_started'));
+  }
+  return { dir, step, finish, startupCancelled, cleanup: async () => { await native?.close(); await store.close(); await rm(base, { recursive: true, force: true }); } };
 }
 async function records(dir: string): Promise<EyeLogRecord[]> { return (await readFile(join(dir, 'events.jsonl'), 'utf8')).trim().split('\n').map((line) => JSON.parse(line) as EyeLogRecord); }
 async function rewrite(dir: string, rows: EyeLogRecord[]) { await writeFile(join(dir, 'events.jsonl'), rows.map((row, seq) => JSON.stringify({ ...row, seq })).join('\n') + '\n'); }
@@ -173,4 +178,18 @@ test('late terminal receipt preserves the cancelled plan and conservative unknow
     (rows[end]!.data as { result: PlayResult }).result.steps = [structuredClone(step)]; late.at_ms = rows[end]!.at_ms; rows.splice(end + 1, 0, late);
     await rewrite(run.dir, rows); const result = await replayPlayRun(run.dir); assert.equal(result.status, 'cancelled'); assert.equal(result.complete, false); assert.equal(result.steps[0]!.receipt!.input.counts_status, 'unknown'); assert.equal(result.confirmed_effects, 0);
   } finally { await run.cleanup(); }
+});
+
+test('cancelled startup without steps or inputs replays as incomplete and never successful', async () => {
+  for (const mode of ['simulated', 'live'] as const) {
+    const run = await fixture(mode);
+    try { await run.startupCancelled(); const result = await replayPlayRun(run.dir); assert.equal(result.status, 'incomplete'); assert.equal(result.complete, false); assert.equal(result.actions, 0); assert.equal(result.steps.length, 0); assert.equal(result.observations, 1); assert.equal(result.confirmed_effects, 0); } finally { await run.cleanup(); }
+  }
+});
+
+test('missing plan start with steps/inputs or a complete run end is rejected', async () => {
+  const startup = await fixture('simulated');
+  try { await startup.startupCancelled(); const rows = await records(startup.dir); (rows.find((row) => row.kind === 'run_end')!.data as { status: string }).status = 'complete'; await rewrite(startup.dir, rows); await assert.rejects(replayPlayRun(startup.dir), /missing_plan_started/); } finally { await startup.cleanup(); }
+  const started = await fixture('simulated');
+  try { await started.step(0); await started.finish('cancelled'); const rows = await records(started.dir); await rewrite(started.dir, rows.filter((row) => row.kind !== 'event' || (row.data as { code?: string }).code !== 'play.plan_started')); await assert.rejects(replayPlayRun(started.dir), /step_started_order|action_plan_or_order|missing_plan_started/); } finally { await started.cleanup(); }
 });

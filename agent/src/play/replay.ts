@@ -193,7 +193,7 @@ export async function replayPlayRun(directory: string): Promise<PlayReplay> {
       } else if (!['play.cancel_requested', 'play.release_failed', 'play.cleanup_failed'].includes(String(event.code))) fail('unknown_play_event');
     } else if (row.kind === 'run_end') { ended = true; endStatus = (row.data as { status?: unknown }).status; }
   }
-  if (!started) fail('missing_plan_started');
+  if (!started && (!ended || endStatus === 'complete' || active || next || results.length || intents.size || receipts.size || links.size || raw.size || dispatches.size)) fail('missing_plan_started');
   if (usedActions.size !== intents.size || receipts.size !== intents.size || links.size !== intents.size) fail('unlinked_action_or_receipt');
   if (manifest.config.native_dispatch_logged === true && [...raw.values()].some((receipt) => receipt.input.events_inserted > 0 && !dispatches.has(receipt.id))) fail('missing_native_dispatch');
   if (endStatus === 'complete' && (!finished || active || finished.status !== 'completed')) fail('complete_with_incomplete_plan');
