@@ -96,11 +96,11 @@ export class SeedBrainClient implements BrainPlanner {
   get busy(): boolean { return this.pending !== null; }
   async plan(request: BrainRequest, imagePath: string | null): Promise<BrainChoiceResult> {
     validateSelectionRequest(request);
-    if (this.stopped) return failedChoice(request, 'failed', 'brain_worker_stopped');
-    if (this.pending) return failedChoice(request, 'failed', 'brain_worker_busy');
-    if (imagePath !== null && (!isAbsolute(imagePath) || !/\.jpe?g$/i.test(imagePath) || imagePath.includes('\0'))) return failedChoice(request, 'failed', 'brain_requires_absolute_jpeg');
+    if (this.stopped) return failedChoice(request, 'failed', 'brain_worker_stopped', 0, this.options.promptSha256 ?? PROMPT_SHA256);
+    if (this.pending) return failedChoice(request, 'failed', 'brain_worker_busy', 0, this.options.promptSha256 ?? PROMPT_SHA256);
+    if (imagePath !== null && (!isAbsolute(imagePath) || !/\.jpe?g$/i.test(imagePath) || imagePath.includes('\0'))) return failedChoice(request, 'failed', 'brain_requires_absolute_jpeg', 0, this.options.promptSha256 ?? PROMPT_SHA256);
     const started = this.now();
-    if (started >= request.deadline_ms || started < request.at_ms) return failedChoice(request, 'failed', 'brain_request_expired');
+    if (started >= request.deadline_ms || started < request.at_ms) return failedChoice(request, 'failed', 'brain_request_expired', 0, this.options.promptSha256 ?? PROMPT_SHA256);
     const frozen = structuredClone(request);
     const command = { id: frozen.id, op: 'plan', image_path: imagePath, prompt_version: 'brain-retail-v1', request: frozen };
     return new Promise((resolve) => {
@@ -123,6 +123,7 @@ export class SeedBrainClient implements BrainPlanner {
       try {
         const value: unknown = strictJson(line);
         if (!validateResult(value) || !this.pending || value.id !== this.pending.request.id || value.prompt_sha256 !== (this.options.promptSha256 ?? PROMPT_SHA256)) throw new Error('brain_worker_result_schema');
+        validateChoiceResult(value, this.pending.request, this.options.promptSha256 ?? PROMPT_SHA256);
         if (value.status !== 'ok' && value.reply !== null) throw new Error('brain_worker_result_reply');
         if (value.status === 'ok') {
           const reply = validateModelReply(value.raw_text, this.pending.request);

@@ -58,3 +58,18 @@ test('simulated planner can identify a mock with model=null while live reply con
   result.reply.plan_revision = 2; result.raw_text = JSON.stringify(result.reply);
   assert.throws(() => validateChoiceResult(result, req, BRAIN_PROMPT_SHA256, 'simulated'), /brain_reply_evidence_mismatch/);
 });
+
+test('SeedBrainClient never accepts model=null ok reply even when a simulated controller could use local mocks', async () => {
+  const base = await mkdtemp(join(tmpdir(), 'brain-worker-mock-'));
+  const worker = join(base, 'mock.mjs');
+  const source = `import readline from 'node:readline';
+for await (const line of readline.createInterface({input:process.stdin})) {
+ const command=JSON.parse(line), r=command.request;
+ const reply={request_id:r.id,plan_revision:r.plan.revision,route_id:'complete-observe',evidence_observation_id:r.based_on_observation_id,consulted_fact_ids:r.consulted_fact_ids,reason:'mock'};
+ process.stdout.write(JSON.stringify({type:'brain_choice',id:r.id,status:'ok',reply,reason:{code:'selected'},model:null,prompt_version:'brain-retail-v1',prompt_sha256:${JSON.stringify(BRAIN_PROMPT_SHA256)},elapsed_ms:0,usage:{input_tokens:null,output_tokens:null},raw_text:JSON.stringify(reply)})+'\\n');
+}`;
+  await writeFile(worker, source);
+  const client = new SeedBrainClient({ python: process.execPath, worker, cwd: base, now: () => 100 });
+  try { const result = await client.plan(request(), null); assert.equal(result.status, 'failed'); assert.equal(result.reason.code, 'brain_worker_invalid_result'); }
+  finally { client.close(); await rm(base, { recursive: true, force: true }); }
+});
