@@ -4,6 +4,16 @@
 
 ## 最新决定与下一阶段
 
+用户进一步授权继续完成五项：4K可靠识别、正式服动作闭环、NPC任务感知、真实学习迭代效果、长期/WSL重启恢复；允许必要时用computer-use打开WoW测试，并新增多版本本地游戏/怪物数据库要求。当前在四个项目内工作树并行：retail-identity-v2、versioned-game-data、retail-npc-perception、负责人retail-runtime-closure；主目录暂未合入这些代码，不推送。本轮尚未完成全部五项，不能标整体验收通过。
+
+已实现并分别提交：848f978稳定名字bank/局部陌生字保护（51项Python+真实Windows测试），8e1b5ef NPC对话/显式目标绑定交互指示（42项），efc6c7f多版本SQLite/TS查询桥（19项Python+2项整链），2386eab真实同条件效果对照（9项边界，模拟/重复/错版本/unknown不算收益），soak driver8c4d8bd及真实日志检查f58bf67/Windows元数据4b5f51d修复。负责人工作树已cherry-pick这些工程、扩展可选target_name/NPC协议与冻结回放、新增system/live.ts及显式一次interact_npc探测目标；43项既有相关TS与33项新增/相关边界通过，集成109项Python/真实Windows回归无跳过。真实只读brain-observe-2版本核对→新bank→大脑→严格回放通过（21条/2图/0输入）；这不是NPC动作验收。JeV冻结prompt修复d715d64待负责人接入。
+
+当前客户端证据：正式服_retaiI_实际路径拼写为_retail_/Wow.exe，file/build/UI版本12.1.0.69933，product=wow，配置portal CN/textLocale zhCN，数据库规范locale zh_CN、branch retail/expansion midnight；旁边_classic_titan_为另一产品3.80.2.69874，不能混用。来源原字节/SHAs在out/acceptance/retail-closure/client-version-1.json（94951e43…ca6d）及新game-data/provenance。11条公开网站任务/怪物断言因build未知隔离reference_only；不同ID/历史任务数量保留，精确69933 query正确not_found，不把网页资料冒充当前游戏事实。
+
+computer-use技能已读并尝试初始化/重试/重置，均因sandboxCwd is not a local file URI: file:///home/dai/Projects/wow-jev失败，没有用插件操作桌面。直接Wow.exe启动曾停初始提示；用户指正应从战网“进入游戏”，负责人实际用已登录Battle.net.exe --exec=launch WoW启动新正式服并按一次Enter进入既有Dwroy11，不处理认证/充值。当前真实游戏 HWND0x340894/PID18128/3840×2160、前台；旧0x12c0892/PID25160不能复用。角色目前在营地安全平地、满血、骑坐骑，任务状态已变化，不能继续把原三任务当当前唯一目标。原生输入保持focus/identity/有限释放；菜单首次焦点探测超时未输入，game-menu-2重试打开菜单成功，正在控制选项为未设置的“与目标互动”配置独立测试键，E/S/D/F原移动不改；设置证据out/acceptance/retail-closure。异步人工进入角色准备问题已被后续战网自动启动过程解决，不必反复要求用户手工点击。
+
+接下来：把全部接入变化保存并完成负责人审查/无跳过回归；当前bank同名35–37/43稳定、39/40另一类，但仍缺独立名字/死亡正例；补当前NPC名字/对话校准与显式有限交互、新独立战斗实测、两对同条件真实版本效果+知识消费/迭代/回退、10分钟实际录制。Windows外部WSL重启host工具由retail_npc_perception继续准备，尚未执行；只有Ubuntu一个发行版且并行agent/其它项目可能活跃，真实terminate前需完成本项目保存/停进程/影响预检，再决定是否需用户针对共享进程的明确授权。杀Node不能当整发行版重启。源码/原失败/必要Windows产物清理前必须归档。
+
 用户先明确“先做后面，继续5–7”，随后准备好游戏恢复第4阶段实测。第5–7工程已接通并以8e71665本地合入：执行大脑/工作记忆/有限阶段规划/控制权交接，严格真实日志学习与内容hash知识库，证据提案→独立工作树→固定回归→签名发布→冻结源码启动→任务边界切换/回退。入口docs/system-runtime.md，分项证据docs/acceptance/stages-5-7.md及主out/acceptance/stages-5-7。当前system CLI只提供模拟/离线，不操作游戏；真实NPC名字、距离和对话感知尚未接上，不称正式服任务已验收。主目录219项TS/68项Python/typecheck及模拟/冻结v3启动已通过，本轮7个实施/候选工作树正常清理，必要证据和未发布候选快照保留；没有清理其它历史工作树。
 
 四个独立真实/模拟来源学习出25facts（19 observed/6 inferred，19经验/4背包事实/2报告UI名字统计）、14slices/13reviews；重复retail-3去重。knowledge/baseline-v1中的canonical JSON SHA为5134f31f6ac964d4ca50ecfa5f7968075b7f00f43753acf4e76c8d2b4a6910b8。完整4K运动效果unknown保留；实际Brain咨询两条move_for经验后升级处理，0输入。UI名字仅为Seed报告，不生成GUID/击杀/等级/掉落率。Brain/CodePlay/Jev严格嵌套回放和Brain来源学习也已实现。
