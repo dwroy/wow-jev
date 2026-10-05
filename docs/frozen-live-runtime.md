@@ -16,6 +16,8 @@ npm --prefix agent run system -- observe \
 
 registry 启动的依赖根由实际执行的 launcher 模块路径独立确定，`--repo-root` 不能替换 bootstrap loader 的执行权限。相同 package-lock 也不能让其它目录的 loader 运行；子任务还核对实际 `--import` 路径与父记录的 loader SHA。这里使用当前已安装可信依赖，不把用户可传路径当作依赖来源证明。
 
+实际 Windows 客户端版本 probe 固定使用可信 `/usr/bin/python3`；`--python` 只配置模型 worker，不能替换版本核验解释器或冒充进程元数据。没有启用模型时，该 wrapper 不会因版本 probe 被执行。
+
 ## 原生构建与相同字节复用
 
 源码包不包含 ignored `native/windows/bin`。子任务将批准的 `.cs`、`build.sh` 等原生源码复制到独立生成目录，调用冻结 `build.sh` 和本机固定 Windows Framework4 `csc.exe`，复核构建前后源文件。实际编译器、源码、script、输出日志和每个二进制 SHA 进入证据。

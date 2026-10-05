@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { access, cp, mkdtemp, mkdir, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { access, chmod, cp, mkdtemp, mkdir, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { directoryHash } from '../src/learner/iteration/util.js';
@@ -54,6 +54,25 @@ test('identical lock cannot grant a foreign bootstrap loader authority or create
     await assert.rejects(access(marker));
     const response = await command(['observe', '--registry', '/nonexistent/registry', '--repo-root', foreign]);
     assert.equal(response.code, 2); assert.match(response.stderr, /dependency_repo_must_match_launcher/); await assert.rejects(access(marker));
+  } finally { await rm(temp, { recursive: true, force: true }); }
+});
+
+test('public model --python wrapper cannot execute or impersonate the actual metadata probe', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'wow-fixed-version-python-'));
+  try {
+    const native = join(temp, 'native/windows/bin'), marker = join(temp, 'foreign-python-ran'), listed = join(temp, 'list-called');
+    await mkdir(native, { recursive: true });
+    const profile = join(temp, 'profile.json'); await writeFile(profile, JSON.stringify({ branch: 'retail', expansion: 'midnight', patch: '12.1.0', build: 69933, region: 'cn', locale: 'zh_CN' }));
+    // The transport stub only lists a deliberately nonexistent process. It sends no input.
+    const window = { hwnd: '0x1', pid: 2147483646, proc: 'Wow', client_width: 800, client_height: 600, focused: false };
+    const input = join(native, 'WinInput.exe');
+    await writeFile(input, `#!/usr/bin/python3\nfrom pathlib import Path\nimport json\np=Path(${JSON.stringify(listed)})\np.write_text(p.read_text()+'1' if p.exists() else '1')\nprint(${JSON.stringify(JSON.stringify(window))})\n`); await chmod(input, 0o700);
+    const wrapper = join(temp, 'fake-python');
+    await writeFile(wrapper, `#!/usr/bin/python3\nfrom pathlib import Path\nPath(${JSON.stringify(marker)}).write_text('untrusted probe executed')\nprint('{}')\n`); await chmod(wrapper, 0o700);
+    const result = await command(['observe', '--window', '0x1', '--pid', '2147483646', '--client-profile', profile, '--native-root', temp, '--python', wrapper, '--run-dir', join(temp, 'run')]);
+    assert.equal(result.code, 2); assert.match(result.stderr, /client_version_probe_failed/);
+    assert.equal(await readFile(listed, 'utf8'), '11'); // Native listing, then the real trusted Python probe listing.
+    await assert.rejects(access(marker)); await assert.rejects(access(join(temp, 'run/manifest.json')));
   } finally { await rm(temp, { recursive: true, force: true }); }
 });
 

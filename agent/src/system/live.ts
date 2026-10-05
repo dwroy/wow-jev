@@ -80,7 +80,8 @@ export async function runLiveSystem(values: Options, repo: string, observeOnly =
   // Reuse the tested read-only process probe; supplied labels cannot turn a
   // different installed client into the selected version.
   const probeCode = 'import json,sys; from pathlib import Path; from tools.retail_soak import probe_client; print(json.dumps(probe_client(Path(sys.argv[1]),json.loads(sys.argv[2]),sys.argv[3],int(sys.argv[4])),ensure_ascii=False))';
-  const clientProbe = await runCommand(text(values, 'python') ?? '/usr/bin/python3', ['-B', '-c', probeCode, nativeRoot, JSON.stringify(version), window, String(pid)],
+  // Metadata authority is independent of the user-selected model worker runtime.
+  const clientProbe = await runCommand('/usr/bin/python3', ['-B', '-c', probeCode, nativeRoot, JSON.stringify(version), window, String(pid)],
     { cwd: repo, timeoutMs: 20000, maxOutputBytes: 65536 });
   if (clientProbe.status !== 'ok') throw new Error('system_live_client_version_probe_failed');
   const clientInstance = strictJson(clientProbe.stdout);
