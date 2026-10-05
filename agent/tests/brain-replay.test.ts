@@ -94,3 +94,18 @@ test('strict replay rejects arbitrary plan, forged epoch, knowledge IDs, approva
     } finally { await s.cleanup(); }
   }
 });
+test('actual CodePlay goal revision barrier closes prior macro before next epoch and strict replay audits both', async () => {
+  const s = await setup(500); s.missingRange(); try {
+    const running = s.brain.run(goal); await s.waited;
+    await s.brain.updateGoal({ id: goal.id, revision: 2, description: '换版后只观察', kind: 'observe' });
+    const result = await running; await s.finish(result.status); assert.equal(result.status, 'completed'); assert.equal(result.goal.revision, 2);
+    const rows = await s.records();
+    const seq = (code: string) => rows.find((row) => row.kind === 'event' && (row.data as { code?: string }).code === code)!.seq;
+    assert.ok(seq('play.plan_finished') < seq('brain.control_aborted')); assert.ok(seq('brain.control_aborted') < seq('brain.goal_changed'));
+    const replay = await replayBrainRun(s.dir); assert.equal(replay.complete, true); assert.equal(replay.result!.goal.revision, 2); assert.equal(replay.simulated_inputs, 0);
+    const changed = rows.find((row) => row.kind === 'event' && (row.data as { code?: string }).code === 'brain.goal_changed')!.data as { memory: { epoch: number } };
+    changed.memory.epoch = 4;
+    await writeFile(join(s.dir, 'events.jsonl'), rows.map((row) => JSON.stringify(row)).join('\n') + '\n');
+    await assert.rejects(replayBrainRun(s.dir), /brain_replay:goal_changed_memory/);
+  } finally { await s.cleanup(); }
+});

@@ -41,7 +41,7 @@ Ports 提供 `now/collect/append/planner/executeCode/executeJev/release`，不�
 
 `SeedBrainClient` 使用串行 `perception/brain_worker.py`，显式 `allowGameImageUpload` 才启用上传和凭据加载。沿用 seed_worker 的凭据、JPEG校验、固定 HTTPS运输、超时中断和错误码清洗。默认凭据位置仍是 `~/.config/wow-jev/api.env`，模型为 `doubao-seed-2-0-mini-260428`。这里只上传已有WoW客户区截图；worker不操作Windows。
 
-候选 prompt 使用协议 ID `brain-retail-v1`，真正版本由 RuntimeVersion 与 SHA 区分。`promptFile/promptSha256` 传至 worker 的 `--prompt-file/--prompt-sha256`；文件必须有界、regular、非符号链接且哈希匹配。回复必须是精确JSON，包含 request_id、plan_revision、route_id、evidence_observation_id、consulted_fact_ids、reason。多键重复、代码围栏、未知路由和自行添加键鼠都拒绝。
+候选 prompt 使用协议 ID `brain-retail-v1`，真正版本由 RuntimeVersion 与 SHA 区分。`promptFile/promptSha256` 传至 worker 的 `--prompt-file/--prompt-sha256`；文件必须有界、regular、非符号链接且哈希匹配。回复必须是精确JSON，包含 request_id、plan_revision、route_id、evidence_observation_id、consulted_fact_ids、reason。模拟规划端口可明确使用 model=null；live 和实际 SeedBrainClient 仍要求固定 Seed 模型，不能伪装模型调用。多键重复、代码围栏、未知路由和自行添加键鼠都拒绝。
 
 ## 知识与回放
 

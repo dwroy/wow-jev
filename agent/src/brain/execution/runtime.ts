@@ -158,7 +158,7 @@ export class ExecutionBrain {
       if (this.plannerUnavailable) reply = failedChoice(request, 'failed', 'planner_unavailable', 0, this.promptSha);
       else reply = await this.active(this.bounded(this.ports.planner.plan(structuredClone(request), this.ports.imagePath?.(before) ?? before.artifact?.path ?? null),
         Math.max(1, request.deadline_ms - this.ports.now()), 'brain_planner_timeout'), epoch);
-      validateChoiceResult(reply, request, this.promptSha);
+      validateChoiceResult(reply, request, this.promptSha, this.options.mode);
     } catch (error) {
       if (error instanceof Stop || error instanceof Changed) throw error;
       this.ports.planner.close(); this.plannerUnavailable = true; reply = failedChoice(request, 'failed', detail(error), 0, this.promptSha);

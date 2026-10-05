@@ -142,7 +142,7 @@ export async function replayBrainRun(directory: string, options: BrainReplayOpti
         current = { request, before, reply: null, approved: null, fresh: null, why: null, selected: null, acquired: false, released: false, records: [], execution: null, terminal: false }; states.set(request.id, current);
       } else if (code === 'brain.response') {
         if (!current || current.reply || cancelled || changing || event.decision_id !== current.request.id) fail('response_order');
-        try { validateChoiceResult(event.result, current.request, promptSha); } catch { fail('response_validation'); } current.reply = event.result;
+        try { validateChoiceResult(event.result, current.request, promptSha, mode); } catch { fail('response_validation'); } current.reply = event.result;
       } else if (code === 'brain.approval') {
         if (!current?.reply || current.approved || cancelled || changing || event.decision_id !== current.request.id || event.epoch !== memory.epoch || event.plan_revision !== memory.goal.revision ||
           !Number.isSafeInteger(event.at_ms) || Number(event.at_ms) > row.at_ms || event.knowledge_sha256 !== version.knowledge.sha256) fail('approval_order');

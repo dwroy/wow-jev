@@ -145,9 +145,9 @@ export class SeedBrainClient implements BrainPlanner {
 
 export const BRAIN_PROMPT_SHA256 = PROMPT_SHA256;
 
-export function validateChoiceResult(value: unknown, request: BrainRequest, promptSha256 = PROMPT_SHA256): asserts value is BrainChoiceResult {
+export function validateChoiceResult(value: unknown, request: BrainRequest, promptSha256 = PROMPT_SHA256, mode: 'live' | 'simulated' = 'live'): asserts value is BrainChoiceResult {
   if (!validateResult(value) || value.id !== request.id || value.prompt_sha256 !== promptSha256) throw new Error('brain_choice_schema');
   if (value.status !== 'ok') { if (value.reply !== null) throw new Error('brain_choice_unexpected_reply'); return; }
-  if (value.model !== 'doubao-seed-2-0-mini-260428' || value.raw_text === null) throw new Error('brain_choice_model');
+  if (!(value.model === 'doubao-seed-2-0-mini-260428' || mode === 'simulated' && value.model === null) || value.raw_text === null) throw new Error('brain_choice_model');
   if (JSON.stringify(validateModelReply(value.raw_text, request)) !== JSON.stringify(value.reply)) throw new Error('brain_choice_reply_mismatch');
 }

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildBrainRoutes, routesHash } from '../src/brain/execution/routes.js';
-import { BRAIN_PROMPT_SHA256, DisabledPlanner, SeedBrainClient, validateModelReply, validateSelectionRequest } from '../src/brain/execution/planner.js';
+import { BRAIN_PROMPT_SHA256, DisabledPlanner, SeedBrainClient, validateChoiceResult, validateModelReply, validateSelectionRequest } from '../src/brain/execution/planner.js';
 import type { BrainRequest } from '../src/brain/execution/types.js';
 import { DEFAULT_SKILL_BINDINGS } from '../src/reflex/skills.js';
 import type { Observation } from '../src/core/protocol.js';
@@ -47,4 +47,14 @@ test('real serial Python brain client default is disabled and custom frozen prom
       } finally { client.close(); }
     }
   } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test('simulated planner can identify a mock with model=null while live reply constraints stay strict', () => {
+  const req = request(), reply = { request_id: req.id, plan_revision: 1, route_id: 'complete-observe', evidence_observation_id: req.based_on_observation_id, consulted_fact_ids: [], reason: '模拟本地选择' };
+  const result = { type: 'brain_choice', id: req.id, status: 'ok', reply, reason: { code: 'selected' }, model: null,
+    prompt_version: 'brain-retail-v1', prompt_sha256: BRAIN_PROMPT_SHA256, elapsed_ms: 0, usage: { input_tokens: null, output_tokens: null }, raw_text: JSON.stringify(reply) };
+  assert.throws(() => validateChoiceResult(result, req), /brain_choice_model/);
+  assert.doesNotThrow(() => validateChoiceResult(result, req, BRAIN_PROMPT_SHA256, 'simulated'));
+  result.reply.plan_revision = 2; result.raw_text = JSON.stringify(result.reply);
+  assert.throws(() => validateChoiceResult(result, req, BRAIN_PROMPT_SHA256, 'simulated'), /brain_reply_evidence_mismatch/);
 });
