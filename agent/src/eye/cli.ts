@@ -20,7 +20,7 @@ import { EyeRunStore, hashFile, wslPath } from './store.js';
 
 const print = (value: unknown) => process.stdout.write(`${JSON.stringify(value)}\n`);
 const HELP = `眼运行时：
-npm run eye -- observe --window 0xHWND --pid PID [--duration-ms 10000] [--save] [--calibration bundle/calibration.json]
+npm run eye -- observe --window 0xHWND --pid PID [--duration-ms 10000] [--save] [--calibration bundle/calibration.json] [--combat-calibration bundle/calibration.json]
 npm run eye -- replay --run-dir DIR
 npm run eye -- record-action --window 0xHWND --pid PID --live --action JSON_OR_FILE [--expect-inventory-open true|false]
 
@@ -35,7 +35,7 @@ function integer(value: string | undefined, fallback: number, min: number, max: 
 async function main(): Promise<number> {
   const { values, positionals } = parseArgs({ allowPositionals: true, strict: true, options: {
     help: { type: 'boolean' }, window: { type: 'string' }, pid: { type: 'string' }, 'run-dir': { type: 'string' },
-    'repo-root': { type: 'string' }, 'native-root': { type: 'string' }, calibration: { type: 'string' },
+    'repo-root': { type: 'string' }, 'native-root': { type: 'string' }, calibration: { type: 'string' }, 'combat-calibration': { type: 'string' },
     'duration-ms': { type: 'string' }, 'interval-ms': { type: 'string' }, 'cv-max-age-ms': { type: 'string' }, 'seed-max-age-ms': { type: 'string' },
     save: { type: 'boolean' }, 'save-interval-ms': { type: 'string' }, seed: { type: 'boolean' }, 'allow-game-image-upload': { type: 'boolean' },
     python: { type: 'string' }, 'seed-env-file': { type: 'string' }, 'seed-interval-ms': { type: 'string' },
@@ -59,6 +59,7 @@ async function main(): Promise<number> {
   const seedInterval = integer(values['seed-interval-ms'], 3000, 500, 30000); const focusWait = integer(values['wait-focus-ms'], 5000, 0, 30000);
   const saveInterval = integer(values['save-interval-ms'], 1000, 500, 30000);
   const calibrationPath = values.calibration ? resolve(values.calibration) : undefined;
+  const combatCalibrationPath = values['combat-calibration'] ? resolve(values['combat-calibration']) : undefined;
   const schemaPaths: Record<string, string> = {};
   for (const name of ['agent-v1.schema.json', 'native-input-v1.schema.json', 'native-eye-v1.schema.json', 'eye-log-v1.schema.json']) schemaPaths[name] = join(repo, 'protocol', name);
   if (values.seed) schemaPaths['seed-result-v1.schema.json'] = join(repo, 'perception/schemas/seed-result-v1.schema.json');
@@ -78,13 +79,15 @@ async function main(): Promise<number> {
   const config: Record<string, unknown> = { mode, window: values.window, expected_pid: pid, duration_ms: duration, interval_ms: interval,
     cv_max_age_ms: cvAge, seed_max_age_ms: seedAge, seed_interval_ms: seedInterval, save, save_interval_ms: saveInterval, seed_enabled: values.seed ?? false,
     allow_game_image_upload: values['allow-game-image-upload'] ?? false, native_root: nativeRoot, node_version: process.version,
-    python: values.python ?? 'python3', calibration_path: calibrationPath ?? null, action, expected_inventory_open: expected ?? null };
-  const store = await EyeRunStore.create({ dir, runId, repo, nativeRoot, schemaPaths, config, promptSha256: await hashFile(promptPath), ...(calibrationPath ? { calibrationPath } : {}) });
+    python: values.python ?? 'python3', calibration_path: calibrationPath ?? null, combat_calibration_path: combatCalibrationPath ?? null, action, expected_inventory_open: expected ?? null };
+  const store = await EyeRunStore.create({ dir, runId, repo, nativeRoot, schemaPaths, config, promptSha256: await hashFile(promptPath),
+    ...(calibrationPath ? { calibrationPath } : {}), ...(combatCalibrationPath ? { combatCalibrationPath } : {}) });
   const origin = performance.now(); const now = () => Math.floor(performance.now() - origin);
   let eye: NativeEyeClient | null = null; let hand: NativeInputClient | null = null; let runtime: EyeRuntime | null = null; let seed: SeedClient | undefined; let status = 'failed';
   try {
     const exportWindowsPath = await wslPath(join(dir, 'native-export'), 'w');
-    const calibrationWindowsPath = calibrationPath ? await wslPath(calibrationPath, 'w') : undefined;
+    const calibrationWindowsPath = store.manifest.calibration ? await wslPath(join(dir, 'calibration/calibration.json'), 'w') : undefined;
+    const combatCalibrationWindowsPath = store.manifest.combat_calibration ? await wslPath(join(dir, 'combat-calibration/calibration.json'), 'w') : undefined;
     const executable = join(nativeRoot, 'native/windows/bin/WinEye.exe');
     if (mode === 'record-action') {
       print({ event: 'waiting_for_focus', window: values.window, pid, timeout_ms: focusWait, message: '请手动切回目标窗口。' });
@@ -98,6 +101,7 @@ async function main(): Promise<number> {
     }
     eye = await NativeEyeClient.start({ executable, window: values.window, expectedPid: pid, cwd: repo, now, exportWindowsPath,
       ...(calibrationWindowsPath ? { calibrationWindowsPath } : {}),
+      ...(combatCalibrationWindowsPath ? { combatCalibrationWindowsPath } : {}),
       onMessage: (direction, message) => { void store.append('native_eye', { direction, message }, now()).catch(() => {}); } }, eyeValidator);
     if (values.seed) seed = new SeedClient({ python: values.python ?? 'python3', worker: join(repo, 'perception/seed_worker.py'), cwd: repo,
       allowUpload: values['allow-game-image-upload'] ?? false, ...(values['seed-env-file'] ? { envFile: resolve(values['seed-env-file']) } : {}),

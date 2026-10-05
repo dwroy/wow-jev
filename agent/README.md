@@ -1,6 +1,8 @@
 # WoW Agent 在线入口
 
-提供环境诊断、协议校验、离线演示，以及第 1 阶段 Windows 键鼠入口。当前不调用视觉 API；`input` 默认 dry-run，显式 `--live` 才发送真实输入。
+提供环境诊断、协议校验、离线演示、Windows 键鼠、眼、代码 play 和 Jev 入口。模型默认关闭；纯模拟不调用 API。真实输入需要对应入口的显式 `--live`，Jev 另需角色场景、目标和战斗校准。
+
+代码计划见 [play-runtime.md](../docs/play-runtime.md)，Jev 候选选择与取消见 [jev-runtime.md](../docs/jev-runtime.md)。
 
 在仓库根目录安装本地依赖并验证：
 
