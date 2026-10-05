@@ -1,8 +1,14 @@
 # WoW Agent 当前交接
 
-更新：2026-10-05。用户最新授权和项目规则见 `AGENTS.md`，实施计划见 `docs/agent-roadmap.md`。历史3.3.5a像素桥任务原文已保留在 `docs/handoff-pixel-bridge.md`；当前测试目标为用户指定的正式服客户端。
+更新：2026-10-06。用户最新授权和项目规则见 `AGENTS.md`，实施计划见 `docs/agent-roadmap.md`。历史3.3.5a像素桥任务原文已保留在 `docs/handoff-pixel-bridge.md`；当前测试目标为用户指定的正式服客户端。
 
 ## 最新决定与下一阶段
+
+**2026-10-06 新机器接续：准备完成，里程碑一实施中。** 主 checkout `/home/dw/Projects/wow-jev` 已 fetch 并安全切到 `codex/agent-system`（远端起点47423e8）；旧的未跟踪 HANDOFF.md 与目标分支冲突，已完整移到 `.worktrees/backups/pre-agent-system-20261005/HANDOFF.md`，SHA `6f35f53b9a9a8aea7de885390e16d160386735aed57fb87c6823c6db23c117d7`。未跟踪 `wow-jev.bundle` 保留原位，SHA `7a6ebc4daef3a421d357ff2ab41a659e605e5954c7c20cb5d2e65256ff6c1931`；既有 pixel-bridge 工作树未修改。
+
+已读 AGENTS、本交接、数据库交接及要求的 game-database/four-layer-agent-design/agent-roadmap。实施工作树 `.worktrees/game-db-foundation`（共同schema/世界包/迁移/桥）、`.worktrees/game-db-runtime`（运行库）分别有单一负责人；来源和学习链路只读核查已完成。依赖按 lock 安装；本机旧库19项Python、2项TS整链及typecheck通过。沙箱网络/tsx IPC拒绝经同一命令正常权限审查后运行，保留首次环境失败，不作为程序失败或测试通过。未读取凭据、调用模型、操作游戏或推送。
+
+本机CPython3.14.4，标准库SQLite3.46.1未包含WAL-reset修补；新增 `database` 依赖组固定 APSW3.53.4.0，实测其SQLite3.53.4。v1保持标准库接口，新的可写运行库使用已修补运行时并自检，不默默在旧SQLite启用WAL。当前只完成恢复与基线，里程碑一尚未验收；按交接四个里程碑逐步实施，每个完成步骤更新本文件并提交。验收入口与证据将记在 `docs/acceptance/game-database-v2.md`。
 
 **2026-10-05 数据库设计交接（最新）**：用户已要求将讨论后的设计保存并推送远端，交由其它机器继续研发。先读 `docs/handoff-game-database.md`，在 `codex/agent-system` 接续；优先实施v2规范schema、不可变世界包、运行/经验索引及v1兼容迁移，再以ATT固定提交和TDB12.1抽样构建巨龙群岛种子库。设计已落盘不等于新数据库已实现：目前只有11条reference_only，尚未下载TDB/批量导入或接通layers→learner/world pack版本。完整跨机器命令、依赖、许可、数据边界及四个里程碑在该文档。
 

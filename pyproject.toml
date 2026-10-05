@@ -7,6 +7,7 @@ dependencies = []
 
 [dependency-groups]
 dev = ["pytest", "lupa", "pillow"]
+database = ["apsw==3.53.4.0"]
 
 [tool.uv]
 package = false
