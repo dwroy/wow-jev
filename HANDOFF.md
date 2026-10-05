@@ -4,6 +4,10 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-05 数据库设计交接（最新）**：用户已要求将讨论后的设计保存并推送远端，交由其它机器继续研发。先读 `docs/handoff-game-database.md`，在 `codex/agent-system` 接续；优先实施v2规范schema、不可变世界包、运行/经验索引及v1兼容迁移，再以ATT固定提交和TDB12.1抽样构建巨龙群岛种子库。设计已落盘不等于新数据库已实现：目前只有11条reference_only，尚未下载TDB/批量导入或接通layers→learner/world pack版本。完整跨机器命令、依赖、许可、数据边界及四个里程碑在该文档。
+
+本轮推送范围为当前分支源码与文档；`out/`运行数据库、截图/原始日志、EXE、依赖和凭据不随Git传输，新机器按交接命令重建或单独核SHA迁移证据。该文档是后续数据库阶段的设计入口，以下四层与旧正式服记录作为已完成/未验收历史保留。
+
 **2026-10-05 四层实施（当前轮）**：用户已确认L1基础输入、L2人物动作、L3高级行为、L4任务，并明确要求记录设计和实施代码；此前“不要新增架构规划文件”的临时限制已被本次授权替代。设计在 `docs/four-layer-agent-design.md`。负责人工作树 `.worktrees/four-layer-foundation`；独立实施工作树 actions-v2、behaviors-tasks、regional-eye，由负责人审查后本地集成，不推送。
 
 本轮已在负责人分支完成L1/L2、区域CV/OCR框架、九个L3行为、三类L4任务及四层demo/live/replay/cancel入口的审查集成。最终335项TS全通过、无skip，typecheck和四个Windows原生程序构建通过；2有效/9无效时间线原生参数校验、6项真实Windows日志文件条件、6组无损codec/配额、真实离屏区域Bitmap与PNG、真实PNG→JPEG裁切映射及6项拒绝反例分别通过。模拟六行为小闭环完成，实际输入0、chooser0、scenario_effect=confirmed、game_effect=unverified；模拟回放通过。旧Node timer早醒导致wait回放失败已复现并修复，不放宽回放条件；原失败保留。
