@@ -4,6 +4,8 @@
 
 代码计划见 [play-runtime.md](../docs/play-runtime.md)，Jev 候选选择与取消见 [jev-runtime.md](../docs/jev-runtime.md)。
 
+执行大脑、日志学习与版本迭代入口见 [system-runtime.md](../docs/system-runtime.md)：`npm run system -- demo` 只运行三层模拟，`learn` 复盘已有日志，版本迭代在隔离工作树中评估后本地发布。
+
 在仓库根目录安装本地依赖并验证：
 
 ```bash

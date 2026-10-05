@@ -1,6 +1,6 @@
-import { validateMessage, type ActionIntent, type Observation } from '../core/protocol.js';
+import { validateMessage, type ActionIntent, type Observation, type ActionCondition } from '../core/protocol.js';
 import type { EyeLogRecord } from '../eye/store.js';
-import { loadPlayJournal, replayPlayJournal, type PlayReplay } from '../play/replay.js';
+import { loadPlayJournal, replayPlayJournal, type PlayReplay, type PlayJournal } from '../play/replay.js';
 import { parseBindings } from '../reflex/skills.js';
 import { decisionPlan, waitCandidate } from './runtime.js';
 import type { CandidateContext, JevCandidate, JevChoiceResult, JevGoal, JevIterationResult, JevLoopResult, JevRequest, JevModelReply } from './types.js';
@@ -78,6 +78,12 @@ function validReply(result: unknown, request: JevRequest, validateRaw?: JevRepla
 /** Audit the model's selection and derive each trusted plan before reusing the strict code-play journal verifier. */
 export async function replayJevRun(directory: string, builders: JevReplayBuilders): Promise<JevReplay> {
   const journal = await loadPlayJournal(directory);
+  return replayJevJournal(directory, journal, builders);
+}
+
+/** A parent controller supplies an already verified journal and its trusted child goal/config. */
+export async function replayJevJournal(directory: string, journal: PlayJournal, builders: JevReplayBuilders,
+  options: { nested?: boolean; requiredConditions?: ActionCondition[]; firstObservationId?: string } = {}): Promise<JevReplay> {
   const config = journal.manifest.config;
   const goal = builders.parseJevGoal(config.jev_goal); const bindings = parseBindings(config.bindings);
   const mode = config.mode as CandidateContext['mode'];
@@ -237,15 +243,17 @@ export async function replayJevRun(directory: string, builders: JevReplayBuilder
     if (!decision.result?.plan) continue;
     const rows = [...sourceRecords, ...decision.records].sort((a, b) => a.seq - b.seq);
     const replay = replayPlayJournal({ ...journal, records: rows }, { plan: decision.result.plan, bindings, maxObservationAgeMs: maxAge,
-      actor: 'jev', decisionId: decision.id, nested: true, requiredConditions: decision.approved!.conditions, firstObservationId: decision.fresh!.id,
-      requireNativeReady: true });
+      actor: 'jev', decisionId: decision.id, nested: true, firstObservationId: decision.fresh!.id,
+      requireNativeReady: true,
+      requiredConditions: [...decision.approved!.conditions, ...(options.requiredConditions ?? [])] });
     if (replay.status !== decision.result.result?.status) fail('iteration_execution_result');
     plans.push(replay);
   }
   // Late terminal native receipts are retained as facts but cannot upgrade cancelled/unknown execution results.
   if (cancelledSeq !== null && journal.records.some((row) => row.seq > cancelledSeq && row.kind === 'native_input' &&
     (row.data as { message: Obj }).message.type === 'command' && (row.data as { message: Obj }).message.op === 'execute')) fail('dispatch_after_cancel');
-  const complete = ended && endStatus === 'complete' && finished?.status === 'completed';
+  if (options.firstObservationId && decisions[0]?.before?.id !== options.firstObservationId) fail('parent_first_observation');
+  const complete = finished?.status === 'completed' && (options.nested === true || ended && endStatus === 'complete');
   return { run_id: journal.manifest.run_id, records: journal.records.length, complete,
     status: finished?.status === 'completed' && !complete ? 'incomplete' : finished?.status ?? 'incomplete', iterations, plans,
     real_inputs: plans.reduce((count, plan) => count + plan.real_inputs, 0), simulated_inputs: plans.reduce((count, plan) => count + plan.simulated_inputs, 0),
