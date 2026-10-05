@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { mkdtemp, mkdir, readFile, writeFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, writeFile, rm, symlink } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { KnowledgeSnapshot } from '../src/system/types.js';
 import { createIterationProposal, IterationRuntime, RuntimeVersionRegistry, validateProposal } from '../src/learner/iteration/index.js';
@@ -16,14 +17,20 @@ const newPrompt = oldPrompt + '需要 npc.in_interaction_range 和 ui.npc_dialog
 function knowledge(mode: 'live' | 'simulated' = 'live'): KnowledgeSnapshot {
   return { schema_version: 1, id: 'learned-real-movement', created_at: new Date().toISOString(), sources: [{ id: 'retail-3', run_id: 'retail-3', kind: 'code_play', mode, manifest_sha256: sha256('real manifest'), events_sha256: sha256('real records'), complete: false }], facts: [{ id: 'movement-unknown', kind: 'experience', statement: '真实运动输入已发送，游戏效果仍未确认。', certainty: 'observed', scope: { mode: 'live' }, sample_count: 15, counterexamples: 0, evidence: [{ source_id: 'retail-3', record_seq: 4, observation_ids: ['before', 'after'], artifact_ids: [] }], metrics: { effect: 'unknown' } }] };
 }
-async function fixture(t: test.TestContext, buggy = false) {
+async function fixture(t: test.TestContext, buggy = false, pythonWorker = false) {
   const directory = await mkdtemp(path.join(tmpdir(), 'wow-iteration-test-')); const repository = path.join(directory, 'repo');
   await mkdir(path.join(repository, 'agent/src/brain'), { recursive: true }); await mkdir(path.join(repository, 'agent/tests'), { recursive: true }); await mkdir(path.join(repository, 'perception/prompts'), { recursive: true });
-  await writeFile(path.join(repository, '.gitignore'), 'agent/node_modules\n');
+  await writeFile(path.join(repository, '.gitignore'), 'agent/node_modules\nperception/__pycache__/\n.pytest_cache/\nagent/src/brain/ignored.ts\nout/\n');
   await writeFile(path.join(repository, 'agent/package.json'), json({ name: 'fixed-fixture', type: 'module', private: true }));
   await writeFile(path.join(repository, 'agent/tsconfig.json'), json({ compilerOptions: { target: 'ES2022', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true, skipLibCheck: true, noEmit: true }, include: ['src/**/*.ts', 'tests/**/*.ts'] }));
   await writeFile(path.join(repository, 'agent/src/brain/arrival.ts'), `export function arrived(sent: boolean, inRange: boolean): boolean { return ${buggy ? 'sent' : 'inRange'}; }\n`);
   await writeFile(path.join(repository, 'agent/tests/arrival.test.ts'), "import test from 'node:test'; import assert from 'node:assert/strict'; import { arrived } from '../src/brain/arrival.js'; test('input completion does not prove arrival', () => { assert.equal(arrived(true, false), false); assert.equal(arrived(false, true), true); });\n");
+  if (pythonWorker) {
+    await writeFile(path.join(repository, 'perception/__init__.py'), '');
+    await writeFile(path.join(repository, 'perception/worker_fixture.py'), 'safe_worker_fact = \"unconfirmed\"\n');
+    const workerTest = `\nimport { spawnSync } from 'node:child_process'; import { fileURLToPath } from 'node:url'; test('tracked Python worker offline regression', () => { const result = spawnSync('/usr/bin/python3', ['-c', 'from perception.worker_fixture import safe_worker_fact; assert safe_worker_fact == \"unconfirmed\"'], { cwd: fileURLToPath(new URL('../../', import.meta.url)), env: process.env }); assert.equal(result.status, 0); assert.equal(process.env.PYTHONDONTWRITEBYTECODE, '1'); });\n`;
+    await writeFile(path.join(repository, 'agent/tests/arrival.test.ts'), (await readFile(path.join(repository, 'agent/tests/arrival.test.ts'), 'utf8')) + workerTest);
+  }
   await writeFile(path.join(repository, promptFile), oldPrompt);
   await git(repository, ['init', '-q']); await git(repository, ['add', '.']); await git(repository, ['commit', '-qm', 'fixed regression fixture\n\nCo-Authored-By: Codex GPT-6 <noreply@openai.com>']);
   const baseCommit = (await git(repository, ['rev-parse', 'HEAD'])).toString('utf8');
@@ -153,4 +160,20 @@ test('public evaluated publication binds manifest object and knowledge bytes to 
   await assert.rejects(f.runtime.registry.publishEvaluated(input, proof), /knowledge differs/); assert.equal(await f.runtime.registry.currentId(), 'baseline');
   await writeFile(manifest.knowledge.file, json(f.snapshot));
   const published = await f.runtime.registry.publishEvaluated(input, proof); assert.equal(published.knowledge.sha256, manifest.knowledge.sha256); assert.equal((await f.runtime.registry.resolveForTask()).version.id, 'public-release');
+});
+
+test('actual ignored Python/pytest caches survive evaluation while ignored source or output still rejects', async (t) => {
+  const f = await fixture(t, false, true); await f.baseline(); const manifest = await f.runtime.prepare(f.proposal('python-cache-regression'), f.knowledgeFile);
+  // Reproduce the first real failure: a tracked worker import writes ordinary ignored bytecode before re-evaluation.
+  const imported = spawnSync('/usr/bin/python3', ['-c', 'from perception.worker_fixture import safe_worker_fact; assert safe_worker_fact == "unconfirmed"'], { cwd: manifest.worktree, env: { PATH: '/usr/bin:/bin' } });
+  assert.equal(imported.status, 0); const cacheFiles = await readdir(path.join(manifest.worktree, 'perception/__pycache__')); assert.ok(cacheFiles.some((file) => file.endsWith('.pyc')));
+  await mkdir(path.join(manifest.worktree, '.pytest_cache/v/cache'), { recursive: true }); await writeFile(path.join(manifest.worktree, '.pytest_cache/v/cache/nodeids'), '[]');
+  const inspected = await f.runtime.inspect(manifest.id); assert.equal(inspected.source_sha256, manifest.source_sha256);
+  for (const file of ['agent/src/brain/ignored.ts', 'perception/__pycache__/not-bytecode.ts', '.pytest_cache/v/cache/malicious.ts', 'out/ignored-output.json', 'unignored/__pycache__/fake.pyc']) {
+    await mkdir(path.dirname(path.join(manifest.worktree, file)), { recursive: true }); await writeFile(path.join(manifest.worktree, file), 'undeclared');
+    await assert.rejects(f.runtime.inspect(manifest.id), /undeclared/); await rm(path.join(manifest.worktree, file));
+  }
+  const evaluation = await f.runtime.evaluate(manifest.id); assert.equal(evaluation.passed, true); assert.deepEqual(await readdir(path.join(manifest.worktree, 'perception/__pycache__')), cacheFiles);
+  const published = await f.runtime.publish(manifest.id, { versionId: 'cache-safe-version', evaluationId: evaluation.id, approvedBy: 'codex' }); assert.equal(published.id, 'cache-safe-version');
+  const task = await f.runtime.registry.resolveForTask(); await assert.rejects(readFile(path.join(task.code_root, 'perception/__pycache__', cacheFiles[0]!)), /ENOENT/);
 });

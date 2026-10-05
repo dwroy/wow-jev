@@ -5,7 +5,7 @@ import type { CandidateManifest, EvaluationReceipt, EvaluationReport, IterationP
 import type { RuntimeVersion } from '../../system/types.js';
 import { evaluateFixed } from '../../eval/iteration.js';
 import { RuntimeVersionRegistry } from './registry.js';
-import { assert, deepFreeze, exact, fields, git, hash, id, json, regularFile, safePath, sha256, sourceHash, trackedFiles, writeNew } from './util.js';
+import { assert, deepFreeze, exact, fields, git, hash, id, json, regularFile, safePath, sha256, sourceHash, trackedFiles, writeNew, runFixed } from './util.js';
 import { validateKnowledge, validateProposal } from './validation.js';
 import { verifyReceipt } from './receipt.js';
 
@@ -79,7 +79,16 @@ export class IterationRuntime {
     const changed = (await git(manifest.worktree, ['diff', manifest.proposal.base_commit, '--name-only', '-z'], true)).toString('utf8').split('\0').filter(Boolean);
     const staged = (await git(manifest.worktree, ['diff', '--cached', manifest.proposal.base_commit, '--name-only', '-z'], true)).toString('utf8').split('\0').filter(Boolean);
     const untracked = (await git(manifest.worktree, ['ls-files', '--others', '-z'], true)).toString('utf8').split('\0').filter(Boolean);
-    assert([...changed, ...staged, ...untracked].every((file) => expected.has(file) || file === 'agent/node_modules'), 'undeclared candidate change');
+    assert([...changed, ...staged].every((file) => expected.has(file)), 'undeclared candidate change');
+    for (const file of untracked) {
+      if (expected.has(file) || file === 'agent/node_modules') continue;
+      const generatedCache = /(?:^|\/)__pycache__\/[^/]+\.pyc$/.test(file) || /(?:^|\/)\.pytest_cache\/(?:\.gitignore|CACHEDIR\.TAG|README\.md|v\/cache\/(?:nodeids|lastfailed|stepwise))$/.test(file);
+      assert(generatedCache, 'undeclared candidate change');
+      await safePath(manifest.worktree, file); // Generated caches must also be ordinary files without symlink parents.
+      const ignored = await runFixed('/usr/bin/git', ['-C', manifest.worktree, 'check-ignore', '--quiet', '--no-index', '--', file], manifest.worktree, 3000, false, true);
+      assert((ignored.status === 'passed' && ignored.exit_code === 0) || (ignored.status === 'failed' && ignored.exit_code === 1), `cache ignore probe failed (${ignored.status}; exit=${ignored.exit_code})`);
+      assert(ignored.exit_code === 0, 'undeclared nonignored cache');
+    }
     const dependencies = await lstat(path.join(manifest.worktree, 'agent/node_modules')); assert(dependencies.isSymbolicLink(), 'fixed dependencies changed');
     const { realpath } = await import('node:fs/promises');
     assert(await realpath(path.join(manifest.worktree, 'agent/node_modules')) === await realpath(path.join(this.repository, 'agent/node_modules')), 'dependency target changed');
