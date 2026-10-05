@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 from collections import Counter
 from datetime import datetime, timezone
 import hashlib
@@ -71,7 +72,9 @@ def probe_client(repo, version, window, pid):
     if len(matches) != 1:
         raise ValueError("bound_wow_window_missing")
     # Read only selected non-auth fields. Never copy Config.wtf or a process command line.
-    script = r'''[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+    script = r'''$ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 $p = Get-Process -Id PID_VALUE -ErrorAction Stop
 $exe = $p.Path
 $directory = Split-Path -Parent $exe
@@ -87,8 +90,14 @@ if (Test-Path -LiteralPath $config) {
 @{pid=$p.Id;proc=$p.ProcessName;exe=$exe;start_ticks=$p.StartTime.ToUniversalTime().Ticks.ToString();file_version=[System.Diagnostics.FileVersionInfo]::GetVersionInfo($exe).FileVersion;branch=if ((Split-Path -Leaf $directory) -eq '_retail_') {'retail'} else {'unknown'};region=$region;text_locale=$locale} | ConvertTo-Json -Compress
 '''.replace("PID_VALUE", str(pid))
     powershell = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
-    reply = subprocess.run([powershell, "-NoProfile", "-NonInteractive", "-Command", "-"], input=script, capture_output=True, text=True, timeout=15, check=True)
-    rows = [line for line in reply.stdout.splitlines() if line.strip().startswith("{")]
+    encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+    reply = subprocess.run([powershell, "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], capture_output=True, timeout=15)
+    if reply.returncode != 0:
+        raise ValueError("client_metadata_query_failed")
+    # Windows PowerShell stderr can contain ANSI/CLIXML progress. Only bounded UTF-8 stdout is the protocol.
+    if len(reply.stdout) > 65536:
+        raise ValueError("client_metadata_reply_too_large")
+    rows = [line for line in reply.stdout.decode("utf-8-sig").splitlines() if line.strip().startswith("{")]
     if len(rows) != 1:
         raise ValueError("client_metadata_reply_invalid")
     metadata = {**json.loads(rows[0]), **{key: matches[0][key] for key in ("hwnd", "client_width", "client_height", "focused")}}

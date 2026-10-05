@@ -169,3 +169,21 @@ def test_actual_eye_log_input_kinds_reject_even_when_replay_reports_zero_actions
     if kind == 'native_input':
         assert result['native_input_records'] == 1
         assert result['native_input_commands'] == (1 if data['direction'] == 'out' else 0)
+
+
+def test_powershell_uses_encoded_utf16_script_and_ignores_ansi_progress_stderr(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    import base64
+    calls = []
+    def run(command, **kwargs):
+        calls.append(command)
+        if command[-1] == 'list':
+            return SimpleNamespace(stdout=json.dumps({'pid':42,'hwnd':'0x123','proc':'Wow','client_width':3840,'client_height':2160,'focused':True})+'\n')
+        assert '-EncodedCommand' in command and 'input' not in kwargs and kwargs.get('text') is not True
+        script=base64.b64decode(command[-1]).decode('utf-16-le')
+        assert 'Get-Process -Id 42' in script and '$ProgressPreference = "SilentlyContinue"' in script
+        assert 'ConvertTo-Json -Compress' in script
+        return SimpleNamespace(returncode=0,stdout=json.dumps(metadata()).encode('utf-8'),stderr=b'\xd5\xfd\xd4\xda')
+    monkeypatch.setattr(soak.subprocess,'run',run)
+    assert soak.probe_client(tmp_path, VERSION, '0x123',42)['file_version']=='12.1.0.69933'
+    assert len(calls)==2
