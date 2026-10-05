@@ -4,6 +4,14 @@
 
 ## 最新决定与下一阶段
 
+**当前交付（18:40后）**：本轮增补已由负责人以bbd76b9本地合入codex/agent-system，f4a4937的版本probe修复也已接入；最终docs补充d16cef8。主目录四个Windows原生模块重建、typecheck和main-demo-1纯模拟/严格回放通过；集成260项TS全量通过，109项Python/真实Windows感知与数据库、27项录制/长跑回归、34组Windows重启机制模拟及Host helper13项边界分别通过。冻结启动独立审查关闭已发现P1，真实259源码只读两轮各21条/2观察/0输入，首编译→缓存复用、四exe同SHA；最终f4窗口补测因旧HWND/PID消失拒绝，不能冒充通过。没有推送，没有执行实际WSL重启。
+
+多版本SQLite实际在out/runtime/game-data.sqlite（11条reference_only/1安装profile）。十分钟只读录制7段492ok/491不同图/0输入完整结束；快速轮换复测将唯一缺口缩到1520ms；Seed实际只读规划也通过。全部原始证据主out/acceptance/retail-closure，独立审查out/acceptance/runtime-closure，当前状态和体验见docs/acceptance/retail-closure.md、docs/system-runtime.md、docs/game-database.md。
+
+**仍未完成五项最终正式服验收**：独立4K战斗/死亡正例、Jev非wait主动动作、当前NPC现场校准/对话闭环与可靠距离、两对同条件真实学习收益、整Ubuntu重启/物理释放/新会话恢复。长跑部分已过。当前已检测不到可用WoW HWND/PID，前台准备问题未回复；此前G已持久为INTERACTTARGET，原E/S/D/F不改。computer-use仍有WSL sandboxCwd错误，先前实际用战网正常启动入口进入过角色，没有插件点击或认证操作。外部Host只读breakaway/Explorer/Documents均job=true，不能直接run；Ubuntu有acehr共享进程，真实重启还需具体授权/外部启动条件。
+
+本轮五个实施工作树已在检查无活动进程/保存代码后正常git worktree remove，分支保留，146个必要ignored产物及SHA归档到out/acceptance/retail-closure/worktree-archive-1。未清理其它历史工作树。以下为本轮过程记录，旧的“运行中/未合入”描述不覆盖上述当前交付。
+
 用户进一步授权继续完成五项：4K可靠识别、正式服动作闭环、NPC任务感知、真实学习迭代效果、长期/WSL重启恢复；允许必要时用computer-use打开WoW测试，并新增多版本本地游戏/怪物数据库要求。当前在四个项目内工作树并行：retail-identity-v2、versioned-game-data、retail-npc-perception、负责人retail-runtime-closure；主目录暂未合入这些代码，不推送。本轮尚未完成全部五项，不能标整体验收通过。
 
 已实现并分别提交：848f978稳定名字bank/局部陌生字保护（51项Python+真实Windows测试），8e1b5ef NPC对话/显式目标绑定交互指示（42项），efc6c7f多版本SQLite/TS查询桥（19项Python+2项整链），2386eab真实同条件效果对照（9项边界，模拟/重复/错版本/unknown不算收益），soak driver8c4d8bd及真实日志检查f58bf67/Windows元数据4b5f51d修复。负责人工作树已cherry-pick这些工程与JeV冻结prompt修复d715d64；ab37147提交可选target_name/NPC协议、模板冻结回放、system/live.ts及显式一次interact_npc探测，09b28e0忽略工作树依赖链接。集成236项TS/typecheck和109项Python/真实Windows回归无跳过，原误填不存在测试路径的失败保留，修正后42项审查回归通过。真实只读brain-observe-2版本核对→新bank→大脑→严格回放通过（21条/2图/0输入）；这不是NPC动作验收。独立Eye/NPC审查在codex/eye-npc-review、真实批准源码启动接入在codex/frozen-live-runtime，均尚未合入负责人分支。
