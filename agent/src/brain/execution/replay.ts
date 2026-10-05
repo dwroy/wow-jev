@@ -192,10 +192,12 @@ export async function replayBrainRun(directory: string, options: BrainReplayOpti
           !same(supplied.goal, { id: memory.goal.id, revision: memory.goal.revision }) || !same(supplied.decisions, decisions) ||
           supplied.runtime_version_id !== version.id || supplied.knowledge_sha256 !== version.knowledge.sha256 || !['confirmed', 'unconfirmed'].includes(supplied.release)) fail('finished');
         if (current?.acquired && !current.released && supplied.release === 'confirmed') fail('runner_not_closed');
+        if (!same(Object.keys(supplied).sort(), ['status', 'reason', 'goal', 'runtime_version_id', 'knowledge_sha256', 'release', 'game_effect', 'evidence_observation_ids', 'decisions'].sort()) || typeof supplied.reason !== 'string') fail('finished_shape');
         const complete = supplied.status === 'completed';
         if (complete && (cancelled || changing || supplied.release !== 'confirmed' || !current?.terminal || current.approved?.outcome !== 'complete' ||
           memory.goal.kind === 'panel_cycle' && current.approved.id !== 'complete-panel' || !same(supplied.evidence_observation_ids, [current.fresh!.id]))) fail('false_completion');
         const effect = complete && mode === 'live' && memory.goal.kind !== 'observe' ? 'confirmed' : 'unverified';
+        if (complete && supplied.reason !== current!.approved!.reason || !complete && !same(supplied.evidence_observation_ids, [])) fail('finished_evidence_or_reason');
         if (supplied.game_effect !== effect || mode === 'simulated' && real > 0) fail('game_effect_claim');
         if (supplied.status === 'cancelled' && !cancelled) fail('false_cancel'); result = supplied; finishedSeq = row.seq;
       } else fail('unknown_brain_event');

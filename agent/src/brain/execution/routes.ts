@@ -81,7 +81,9 @@ export function buildBrainRoutes(context: RouteContext): BrainRoute[] {
     observation.fields['target.name']!.value !== goal.target_name) return [route('escalate', 'escalate', 'npc_target_changed'), wait];
   if (observation.fields['target.dead']!.value !== false || observation.fields['player.in_combat']!.value !== false) return [route('escalate', 'escalate', 'npc_dead_or_combat'), wait];
   const fields = [...common, ...target];
-  if (safe(['ui.npc_dialog_open']) && observation.fields['ui.npc_dialog_open']!.value === true) return [route('complete-npc', 'complete', 'npc_dialog_observed', [...fields, 'ui.npc_dialog_open']), wait];
+  if (!safe(['ui.npc_dialog_open']) || typeof observation.fields['ui.npc_dialog_open']!.value !== 'boolean') return uncertain('npc_dialog_state_unknown');
+  if (observation.fields['ui.npc_dialog_open']!.value === true) return [route('complete-npc', 'complete', 'npc_dialog_observed', [...fields, 'ui.npc_dialog_open']), wait];
+  fields.push('ui.npc_dialog_open');
   if (!safe(['npc.in_interaction_range']) || typeof observation.fields['npc.in_interaction_range']!.value !== 'boolean') return uncertain('npc_range_unknown');
   fields.push('npc.in_interaction_range');
   if (observation.fields['npc.in_interaction_range']!.value === true) {

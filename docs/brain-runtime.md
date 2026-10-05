@@ -20,7 +20,7 @@
 
 默认没有交互键。只有目标的 `interaction_slot` 和 `bindings.action_slots` 都显式配置时，交互才可能使用现有 `use_action_slot`。
 
-NPC 每次主动行动要求同截图的新鲜 `capture.available=true`、焦点、目标存在、指纹与名称匹配、目标未死、玩家不在战斗。`npc.in_interaction_range=false` 才提供 100ms 前进候选；该字段未知则等待，连续缺证据后升级。字段为 true 才提供交互槽位候选。对话完成只依据随后新鲜的 `ui.npc_dialog_open=true` 和同目标证据；输入回执、运动次数或模型推断都不表示到达。
+NPC 每次主动行动要求同截图的新鲜 `capture.available=true`、焦点、目标存在、指纹与名称匹配、目标未死、玩家不在战斗。`npc.in_interaction_range=false` 才提供 100ms 前进候选；该字段或对话框开闭状态未知则等待，连续缺证据后升级。字段为 true 才提供交互槽位候选。对话完成只依据随后新鲜的 `ui.npc_dialog_open=true` 和同目标证据；输入回执、运动次数或模型推断都不表示到达。
 
 ## 接口与独占
 

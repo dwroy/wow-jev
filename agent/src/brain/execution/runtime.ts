@@ -90,10 +90,10 @@ export class ExecutionBrain {
     if (goal.id !== this.memory.goal.id || goal.revision <= this.memory.goal.revision) throw new Error('brain_goal_revision_not_increased');
     const prior = this.memory.epoch; const priorDecision = this.activeDecision; this.abort.abort(); this.notifyChange(); this.ports.planner.close();
     this.updateJob = (async () => {
-      await this.event('brain.goal_change_requested', { prior_epoch: prior, goal });
+      const requested = this.event('brain.goal_change_requested', { prior_epoch: prior, goal });
       const released = this.bounded(Promise.resolve().then(() => this.ports.release('goal_revision_changed')), 3000, 'brain_replan_release_timeout');
       const settled = this.runner ? this.bounded(this.runner.then(async (result) => { if (priorDecision) await this.event('brain.control_aborted', { decision_id: priorDecision.id, epoch: priorDecision.epoch, result }); }), 3000, 'brain_replan_runner_timeout') : Promise.resolve();
-      const [release] = await Promise.all([released, settled]);
+      const [release] = await this.bounded(Promise.all([released, settled, requested]), 3000, 'brain_replan_barrier_timeout');
       if (release.release !== 'confirmed') throw new Error('brain_replan_release_unconfirmed');
       if (this.stop) throw this.stop;
       this.memory = { epoch: prior + 1, goal, phase: initialPhase(goal), waits: 0, npc_moves: 0, observations: [], completed_phases: [] };

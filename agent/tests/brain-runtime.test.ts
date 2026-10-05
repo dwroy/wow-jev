@@ -145,3 +145,20 @@ test('planner wrong revision/evidence, timeout or fabricated simulated game succ
   }
   assert.throws(() => parseBrainGoal({ ...npc, keys: ['E'] }), /brain_goal_fields/);
 });
+
+test('missing dialog state is a missing prerequisite, not evidence that NPC dialog is closed', async () => {
+  const s = setup(); delete s.values['ui.npc_dialog_open'];
+  const result = await s.brain.run(npc); assert.equal(result.reason, 'npc_dialog_state_unknown');
+  assert.equal(result.status, 'escalated'); assert.ok(s.plans.every((plan) => plan.steps[0]!.name === 'wait'));
+});
+test('simulated runner cannot promote fabricated confirmed game effects', async () => {
+  const s = setup(), execute = s.ports.executeCode;
+  s.ports.executeCode = async (plan, context) => {
+    const result = await execute(plan, context), step = result.steps[0]!;
+    step.action_id = 'fabricated-action'; step.receipt = { protocol: 'wow-agent', version: 1, type: 'execution_receipt', id: 'fabricated-receipt',
+      run_id: s.opts.runId, at_ms: 20, action_id: step.action_id, revision: plan.revision, mode: 'simulated', input: { status: 'simulated', events_requested: 0, events_inserted: 0 },
+      effect: { status: 'confirmed', evidence_observation_ids: [context.revalidated.observation.id] }, timing: { started_at_ms: 20, finished_at_ms: 20 } };
+    return result;
+  };
+  const result = await s.brain.run(npc); assert.equal(result.status, 'failed'); assert.equal(result.reason, 'brain_runner_mode_mismatch'); assert.equal(result.game_effect, 'unverified');
+});
