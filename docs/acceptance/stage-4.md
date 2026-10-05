@@ -40,6 +40,8 @@ glyph-v3只用训练图选择规则：匹配黄色死亡字形确认true；false
 
 最终集成155项TypeScript测试、75项Python/真实Windows离线分类测试、typecheck和四模块原生构建均通过；Python原生用显式WOW_COMBAT_EYE_EXE运行，未跳过。结果保存在 `out/acceptance/stage-4/integration-1`；运行方法见 [jev-runtime.md](../jev-runtime.md)。旧CodePlay日志保持可回放，第3阶段正式服证据仍是其原有有限范围。
 
+负责人以129bf78本地合并工程分项至codex/agent-system；主目录四模块重新构建，main-demo-1五次决策及独立回放通过，冻结代码dirty=false。旧retail-3分别经新CodePlay/Eye严格回放通过，514条日志、50观察、25旧动作、10旧confirmed；这些是既有动作证据，本轮实际游戏输入为0。工作树正常清理、分支保留；8份必要二进制已归档并记录SHA。
+
 集成命令：`npm --prefix agent test`、`npm --prefix agent run typecheck`、`bash native/windows/build.sh`；Python用项目.venv执行 `pytest tests/test_jev_worker.py tests/test_seed_worker.py tests/test_combat_calibrate.py tests/test_combat_native.py -q` 并指定本轮构建的WinEye。测试首次把取消日志的complete误断言为true，失败记录保留；按既有语义修正为false/status=cancelled后通过，没有改写运行器取消结果。
 
 ## 剩余实测

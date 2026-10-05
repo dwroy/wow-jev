@@ -8,6 +8,8 @@
 
 第4阶段工程已实现并集成候选/选择/重新采样/CodePlay/严格多计划回放与可取消wait；三个模块在stage-4-cv/choice/runtime工作树并行，负责人stage-4-jev统筹。五次纯模拟4动作+1等待通过，真实Seed离线probe3/3选择符合预期、耗时1349–1737ms；该probe观察/候选人为构造、零输入，不能当在线CV或正式服动作验收。入口docs/jev-runtime.md，分项验收docs/acceptance/stage-4.md，原始证据主out/acceptance/stage-4。
 
+工程分项155项TS、75项Python/真实Windows离线测试（无跳过）、typecheck和四模块构建通过；负责人以129bf78本地合并至codex/agent-system，主目录已重建并完成main-demo-1与独立回放，manifest Git dirty=false。旧retail-3的CodePlay与Eye两条严格回放仍通过（514条/50观察/25动作/10confirmed）。8份本轮实施/校准二进制与哈希、原始失败、全量日志保留在out/acceptance/stage-4/integration-1；本轮四个工作树已正常移除，分支保留。本轮没有发送任何游戏输入。
+
 当前战斗CV使用旧2048×1536语料46图，两名Agent盲标且不是用户确认人类金标准。训练combat-01/02为20图，独立留出26图；目标存在42/46 known正确（留出22/26），战斗46/46。死亡v1的两个误判保留，v2紧阈值留出召回2/10；v3仅训练组选黄色死亡字形+独立绿血条证据，规则/代码/原生程序先冻结后评估，留出7/10已知标签正确召回、未输出错误known且16个unknown保持unknown。仍未满足95%完整门槛，不能自动打怪。
 
 本轮当前未检测到可用WoW窗口，4K只读战斗补录未开始（capture-4k-1）；需用户打开游戏后录选中/清除目标、打怪、死亡后保留目标，建立独立当前4K战斗校准，再验收只读在线Jev/Seed和有限正式服输入。2048模板在4K返回unknown且不降级为Seed执行条件。第4阶段整体尚未验收，第5步执行大脑暂未进入实现。
