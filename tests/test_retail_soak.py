@@ -90,7 +90,7 @@ def test_bad_sources_bindings_and_clocks_reject(tmp_path, change):
 def test_input_attempt_and_failed_replay_not_accepted(tmp_path):
     root = fixture(tmp_path)
     def modify(rows):
-        rows.append({'run_id': 'run-1', 'seq': len(rows), 'at_ms': 900, 'kind': 'native_hand', 'data': {'direction': 'out', 'message': {'op': 'execute'}}})
+        rows.append({'run_id': 'run-1', 'seq': len(rows), 'at_ms': 900, 'kind': 'native_input', 'data': {'direction': 'out', 'message': {'op': 'execute'}}})
     rewrite_events(root, modify)
     result = soak.analyze(root, '0x123', 42, replay=lambda _: {'exit_code': 0})
     assert result['accepted'] is False and result['native_input_commands'] == 1
@@ -149,3 +149,23 @@ def test_external_driver_deadline_cancel_and_own_process_group_cleanup(tmp_path,
     assert record['accepted'] is (mode == 'done')
     assert kills == ([] if mode == 'done' else [(10042, signal.SIGTERM)])
     assert signal.getsignal(signal.SIGTERM) == previous
+
+
+@pytest.mark.parametrize('kind,data', [
+    ('native_input', {'direction': 'out', 'message': {'protocol': 'wow-input', 'version': 1, 'type': 'command', 'session_id': '11111111-1111-4111-8111-111111111111', 'id': 'unlinked-execute', 'op': 'execute', 'action': {'kind': 'key', 'keys': ['W'], 'duration_ms': 100}}}),
+    ('native_input', {'direction': 'in', 'message': {'protocol': 'wow-input', 'version': 1, 'type': 'receipt', 'op': 'execute', 'id': 'unlinked-execute', 'status': 'completed', 'input': {'events_requested': 2, 'events_inserted': 2, 'released': True}}}),
+    ('action_intent', {'protocol': 'wow-agent', 'version': 1, 'type': 'action_intent', 'id': 'live-intent', 'actor': 'code', 'action': {'kind': 'key', 'keys': ['W'], 'duration_ms': 100}}),
+    ('execution_receipt', {'protocol': 'wow-agent', 'version': 1, 'type': 'execution_receipt', 'id': 'live-receipt', 'mode': 'live', 'input': {'status': 'sent', 'events_requested': 2, 'events_inserted': 2}}),
+    ('action_link', {'action_id': 'live-intent', 'native_receipt_id': 'unlinked-execute', 'before_observation_id': 'before', 'after_observation_id': 'after'}),
+])
+def test_actual_eye_log_input_kinds_reject_even_when_replay_reports_zero_actions(tmp_path, kind, data):
+    root = fixture(tmp_path)
+    def modify(rows):
+        rows.append({'run_id': 'run-1', 'seq': len(rows), 'at_ms': 900, 'kind': kind, 'data': data})
+    rewrite_events(root, modify)
+    result = soak.analyze(root, '0x123', 42, replay=lambda _: {'exit_code': 0, 'actions': 0})
+    assert result['accepted'] is False
+    assert result['errors']
+    if kind == 'native_input':
+        assert result['native_input_records'] == 1
+        assert result['native_input_commands'] == (1 if data['direction'] == 'out' else 0)

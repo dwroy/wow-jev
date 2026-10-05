@@ -109,7 +109,7 @@ def analyze(recording, window, pid, *, replay=None):
     meta = load(recording / "recording.json")
     if meta.get("window") != window or meta.get("pid") != pid or meta.get("proc") != "Wow" or meta.get("input_enabled") is not False or meta.get("seed_enabled") is not False:
         raise ValueError("readonly_recording_binding_mismatch")
-    segments, previous_finish, artifacts, input_commands = [], None, [], 0
+    segments, previous_finish, artifacts, input_commands, native_input_records = [], None, [], 0, 0
     gaps, errors, samples_total, captures = [], [], 0, Counter()
     image_streak, last_hash, longest_streak = 0, None, 0
     for index, item in enumerate(meta.get("segments", [])):
@@ -141,9 +141,12 @@ def analyze(recording, window, pid, *, replay=None):
                     raise ValueError("event_sequence_or_source_mismatch")
                 expected_seq += 1; previous_at = row["at_ms"]
                 data, kind = row.get("data", {}), row.get("kind")
-                if kind == "native_hand" and data.get("direction") == "out" and data.get("message", {}).get("op") == "execute":
-                    input_commands += 1
-                if kind in ("action", "effect"):
+                if kind in ("native_input", "native_hand"):
+                    native_input_records += 1
+                    errors.append(name + ":unexpected_native_input_record")
+                    if data.get("direction") == "out" and data.get("message", {}).get("op") == "execute":
+                        input_commands += 1
+                if kind in ("action_intent", "execution_receipt", "action_link", "action", "effect"):
                     errors.append(name + ":unexpected_action_or_effect")
                 if kind == "native_eye" and data.get("direction") == "in":
                     message = data.get("message", {})
@@ -200,7 +203,7 @@ def analyze(recording, window, pid, *, replay=None):
     return {"scope": "real_wow_readonly_segmented_capture", "recording_meta_sha256": sha(recording / "recording.json"), "duration_requested_ms": meta.get("duration_requested_ms"),
         "started_at": meta.get("started_at"), "finished_at": meta.get("finished_at"), "recording_complete": finished, "accepted": finished and not errors and replay is not None,
         "strict_replay_verified": replay is not None, "segments": segments, "sample_count": samples_total, "capture_statuses": dict(captures), "screenshot_count": len(artifacts),
-        "unique_screenshot_hashes": len({item["sha256"] for item in artifacts}), "maximum_same_hash_streak": longest_streak, "native_input_commands": input_commands,
+        "unique_screenshot_hashes": len({item["sha256"] for item in artifacts}), "maximum_same_hash_streak": longest_streak, "native_input_commands": input_commands, "native_input_records": native_input_records,
         "segment_boundary_gaps": gaps, "continuous_capture_claimed": False, "errors": errors,
         "limitations": ["分段轮换始终记录真实缺口，完成十分钟有界任务不表示无缝录制。", "相同图像 hash 可能是静止场景，不能单独证明后台渲染停更。", "无输入证据限于绑定录制链路，不代表桌面上其它应用没有人工输入。"]}
 
