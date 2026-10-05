@@ -26,6 +26,7 @@ static partial class WslRestartAcceptance
             "launch_path", Process.GetCurrentProcess().MainModule.FileName, "breakaway_evidence", "not_provided", "survival", "requires_actual_before_after_observation");
     }
     static bool ActualRunBegan, SelfTesting;
+    static Dictionary<string, object> HostJobAtEntry;
     static long RunDeadlineMs;
     static int BoundedTimeout(int milliseconds)
     { long remaining = RunDeadlineMs == 0 ? milliseconds : RunDeadlineMs - Qpc(); Require(remaining > 0, "overall_restart_acceptance_deadline"); return (int)Math.Min(milliseconds, remaining); }
@@ -148,7 +149,7 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
         FreezeClientSource(frozen, binaries);
         long started = Qpc(); object snapshot = WslSnapshot(wsl); long finished = Qpc();
         Save(Path.Combine(outDir, "preflight.json"), Obj("schema_version", 1, "type", "wsl_restart_preflight", "distro", "Ubuntu", "host_pid", Process.GetCurrentProcess().Id,
-            "host_start_ticks", Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks.ToString(), "host_job", HostJob(), "clock", "windows-qpc", "snapshot_started_ms", started, "snapshot_finished_ms", finished,
+            "host_start_ticks", Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks.ToString(), "host_job_at_entry", HostJobAtEntry, "host_job", HostJob(), "clock", "windows-qpc", "snapshot_started_ms", started, "snapshot_finished_ms", finished,
             "snapshot", snapshot, "binaries", binaries, "repo_wsl", RepoWsl, "production_native_root", ProductionNativeRoot, "primary_root", outDir, "primary_domain", "windows_local", "export_root", ExportRoot, "export_domain", ExportRoot == null ? null : "wsl_unc", "wsl_exe_sha256", Hash(wsl), "tool_sha256", Hash(Process.GetCurrentProcess().MainModule.FileName), "shared_impact_review_required", true,
             "confirm_flag_present", confirmed, "restart_executed", false, "input_events", 0, "recorder_opened", false));
         Save(Path.Combine(outDir, "ready-plan.json"), Obj("schema_version", 1, "status", confirmed ? "prepared_needs_shared_impact_review" : "preflight_only", "distro", "Ubuntu",
@@ -361,6 +362,7 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
     static int Main(string[] args)
     {
         Console.OutputEncoding = new UTF8Encoding(false);
+        HostJobAtEntry = HostJob();
         try
         {
             if (args.Length == 1 && args[0] == "--self-test") return SelfTest();

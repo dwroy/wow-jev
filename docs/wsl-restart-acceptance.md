@@ -64,3 +64,5 @@ Root 可以从 Windows 本地 `--verify <primary-directory>` 独立校验 raw re
 负责人独立审查修复：fresh receipt 必须完整出现在 raw fresh-native 日志，且 session_id 等于 fresh ready；原 lease deadline 前必须有至少三次真实连续 UP，released_after 的物理字段全部为 UP。原始 `restart-summary.json` 只记录 native_accepted 与 pending_export；最终 `restart-overall.json` 在恢复/证据 export 结果确定后才记录 overall_accepted，避免 export 失败留下 accepted=true。
 
 最终 overall 文件本身导出失败也返回失败，并将 Windows primary 的 `restart-overall.json` 写为 `overall_accepted=false/export_confirmed=false`；原候选文件保留为 `restart-overall-attempt.json`。之前 data export 的 ACK 不包含这份最终 overall，不能据此宣称整体完成。空的 physical keys/buttons 也不能证明所有输入已经 UP。
+
+外部Host启动的两条只读路径及实际限制见 [host-launch-probe.md](host-launch-probe.md)。Host新增 `host_job_at_entry`，在任何Ubuntu元数据查询前采样；本机Explorer/AppData及另行授权的全新Documents路径均观察到入口job=true，未获得满足当前run前置的独立Host，真实重启仍未执行。
