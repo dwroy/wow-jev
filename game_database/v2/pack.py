@@ -1,9 +1,10 @@
 """Atomic staging and pinned, read-only world packages."""
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 import fcntl
 import hashlib
+import math
 import os
 from pathlib import Path
 import shutil
@@ -106,7 +107,7 @@ def _known_relation(c: sqlite3.Connection, a: dict, h: str) -> None:
                     v = record[k]
                     if v is None and k in {'z', 'accuracy'}:
                         continue
-                    if type(v) not in (int, float) or not __import__('math').isfinite(v):
+                    if type(v) not in (int, float) or not math.isfinite(v):
                         raise ValidationError('location: finite coordinate/accuracy required')
                     if k == 'accuracy' and v < 0 or k in {'x', 'y'} and record['coordinate_space'] == 'ui_percent' and not 0 <= v <= 100:
                         raise ValidationError('location: coordinate/accuracy out of range')
@@ -180,7 +181,7 @@ def build_pack(bundle: dict, output_root: str | Path, *, evidence_root: str | Pa
             c.execute('PRAGMA wal_checkpoint(TRUNCATE)')
             if c.execute('PRAGMA journal_mode=DELETE').fetchone()[0] != 'delete':
                 raise ValidationError('world: cannot finalize journal')
-            coverage = {'entities': len(bundle['entities']), 'assertions': len(fields), 'reference_only': sum(not a['applicability'] for a in fields.values()), 'applicable_assertions': sum(bool(a['applicability']) for a in fields.values()), 'predicates': dict(sorted(__import__('collections').Counter(a['predicate'] for a in fields.values()).items())), 'states': dict(sorted(__import__('collections').Counter(a['state'] for a in fields.values()).items()))}
+            coverage = {'entities': len(bundle['entities']), 'assertions': len(fields), 'reference_only': sum(not a['applicability'] for a in fields.values()), 'applicable_assertions': sum(bool(a['applicability']) for a in fields.values()), 'predicates': dict(sorted(Counter(a['predicate'] for a in fields.values()).items())), 'states': dict(sorted(Counter(a['state'] for a in fields.values()).items()))}
             c.close()
             c = None
             source_map = {canonical_sha256(s): s for s in bundle['sources']}
@@ -270,10 +271,11 @@ class WorldPack:
                 continue
             if version is not None and not any(p['version'] == version for p in a['applicability']):
                 continue
-            source = parse_json(self.connection.execute('SELECT payload FROM source_revision WHERE sha256=?', (a['source_sha256'],)).fetchone()[0])
+            source_raw = self.connection.execute('SELECT payload FROM source_revision WHERE sha256=?', (a['source_sha256'],)).fetchone()[0]
+            source = parse_json(source_raw)
             if canonical_sha256(source) != a['source_sha256']:
                 raise ValidationError('world: source revision hash mismatch')
-            records.append({'assertion_sha256': row['sha256'], 'source_revision': source, **a})
+            records.append({'assertion_sha256': row['sha256'], 'assertion_canonical': row['payload'], 'source_canonical': source_raw, 'source_revision': source, **a})
         return records
 
     def lookup(self, version: dict, selector: dict, *, references: bool = False) -> dict:

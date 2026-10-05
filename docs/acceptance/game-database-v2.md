@@ -17,7 +17,7 @@
 
 ## 里程碑状态
 
-一实施中；二、三、四待实施。运行库固定修补后的SQLite；世界包与v1接口分开，尚无v2发布或当前客户端已核实覆盖。
+一已完成离线验收；二开始实施；三、四待实施。运行库固定修补后的SQLite；世界包与v1接口分开，尚无v2发布或当前客户端已核实覆盖。
 
 ## 步骤1a：世界包与兼容迁移
 
@@ -28,3 +28,22 @@
 - 步骤0主checkout集成：19Python、2TS与typecheck再次通过。
 
 首次世界包测试改fixture中的原件SHA但未同步迁移映射，被正确拒绝；修正fixture后通过，未放宽校验。独立审查复现的证据/许可/迁移问题已修复，加入重算hash仍拒绝的测试。里程碑一运行库与TS桥尚未集成，尚未报告整体完成。
+
+## 步骤1b：运行库与批量TS桥，里程碑一闭合
+
+- `.venv/bin/python -m pytest -q tests/test_runtime_cli.py tests/test_game_runtime.py tests/test_world_pack.py tests/test_game_database.py`：83 passed，exit0，无skip。
+- `./agent/node_modules/.bin/tsx --test agent/tests/world-data.test.ts agent/tests/game-data.test.ts`：13 passed，exit0，无skip。
+- `npm --prefix agent run typecheck`、`git diff --check`：exit0。
+- 实际运行runtime CLI init、Backup API单文件备份、SHA固定restore到新路径及integrity检查均成功，APSW SQLite3.53.4。测试包含未checkpoint WAL、另进程writer拒绝、writer SIGKILL后已提交数据与锁恢复、角色/账号来源与时钟、进度逐字段证据、跨版本、缺口和模拟统计隔离。
+
+独立审查复现的字段/来源SHA绑定和整体状态欺骗已修复，并加入同步改字段/来源仍拒绝、有效重复JSON、合法Python浮点与Unicode反例；不删除原失败或降低约束。旧v1代码只增加world export，v1协议、旧assertion SHA和知识快照不变。
+
+主checkout小样50次查询基线在 `out/acceptance/game-database-v2/milestone-1/python-query-baseline.json`。9实体/27字段、OS缓存未清除，以下只区分新建连接与复用连接，不称物理冷缓存，也不含TS启动成本：
+
+| 查询 | 新建连接p50/p95 ms | 复用连接p50/p95 ms |
+| --- | --- | --- |
+| ID精确（not_found） | 1.437 / 1.882 | 0.187 / 0.252 |
+| ID参考 | 1.580 / 2.141 | 0.581 / 0.635 |
+| 中文同名参考（ambiguous） | 2.292 / 3.105 | 0.841 / 1.769 |
+
+区域查询此阶段unsupported，里程碑三补测；没有据此设广域数据性能承诺。里程碑一完成原子/幂等、篡改、缺字段、跨版本、备份恢复、批量桥与旧接口验收，尚不包含任何模型/Windows/游戏输入、当前游戏核实数据或执行学习闭环。

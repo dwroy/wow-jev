@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 里程碑一完成：运行库、批量桥与基础库联合验收。** 在独立工作树集成APSW单写WAL运行库、run/event缺口索引、严格原观察绑定的角色/账号进度、经验候选/评估/不可变注册、Backup API备份恢复及runtime CLI；新增schema-v2和固定世界SHA的TS批量只读桥。83项Python、13项TS（含旧v1回归）全部通过无skip，typecheck通过；真实WAL未checkpoint备份、第二writer拒绝、SIGKILL后恢复和CLI恢复均验证。经验注册仍需里程碑四接通layers/既有知识快照，不宣称执行学习闭环已完成。
+
+独立桥审查复现“字段/断言同时改写而沿用旧SHA”和“conflict总状态冒充found”已修正；精确canonical字节SHA、source绑定、规则版本和总状态均核验，覆盖Python1.0/Unicode及有效重复键反例，不以JS重序列化字节冒充Python原SHA。主checkout已验收世界包46Python；本步骤按ff-only集成后复核83Python/13TS。体验与证据见 `docs/game-database-v2.md`、`docs/acceptance/game-database-v2.md`。
+
+接下来里程碑二：ATT固定提交及TDB1210.26091已只读准备；TDB实际156449334字节与完整发布SHA核验一致。24任务有24模板/zhCN名、23任务54目标、24任务97POI，但starter/ender、苏醒海岸spawn与当前国服已核实覆盖均0；目标Type0不能推为击杀。未执行来源Lua/SQL；原件在 `.worktrees/backups/source-audit/`，默认local_only，不分发/推送。生产适配器尚未实施；继续保持缺字段unknown、移除时间线/阵营/前置语义和字段覆盖报告，不根据总行数判完成。
+
 **2026-10-06 里程碑一，步骤1a完成：v2世界包与v1兼容迁移。** `.worktrees/game-db-foundation` 新增受控中间格式/关系schema、字段级冲突解析、固定manifest SHA的只读批量Python查询、原子staging发布、来源原件校验及v1映射。独立审查发现的本地证明SHA未绑定、孤立资产分发标记、迁移来源/条件及保留谓词语义问题均修正并有反例；旧库19+世界包27=46项Python通过，无skip。运行库/TS批量桥尚在独立树实施，里程碑一整体尚未验收。
 
 实际重新导入11条seed并迁移，得到9实体/27字段，全部reference_only；当前69933 query仍not_found，references保留来源冲突。没有注册旧机器安装profile为新机器证据。体验入口见 `docs/game-database-v2.md`；验收见 `docs/acceptance/game-database-v2.md`。步骤0已在主checkout fast-forward集成并再次通过19Python/2TS/typecheck；本步骤将按同样流程集成验收。不读取凭据、调用模型、发送游戏输入或push。

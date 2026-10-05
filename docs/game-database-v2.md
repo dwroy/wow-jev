@@ -35,6 +35,31 @@ manifest的distribution只是来源声明的保守汇总，不能替代许可核
 
 ## 可写运行域
 
-里程碑一由独立工作树实施中。`database`依赖组固定APSW3.53.4.0，其实际SQLite3.53.4包含WAL-reset修复；v1/世界包仍用Python标准库。运行库只在WSL/Linux本地文件系统打开，不允许Windows共享路径或网络WAL。运行服务负责单写连接与checkpoint；Windows只提交JSON。
+里程碑一已实现并通过离线验收。`database`依赖组固定APSW3.53.4.0，其实际SQLite3.53.4包含WAL-reset修复；v1/世界包仍用Python标准库。运行库只在WSL/Linux本地文件系统打开，不允许Windows共享路径或网络WAL。运行服务负责单写连接与checkpoint；Windows只提交JSON。
 
 [SQLite官方WAL修复说明](https://sqlite.org/wal.html#walreset)确认修补版本及回补版本。活动库备份须用[Backup API](https://sqlite.org/backup.html)，不能只复制主SQLite文件。运行索引、角色进度、经验评估/注册与真实层日志适配分别验收，创建表不代表执行学习闭环完成。
+
+
+运行库入口（安装依赖可用 `uv sync --group database`，或既有venv）：
+
+```bash
+.venv/bin/python -B -m game_database.runtime_cli --db out/runtime/agent.sqlite init
+.venv/bin/python -B -m game_database.runtime_cli --db out/runtime/agent.sqlite inspect
+.venv/bin/python -B -m game_database.runtime_cli --db out/runtime/agent.sqlite backup --output out/runtime/agent-backup.sqlite
+.venv/bin/python -B -m game_database.runtime_cli --db out/runtime/restored-agent.sqlite restore --backup out/runtime/agent-backup.sqlite --sha256 本次backup输出的SHA
+```
+
+backup/restore拒绝覆盖，恢复到新路径；活动WAL经Backup API进入一致性单文件快照。单写锁与连接由同一服务持有，第二writer明确拒绝，进程被强杀后锁释放、已提交WAL可恢复。run固定世界manifest/SQLite、六维客户端、code/prompt/knowledge/bindings/calibration SHA及真实/模拟/只读模式。原始日志为权威，索引以run/seq/event SHA幂等补入，序号缺口与日志尾缺口明确记录。
+
+角色和账号分别注册，progress的entity/world/client/源观察身份、源时钟和七字段事实必须与indexed observation payload一致；不允许凭存在一个event写出任意完成事实。缺记录、跨版本、不相容源时钟、过期和相同源时钟冲突均返回unknown；不把接收时间当源时间。任务消失保留not_present，不推成交付。经验候选保留真实/模拟/只读样本与反例；评估和发布内容地址注册不可变，并重新核原件。现阶段是运行/经验注册能力，直接消费layers日志和接通既有知识发布仍在里程碑四。
+
+TypeScript批量入口：
+
+```ts
+const world = new WorldDataClient({ repositoryDirectory: repo, worldPackDirectory: packDir, worldPackSha256: manifestSha });
+const data = await world.lookup(version, [
+  { namespace: 'retail', kind: 'quest', native_id: 70123, name: null, predicates: ['name', 'objectives'] }
+]);
+```
+
+`game_database/schema-v2.json` 是批量跨语言请求/响应的结构契约。子进程只读固定包，5秒默认超时，支持AbortSignal；请求64KiB、响应4MiB，严格验证包/版本/规则/总状态/实体/字段和采纳断言绑定；原assertion/source canonical字节分别核SHA，再核JSON值与外层一致，保留Python浮点与Unicode原字节。TS拒绝不可精确保留的int64 ID；其它字段不得据JSON数字舍入合并身份。原v1入口和读取格式不变。

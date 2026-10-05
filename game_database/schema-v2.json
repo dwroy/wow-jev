@@ -1,0 +1,891 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:wow-jev:world-data-v2",
+  "title": "固定 SHA 的世界包批量只读查询 v2",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/request"
+    },
+    {
+      "$ref": "#/$defs/response"
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "namespace": {
+      "type": "string",
+      "pattern": "^(retail|classic-era|classic-progression|classic-seasonal|classic-anniversary|custom:[a-z0-9][a-z0-9_-]{0,63})$"
+    },
+    "kind": {
+      "enum": [
+        "creature",
+        "quest",
+        "item",
+        "spell",
+        "zone",
+        "game_object",
+        "area_trigger",
+        "faction",
+        "achievement",
+        "instance",
+        "ui_map",
+        "world_map",
+        "journal_instance",
+        "challenge_map",
+        "map_floor",
+        "encounter"
+      ]
+    },
+    "native_id": {
+      "type": "integer",
+      "minimum": 1,
+      "exclusiveMaximum": 9223372036854776000
+    },
+    "predicate": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "version": {
+      "allOf": [
+        {
+          "$ref": "urn:wow-jev:game-data-v1#/$defs/version"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expansion": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "patch": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9]+(?:\\.[0-9]+){1,3}[a-z]?$",
+                  "maxLength": 80
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "build": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "locale": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-z]{2}_[A-Z]{2}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "json_value": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "maxLength": 131072
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/json_value"
+          },
+          "maxItems": 4096
+        },
+        {
+          "type": "object",
+          "maxProperties": 512,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/json_value"
+          }
+        }
+      ]
+    },
+    "entity_key": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "$ref": "#/$defs/namespace"
+        },
+        "kind": {
+          "$ref": "#/$defs/kind"
+        },
+        "native_id": {
+          "$ref": "#/$defs/native_id"
+        }
+      },
+      "required": [
+        "namespace",
+        "kind",
+        "native_id"
+      ],
+      "additionalProperties": false
+    },
+    "selector": {
+      "type": "object",
+      "properties": {
+        "namespace": {
+          "$ref": "#/$defs/namespace"
+        },
+        "kind": {
+          "$ref": "#/$defs/kind"
+        },
+        "native_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/native_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "predicates": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/predicate"
+              },
+              "maxItems": 64,
+              "minItems": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "namespace",
+        "kind",
+        "native_id",
+        "name",
+        "predicates"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "native_id": {
+              "$ref": "#/$defs/native_id"
+            },
+            "name": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "native_id": {
+              "type": "null"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        }
+      ]
+    },
+    "condition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "enum": [
+                "true",
+                "false",
+                "unknown"
+              ]
+            }
+          },
+          "required": [
+            "op"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "enum": [
+                "and",
+                "or"
+              ]
+            },
+            "args": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/condition"
+              },
+              "maxItems": 64,
+              "minItems": 1
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "not"
+            },
+            "arg": {
+              "$ref": "#/$defs/condition"
+            }
+          },
+          "required": [
+            "op",
+            "arg"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "fact"
+            },
+            "scope": {
+              "enum": [
+                "character",
+                "account",
+                "context"
+              ]
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "cmp": {
+              "enum": [
+                "eq",
+                "gte",
+                "in"
+              ]
+            },
+            "value": {
+              "$ref": "#/$defs/json_value"
+            }
+          },
+          "required": [
+            "op",
+            "scope",
+            "key",
+            "cmp",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "enum": [
+                "quest_completed",
+                "quest_active",
+                "unlock"
+              ]
+            },
+            "scope": {
+              "enum": [
+                "character",
+                "account"
+              ]
+            },
+            "entity": {
+              "$ref": "#/$defs/entity_key"
+            }
+          },
+          "required": [
+            "op",
+            "scope",
+            "entity"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "license": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "images": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "distribution": {
+          "enum": [
+            "permitted",
+            "local_only",
+            "prohibited",
+            "unknown"
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "data",
+        "images",
+        "distribution"
+      ],
+      "additionalProperties": false
+    },
+    "source_revision": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "source_version": {
+          "$ref": "#/$defs/version"
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "retrieved_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "license": {
+          "$ref": "#/$defs/license"
+        },
+        "third_party": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "license": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "note": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              }
+            },
+            "required": [
+              "provider",
+              "license",
+              "note"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 64
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": [
+        "provider",
+        "revision",
+        "source_version",
+        "url",
+        "retrieved_at",
+        "license",
+        "third_party",
+        "note"
+      ],
+      "additionalProperties": false
+    },
+    "assertion": {
+      "type": "object",
+      "properties": {
+        "assertion_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "assertion_canonical": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 4194304
+        },
+        "source_canonical": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 4194304
+        },
+        "source_revision": {
+          "$ref": "#/$defs/source_revision"
+        },
+        "entity": {
+          "$ref": "#/$defs/entity_key"
+        },
+        "predicate": {
+          "$ref": "#/$defs/predicate"
+        },
+        "state": {
+          "enum": [
+            "known",
+            "unknown",
+            "unsupported",
+            "not_present"
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/json_value"
+        },
+        "source_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "artifact_sha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "observed_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "condition": {
+          "$ref": "#/$defs/condition"
+        },
+        "verification": {
+          "enum": [
+            "reference_only",
+            "source_verified",
+            "locally_verified"
+          ]
+        },
+        "applicability": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:wow-jev:game-data-v1#/$defs/proof"
+          },
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "assertion_sha256",
+        "assertion_canonical",
+        "source_canonical",
+        "source_revision",
+        "entity",
+        "predicate",
+        "state",
+        "value",
+        "source_sha256",
+        "artifact_sha256",
+        "locator",
+        "observed_at",
+        "condition",
+        "verification",
+        "applicability"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "const": "known" } }, "required": ["state"] },
+          "then": { "properties": { "value": { "not": { "type": "null" } } } },
+          "else": { "properties": { "value": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "verification": { "const": "reference_only" } }, "required": ["verification"] },
+          "then": { "properties": { "applicability": { "type": "array", "maxItems": 0 } } },
+          "else": { "properties": { "applicability": { "type": "array", "minItems": 1 } } }
+        }
+      ]
+    },
+    "field": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "known"
+            },
+            "value": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/json_value"
+                },
+                {
+                  "not": {
+                    "type": "null"
+                  }
+                }
+              ]
+            },
+            "assertion_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/sha256"
+              },
+              "maxItems": 100000,
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "assertions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/assertion"
+              },
+              "maxItems": 100000,
+              "minItems": 1
+            }
+          },
+          "required": [
+            "status",
+            "value",
+            "assertion_ids",
+            "assertions"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "unknown",
+                "unsupported",
+                "not_present",
+                "conflict"
+              ]
+            },
+            "value": {
+              "type": "null"
+            },
+            "assertion_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/sha256"
+              },
+              "maxItems": 100000,
+              "uniqueItems": true
+            },
+            "assertions": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/assertion"
+              },
+              "maxItems": 100000
+            }
+          },
+          "required": [
+            "status",
+            "value",
+            "assertion_ids",
+            "assertions"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "resolved_entity": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/entity_key"
+        },
+        "fields": {
+          "type": "object",
+          "maxProperties": 100000,
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/field"
+          }
+        }
+      },
+      "required": [
+        "key",
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    "lookup_result": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 2
+        },
+        "world_pack_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "rule_version": {
+          "const": "field-resolution-v2.1"
+        },
+        "requested_version": {
+          "$ref": "#/$defs/version"
+        },
+        "status": {
+          "enum": [
+            "found",
+            "not_found",
+            "version_unknown",
+            "ambiguous",
+            "conflict",
+            "references"
+          ]
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/resolved_entity"
+          },
+          "maxItems": 1000
+        },
+        "automatic_action_eligible": {
+          "const": false
+        },
+        "applicable_to_requested_client": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "schema_version",
+        "world_pack_sha256",
+        "rule_version",
+        "requested_version",
+        "status",
+        "entities",
+        "automatic_action_eligible",
+        "applicable_to_requested_client"
+      ],
+      "additionalProperties": false
+    },
+    "batch_result": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 2
+        },
+        "world_pack_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/lookup_result"
+          },
+          "maxItems": 128,
+          "minItems": 1
+        },
+        "automatic_action_eligible": {
+          "const": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "world_pack_sha256",
+        "results",
+        "automatic_action_eligible"
+      ],
+      "additionalProperties": false
+    },
+    "request": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 2
+        },
+        "operation": {
+          "enum": [
+            "lookup",
+            "references"
+          ]
+        },
+        "directory": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "world_pack_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "version": {
+          "$ref": "#/$defs/version"
+        },
+        "selectors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/selector"
+          },
+          "maxItems": 128,
+          "minItems": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "operation",
+        "directory",
+        "world_pack_sha256",
+        "version",
+        "selectors"
+      ],
+      "additionalProperties": false
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 2
+            },
+            "ok": {
+              "const": true
+            },
+            "result": {
+              "$ref": "#/$defs/batch_result"
+            }
+          },
+          "required": [
+            "schema_version",
+            "ok",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 2
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "schema_version",
+            "ok",
+            "error"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

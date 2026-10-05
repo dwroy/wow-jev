@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+import hashlib
+from pathlib import Path
 import math
 from typing import Any
 
@@ -13,7 +15,7 @@ KINDS = {'creature', 'quest', 'item', 'spell', 'zone', 'game_object', 'area_trig
          'challenge_map', 'map_floor', 'encounter'}
 RULE_VERSION = 'field-resolution-v2.1'
 CONVERTER_VERSION = 'v1-to-v2.1'
-SCHEMA_PATH = __import__('pathlib').Path(__file__).with_name('schema.sql')
+SCHEMA_PATH = Path(__file__).with_name('schema.sql')
 
 
 def json_value(value: Any, depth: int = 0) -> None:
@@ -251,7 +253,7 @@ def v1_predicate(key: str) -> str:
     # Preserve all valid v1 JSON keys, including reserved/non-identifier names.
     if key not in {'name','description','alias','locations','quest.condition','quest.objectives','quest.givers','guide.step','route.edge','achievement.criteria','encounter.mechanic'} and re.fullmatch(r'[a-z][a-z0-9_.]{0,127}', key) and not key.startswith('v1.fact.'):
         return key
-    return 'v1.fact.' + __import__('hashlib').sha256(key.encode('utf-8')).hexdigest()
+    return 'v1.fact.' + hashlib.sha256(key.encode('utf-8')).hexdigest()
 
 
 def migrate_v1(db, *, scope: str = 'v1-reference') -> dict:

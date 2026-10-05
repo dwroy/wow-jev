@@ -5,6 +5,7 @@ import { Ajv, type ValidateFunction } from "ajv";
 import type { EntitySelector, GameBranch, GameDataResult, GameDataStats, GameVersion } from "./types.js";
 
 export * from "./types.js";
+export * from "./world.js";
 export interface GameDataClientOptions {
   repositoryDirectory: string;
   databasePath: string;
