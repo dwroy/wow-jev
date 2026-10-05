@@ -33,8 +33,8 @@ export function parseJevGoal(raw: unknown): JevGoal {
     allow_movement: item.allow_movement, allowed_action_slots: slots, target_signature: item.target_signature as string | null };
 }
 
-function fresh(field: ObservedField | undefined, context: CandidateContext, maxAge: number): boolean {
-  if (!field || field.status !== 'known' || field.source !== (context.mode === 'live' ? 'cv' : 'simulated') ||
+function fresh(field: ObservedField | undefined, context: CandidateContext, maxAge: number, liveSource: 'cv' | 'window' = 'cv'): boolean {
+  if (!field || field.status !== 'known' || field.source !== (context.mode === 'live' ? liveSource : 'simulated') ||
       field.source_observation_id !== context.observation.id || !Number.isSafeInteger(field.captured_at_ms) ||
       field.captured_at_ms < 0 || field.captured_at_ms > context.observation.at_ms || field.captured_at_ms > context.now || context.now - field.captured_at_ms > maxAge) return false;
   const bracket = field.capture_window;
@@ -54,8 +54,20 @@ export function buildCandidates(context: CandidateContext): JevCandidate[] {
     step: { id: WAIT_CANDIDATE_ID, name: 'wait', duration_ms: 250 }, conditions: [], target_signature: null };
   if (goal.mode !== 'practice' || goal.target_signature === null) return [wait];
   const fields = context.observation.fields;
+  const window = context.observation.window;
+  const capture = fields['capture.available'];
+  const focus = fields['window.focused'];
+  const positiveInt = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
+  if (!window || typeof window.token !== 'string' || ID.exec(window.token)?.[0] !== window.token ||
+      typeof window.hwnd !== 'string' || !/^0x[0-9a-f]+$/i.test(window.hwnd) || BigInt(window.hwnd) === 0n ||
+      !positiveInt(window.pid) || !positiveInt(window.client_width) || window.client_width < 2 || window.client_width > 65535 ||
+      !positiveInt(window.client_height) || window.client_height > 65535 || window.focused !== true ||
+      !fresh(capture, context, maxAge) || capture!.value !== true || !fresh(focus, context, maxAge, 'window') || focus!.value !== true ||
+      capture!.captured_at_ms !== focus!.captured_at_ms ||
+      JSON.stringify(capture!.capture_window ?? null) !== JSON.stringify(focus!.capture_window ?? null)) return [wait];
   const targetFields = ['target.present', 'target.dead', 'target.signature', 'player.in_combat'];
-  if (!targetFields.every((name) => fresh(fields[name], context, maxAge)) || fields['target.present']!.value !== true ||
+  if (!targetFields.every((name) => fresh(fields[name], context, maxAge) && fields[name]!.captured_at_ms === capture!.captured_at_ms &&
+      JSON.stringify(fields[name]!.capture_window ?? null) === JSON.stringify(capture!.capture_window ?? null)) || fields['target.present']!.value !== true ||
       fields['target.dead']!.value !== false || fields['target.signature']!.value !== goal.target_signature ||
       typeof fields['player.in_combat']!.value !== 'boolean') return [wait];
   const conditions: ActionCondition[] = [

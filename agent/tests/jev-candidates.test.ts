@@ -52,6 +52,32 @@ test('freshness lower bound and simulated sources are explicit', () => {
   assert.equal(buildCandidates(ctx).length, 5);
   ctx.maxAgeMs = 751; assert.throws(() => buildCandidates(ctx), /max_age/);
 });
+test('active candidates require current available capture and current focused window fields', () => {
+  for (const field of ['capture.available', 'window.focused']) {
+    for (const patch of [{ status: 'unknown', value: null }, { value: false }, { source: 'seed' }, { source: 'manual' },
+      { source_observation_id: 'old-observation' }, { captured_at_ms: 0 }, { captured_at_ms: 126 },
+      { capture_window: { earliest_ms: 100, latest_ms: 121 } }, { capture_window: { earliest_ms: 100, latest_ms: 109 } }]) {
+      const ctx = context(); ctx.observation.fields[field] = { ...ctx.observation.fields[field]!, ...patch } as ObservedField;
+      assert.deepEqual(buildCandidates(ctx).map((candidate) => candidate.id), ['wait'], field + JSON.stringify(patch));
+    }
+    const ctx = context(); delete ctx.observation.fields[field]; assert.equal(buildCandidates(ctx).length, 1);
+  }
+  for (const [field, source] of [['capture.available', 'window'], ['window.focused', 'cv']] as const) {
+    const ctx = context(); ctx.observation.fields[field]!.source = source; assert.equal(buildCandidates(ctx).length, 1);
+  }
+  const ctx = context(); ctx.now = 851; assert.equal(buildCandidates(ctx).length, 1);
+  const mixed = context(); mixed.observation.fields['target.dead']!.captured_at_ms = 101;
+  mixed.observation.fields['target.dead']!.capture_window = { earliest_ms: 101, latest_ms: 111 };
+  assert.equal(buildCandidates(mixed).length, 1);
+});
+test('missing, unfocused or malformed window binding never offers input candidates', () => {
+  const missing = context(); missing.observation.window = null; assert.equal(buildCandidates(missing).length, 1);
+  for (const patch of [{ focused: false }, { token: '' }, { hwnd: '0x0' }, { hwnd: 'invalid' }, { pid: 0 },
+    { pid: -1 }, { client_width: 0 }, { client_width: 65536 }, { client_height: 0 }]) {
+    const ctx = context(); ctx.observation.window = { ...ctx.observation.window!, ...patch };
+    assert.equal(buildCandidates(ctx).length, 1, JSON.stringify(patch));
+  }
+});
 
 test('goal parser rejects implicit permissions, arbitrary payloads, duplicates and unsafe identifiers', () => {
   for (const raw of [null, [], { ...goal(), arbitrary_key: 'W' }, { ...goal(), allow_movement: 'true' }, { ...goal(), revision: 0 },
