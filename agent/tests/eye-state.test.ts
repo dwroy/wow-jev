@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { EyeState, type SeedResult } from '../src/eye/state.js';
 import type { EyeSample, SampleBracket } from '../src/eye/protocol.js';
@@ -52,6 +53,23 @@ function combat(at: number, signature: string | null = 'a'.repeat(64), present: 
   return { ...bracket(at), sample: { ...sample, detectors: { ...sample.detectors, target_present: calibrated(present), target_dead: calibrated(present === true ? false : null), player_in_combat: calibrated(false),
     target_signature: { status: signature === null ? 'unknown' : 'known', value: signature, confidence: signature === null ? 0 : 1, calibration_id: 'combat-test' } } } };
 }
+
+test('name bank rebinds the new same-frame CV name after invalidation and prevents late model override', () => {
+  const state = new EyeState('run', sample.session_id, 'obs0');
+  const first = combat(10); first.sample.detectors.target_name = { status: 'known', value: '任务员甲', confidence: 1, calibration_id: 'combat-test' };
+  state.applySample(first, 'obs0'); const old = { ...source, ...state.seedSourceContext() };
+  assert.equal(state.snapshot('obs0', 0, 20).fields['target.name']?.value, '任务员甲');
+  const next = combat(100, 'b'.repeat(64)); next.sample.detectors.target_name = { status: 'known', value: '任务员乙', confidence: 1, calibration_id: 'combat-test' };
+  next.sample.detectors.npc_dialog_open = { status: 'known', value: false, confidence: 1, calibration_id: 'npc-test' };
+  state.applySample(next, 'obs1');
+  const frame = state.snapshot('obs1', 1, 110);
+  assert.equal(frame.fields['target.name']?.value, '任务员乙'); assert.equal(frame.fields['target.name']?.source_observation_id, 'obs1');
+  assert.equal(frame.fields['ui.npc_dialog_open']?.source_observation_id, 'obs1');
+  assert.equal(state.applySeed(seed({ 'target.name': { status: 'known', value: '任务员甲', confidence: 1 } }), old, 120).accepted.length, 0);
+  state.applySample(combat(200, null, false), 'obs2');
+  assert.equal(state.snapshot('obs2', 2, 210).fields['target.name']?.status, 'unavailable');
+  assert.equal(state.snapshot('obs2', 2, 210).fields['ui.npc_dialog_open']?.status, 'unavailable');
+});
 
 test('unconfigured optional combat detectors preserve historical read-only Seed behavior', () => {
   const state = new EyeState('run', sample.session_id, 'obs0');
@@ -108,4 +126,13 @@ test('native target dependencies and signature type are enforced while legacy v1
   assert.throws(() => assertEye(missingTarget, validator), /eye_target_dependency/);
   const malformed = combat(10).sample; malformed.detectors.target_signature!.value = 'not-a-sha';
   assert.throws(() => assertEye(malformed, validator), /eye_schema/);
+  const named = combat(10, createHash('sha256').update('wow-visible-name-v1\0任务员').digest('hex')).sample;
+  named.detectors.target_name = { status: 'known', value: '任务员', confidence: 1, calibration_id: 'combat-test' };
+  assertEye(named, validator);
+  const wrongBank = structuredClone(named); wrongBank.detectors.target_name!.calibration_id = 'other-bank';
+  assert.throws(() => assertEye(wrongBank, validator), /eye_name_identity_mismatch/);
+  const wrongName = structuredClone(named); wrongName.detectors.target_name!.value = '另一个任务员';
+  assert.throws(() => assertEye(wrongName, validator), /eye_name_identity_mismatch/);
+  const wrongPresence = structuredClone(named); wrongPresence.detectors.target_present!.calibration_id = 'other-bank';
+  assert.throws(() => assertEye(wrongPresence, validator), /eye_identity_calibration_mismatch/);
 });

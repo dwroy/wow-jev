@@ -14,7 +14,7 @@ export function parseBrainGoal(raw: unknown): BrainGoal {
   const value = raw as Record<string, unknown>;
   const base = ['id', 'revision', 'description', 'kind'];
   const extra = value.kind === 'observe' ? [] : value.kind === 'panel_cycle' ? ['panel'] : value.kind === 'approach_npc' ?
-    ['target_signature', 'target_name', 'allow_movement', 'interaction_slot'] : null;
+    ['target_signature', 'target_name', 'allow_movement', 'interaction_slot'] : value.kind === 'interact_npc' ? ['target_signature', 'target_name', 'interaction_slot'] : null;
   if (!extra || Object.keys(value).length !== base.length + extra.length || [...base, ...extra].some((key) => !Object.hasOwn(value, key))) throw new Error('brain_goal_fields');
   const identifier = (item: unknown): boolean => typeof item === 'string' && ID.exec(item)?.[0] === item && !['__proto__', 'prototype', 'constructor'].includes(item);
   const text = (item: unknown, length: number): boolean => typeof item === 'string' && !!item.trim() && item.length <= length;
@@ -22,9 +22,10 @@ export function parseBrainGoal(raw: unknown): BrainGoal {
   if (value.kind === 'panel_cycle' && value.panel !== 'inventory') throw new Error('brain_goal_panel');
   if (value.kind === 'approach_npc' && (!text(value.target_signature, 128) || !text(value.target_name, 128) || typeof value.allow_movement !== 'boolean' ||
     !(value.interaction_slot === null || identifier(value.interaction_slot)))) throw new Error('brain_goal_npc');
+  if (value.kind === 'interact_npc' && (!text(value.target_signature, 128) || !text(value.target_name, 128) || !identifier(value.interaction_slot))) throw new Error('brain_goal_npc_probe');
   return structuredClone(value) as unknown as BrainGoal;
 }
-export function initialPhase(goal: BrainGoal): BrainPhase { return goal.kind === 'observe' ? 'observe' : goal.kind === 'panel_cycle' ? 'open_panel' : 'approach'; }
+export function initialPhase(goal: BrainGoal): BrainPhase { return goal.kind === 'observe' ? 'observe' : goal.kind === 'panel_cycle' ? 'open_panel' : goal.kind === 'interact_npc' ? 'interact' : 'approach'; }
 export interface RouteContext {
   observation: Observation; memory: WorkingMemory; mode: 'live' | 'simulated'; now: number;
   maxAgeMs: number; bindings: SkillBindings; facts: KnowledgeFact[]; waitMs: number; planId?: string;
@@ -84,6 +85,14 @@ export function buildBrainRoutes(context: RouteContext): BrainRoute[] {
   if (!safe(['ui.npc_dialog_open']) || typeof observation.fields['ui.npc_dialog_open']!.value !== 'boolean') return uncertain('npc_dialog_state_unknown');
   if (observation.fields['ui.npc_dialog_open']!.value === true) return [route('complete-npc', 'complete', 'npc_dialog_observed', [...fields, 'ui.npc_dialog_open']), wait];
   fields.push('ui.npc_dialog_open');
+  if (goal.kind === 'interact_npc') {
+    if (!Object.hasOwn(context.bindings.action_slots, goal.interaction_slot)) return [route('escalate', 'escalate', 'npc_interaction_binding_missing'), wait];
+    if (memory.phase === 'verify') return uncertain('npc_probe_dialog_not_observed');
+    // This goal explicitly permits one finite interaction attempt with a
+    // verified selected NPC. Unknown range does not become a movement claim.
+    return [route('interact-npc-probe', 'run', 'explicit_finite_interaction_probe', fields, 'code',
+      { id: 'brain-interact-probe', name: 'use_action_slot', slot: goal.interaction_slot, duration_ms: 100 }), wait];
+  }
   if (!safe(['npc.in_interaction_range']) || typeof observation.fields['npc.in_interaction_range']!.value !== 'boolean') return uncertain('npc_range_unknown');
   fields.push('npc.in_interaction_range');
   if (observation.fields['npc.in_interaction_range']!.value === true) {

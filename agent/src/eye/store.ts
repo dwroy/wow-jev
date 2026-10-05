@@ -16,6 +16,7 @@ export interface RunManifest {
   prompts: { version: 'eye-retail-v1'; sha256: string | null };
   calibration: { id: string; files: Record<string, string> } | null;
   combat_calibration?: { id: string; files: Record<string, string> };
+  npc_calibration?: { id: string; files: Record<string, string> };
   extra_prompts?: Record<string, { version: string; sha256: string; file: string }>;
   schemas: Record<string, string>;
 }
@@ -75,7 +76,7 @@ export class EyeRunStore {
   static async create(options: {
     dir: string; runId: string; repo: string; schemaPaths: Record<string, string>; config: Record<string, unknown>;
     promptSha256?: string | null; calibrationPath?: string; nativeRoot?: string;
-    combatCalibrationPath?: string; extraPrompts?: { version: string; path: string }[];
+    combatCalibrationPath?: string; npcCalibrationPath?: string; extraPrompts?: { version: string; path: string }[];
   }): Promise<EyeRunStore> {
     const dir = resolve(options.dir);
     await mkdir(dirname(dir), { recursive: true }); await mkdir(dir, { recursive: false, mode: 0o700 });
@@ -105,7 +106,8 @@ export class EyeRunStore {
       if (!info.isFile() || info.size < 1 || info.size > 128 * 1024) throw new Error('unsafe_combat_calibration');
       const raw = await readFile(source);
       const bundle = JSON.parse(raw.toString('utf8')) as { version: number; kind: string; id: string;
-        detectors: Record<string, { templates: { positive: { file: string; sha256: string }[]; negative: { file: string; sha256: string }[] } }> };
+        detectors: Record<string, { templates: { positive: { file: string; sha256: string }[]; negative: { file: string; sha256: string }[] } }>;
+        signature?: { mask?: string; names?: { templates: { file: string; sha256: string }[] }[]; reject_templates?: { file: string; sha256: string }[] } };
       if (bundle.version !== 1 || bundle.kind !== 'combat-ui' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(bundle.id) ||
           !bundle.detectors || typeof bundle.detectors !== 'object' || Array.isArray(bundle.detectors) || !Object.keys(bundle.detectors).length) throw new Error('invalid_combat_calibration');
       await mkdir(join(dir, 'combat-calibration'));
@@ -129,7 +131,52 @@ export class EyeRunStore {
           }
         }
       }
+      if (bundle.signature?.mask === 'name-bank-v1') {
+        if (!Array.isArray(bundle.signature.names) || !bundle.signature.names.length || bundle.signature.names.length > 64 ||
+            !Array.isArray(bundle.signature.reject_templates) || !bundle.signature.reject_templates.length || bundle.signature.reject_templates.length > 16) throw new Error('invalid_identity_bank');
+        const identities = bundle.signature.names.flatMap((entry) => {
+          if (!Array.isArray(entry.templates) || entry.templates.length < 1 || entry.templates.length > 16) throw new Error('invalid_identity_templates');
+          return entry.templates;
+        });
+        for (const template of [...identities, ...bundle.signature.reject_templates]) {
+          const name = template?.file;
+          if (typeof name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.png$/.test(name) || name in files || !/^[0-9a-f]{64}$/.test(template.sha256)) throw new Error('unsafe_identity_template');
+          const path = join(dirname(source), name); const info = await lstat(path);
+          if (!info.isFile() || info.isSymbolicLink() || info.size < 1 || info.size > 16 * 1024 * 1024) throw new Error('identity_template_not_regular');
+          const bytes = await readFile(path); const hash = hashBuffer(bytes);
+          if (hash !== template.sha256) throw new Error('identity_template_hash_mismatch');
+          files[name] = hash; await writeFile(join(dir, 'combat-calibration', name), bytes, { flag: 'wx', mode: 0o400 });
+        }
+      }
       combatCalibration = { id: bundle.id, files };
+    }
+    let npcCalibration: RunManifest['npc_calibration'];
+    if (options.npcCalibrationPath) {
+      const source = resolve(options.npcCalibrationPath), info = await lstat(source);
+      if (!info.isFile() || info.isSymbolicLink() || info.size < 1 || info.size > 128 * 1024) throw new Error('unsafe_npc_calibration');
+      const raw = await readFile(source), bundle = JSON.parse(raw.toString('utf8')) as {
+        version: number; kind: string; id: string; detectors: Record<string, { templates: Record<string, { file: string; sha256: string }[]> }> };
+      if (bundle.version !== 1 || bundle.kind !== 'npc-ui' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(bundle.id) || !bundle.detectors ||
+          Array.isArray(bundle.detectors) || !Object.keys(bundle.detectors).length) throw new Error('invalid_npc_calibration');
+      await mkdir(join(dir, 'npc-calibration')); const files: Record<string, string> = { 'calibration.json': hashBuffer(raw) };
+      await writeFile(join(dir, 'npc-calibration/calibration.json'), raw, { flag: 'wx', mode: 0o400 });
+      for (const [key, detector] of Object.entries(bundle.detectors)) {
+        if (!['npc_dialog_open', 'npc_in_interaction_range'].includes(key)) throw new Error('invalid_npc_detector');
+        for (const label of ['positive', 'negative']) {
+          const templates = detector.templates?.[label];
+          if (!Array.isArray(templates) || templates.length < 1 || templates.length > 16) throw new Error('invalid_npc_templates');
+          for (const template of templates) {
+            const name = template?.file;
+            if (typeof name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.png$/.test(name) || name in files || !/^[0-9a-f]{64}$/.test(template.sha256)) throw new Error('unsafe_npc_template');
+            const path = join(dirname(source), name), entry = await lstat(path);
+            if (!entry.isFile() || entry.isSymbolicLink() || entry.size < 1 || entry.size > 16 * 1024 * 1024) throw new Error('npc_template_not_regular');
+            const bytes = await readFile(path), hash = hashBuffer(bytes);
+            if (hash !== template.sha256) throw new Error('npc_template_hash_mismatch');
+            files[name] = hash; await writeFile(join(dir, 'npc-calibration', name), bytes, { flag: 'wx', mode: 0o400 });
+          }
+        }
+      }
+      npcCalibration = { id: bundle.id, files };
     }
     let extraPrompts: RunManifest['extra_prompts'];
     if (options.extraPrompts) {
@@ -147,7 +194,7 @@ export class EyeRunStore {
     }
     const manifest: RunManifest = { protocol: 'wow-eye-run', version: 1, run_id: options.runId, created_at: new Date().toISOString(), code: await codeVersion(options.repo, options.nativeRoot),
       config: options.config, config_sha256: hashBuffer(JSON.stringify(options.config)), prompts: { version: 'eye-retail-v1', sha256: options.promptSha256 ?? null }, calibration, schemas,
-      ...(combatCalibration ? { combat_calibration: combatCalibration } : {}), ...(extraPrompts ? { extra_prompts: extraPrompts } : {}) };
+      ...(combatCalibration ? { combat_calibration: combatCalibration } : {}), ...(npcCalibration ? { npc_calibration: npcCalibration } : {}), ...(extraPrompts ? { extra_prompts: extraPrompts } : {}) };
     await writeFile(join(dir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx', mode: 0o400 });
     const schema = JSON.parse(await readFile(join(dir, 'schemas/eye-log-v1.schema.json'), 'utf8')) as object;
     const validator = new Ajv({ strict: true, allErrors: true }).compile<EyeLogRecord>(schema);

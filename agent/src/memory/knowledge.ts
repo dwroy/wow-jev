@@ -17,7 +17,7 @@ export function consultKnowledge(snapshot: KnowledgeSnapshot, goal: BrainGoal, p
     skill: phase === 'open_panel' || phase === 'close_panel' ? phase : phase === 'approach' ? 'move_for' : phase,
     ...(observation.window ? { layout: `${observation.window.client_width}x${observation.window.client_height}` } : {}),
     ...(goal.kind === 'panel_cycle' ? { panel: goal.panel } : {}),
-    ...(goal.kind === 'approach_npc' ? { target_name: goal.target_name } : {}),
+    ...(goal.kind === 'approach_npc' || goal.kind === 'interact_npc' ? { target_name: goal.target_name } : {}),
     ...(scene?.status === 'known' && typeof scene.value === 'string' ? { scene: scene.value } : {}),
   };
   const calibration = observation.fields['ui.inventory_calibration_id'];

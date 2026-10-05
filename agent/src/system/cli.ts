@@ -24,10 +24,16 @@ import { reviewRuns } from './learning.js';
 import { launchFrozenTask } from './launch.js';
 import { replaySystemRun } from './replay.js';
 import { SystemSimulation, SIM_NPC_SIGNATURE, type DemoScenario } from './simulation.js';
+import { runLiveSystem } from './live.js';
+import { requestPlayControl } from '../play/control.js';
 
 const print = (data: unknown) => process.stdout.write(`${JSON.stringify(data)}\n`);
-const HELP = `第5–7阶段工程入口（本轮不操作Windows）：
+const HELP = `三层Agent入口：
 npm run system -- demo [--scenario normal|target-lost|unknown|cancel] [--goal-kind npc|panel|observe] [--knowledge-file FILE] [--registry DIR]
+npm run system -- observe --window HWND --pid PID --client-profile FILE [--combat-calibration FILE] [--run-dir DIR]
+npm run system -- live --live --role-scene-confirmed --window HWND --pid PID --client-profile FILE --goal FILE [--bindings FILE] [--calibration FILE] [--combat-calibration FILE] [--npc-calibration FILE] [--run-dir DIR]
+npm run system -- status --session-id ID
+npm run system -- cancel --session-id ID
 npm run system -- replay --run-dir DIR
 npm run system -- learn --run-dir DIR [--run-dir DIR...] --knowledge-dir DIR --out-dir NEW_DIR
 npm run system -- inspect --knowledge-file FILE
@@ -39,6 +45,9 @@ npm run system -- version --registry DIR
 npm run system -- rollback --registry DIR --version-id ID
 
 demo始终模拟、不调用API/Windows/凭据；registry模式真正执行已批准的冻结代码。
+observe只读采样；live使用Windows原生眼和手，必须核对实际正式服12.x客户端版本并保持前台。
+NPC交互需要名字bank、NPC对话校准及显式键位；interact_npc最多一次有限探测，未知距离不支持自动接近。
+模型需同时显式--seed和--allow-game-image-upload；不带开关不读取凭据。
 learn严格重放既有日志，保留unknown与反例；stage/evaluate运行隔离回归，publish仅接受工具签发的通过报告。
 `;
 function integer(raw: string | undefined, fallback: number, maximum: number): number {
@@ -61,13 +70,25 @@ async function main(): Promise<number> {
     registry: { type: 'string' }, 'candidates-root': { type: 'string' }, proposal: { type: 'string' },
     'candidate-id': { type: 'string' }, 'evaluation-id': { type: 'string' }, 'version-id': { type: 'string' },
     'approved-by': { type: 'string' }, activate: { type: 'boolean' }, 'executing-source-sha256': { type: 'string' },
+    window: { type: 'string' }, pid: { type: 'string' }, goal: { type: 'string' }, bindings: { type: 'string' },
+    calibration: { type: 'string' }, 'combat-calibration': { type: 'string' }, 'npc-calibration': { type: 'string' },
+    live: { type: 'boolean' }, 'role-scene-confirmed': { type: 'boolean' }, seed: { type: 'boolean' }, 'allow-game-image-upload': { type: 'boolean' },
+    'wait-focus-ms': { type: 'string' }, 'native-root': { type: 'string' }, python: { type: 'string' }, 'seed-env-file': { type: 'string' },
+    'client-profile': { type: 'string' }, 'evaluation-context': { type: 'string' }, 'session-id': { type: 'string' },
   } });
   if (values.help) { process.stdout.write(HELP); return 0; }
   const mode = positionals[0];
-  if (positionals.length !== 1 || !mode || !['demo', 'replay', 'learn', 'inspect', 'baseline', 'stage', 'evaluate', 'publish', 'version', 'rollback'].includes(mode)) throw new Error('system_mode_required');
+  if (positionals.length !== 1 || !mode || !['demo', 'live', 'observe', 'status', 'cancel', 'replay', 'learn', 'inspect', 'baseline', 'stage', 'evaluate', 'publish', 'version', 'rollback'].includes(mode)) throw new Error('system_mode_required');
   const repo = resolve(values['repo-root'] ?? fileURLToPath(new URL('../../..', import.meta.url)));
   const dirs = values['run-dir'] ?? [];
   if (mode !== 'learn' && dirs.length > 1) throw new Error('system_single_run_required');
+  if (mode === 'status' || mode === 'cancel') {
+    if (!values['session-id']) throw new Error('system_session_id_required');
+    print(await requestPlayControl(values['session-id'], mode)); return 0;
+  }
+  if (mode === 'live' || mode === 'observe') return runLiveSystem(values, repo, mode === 'observe');
+  if (['window', 'pid', 'goal', 'bindings', 'calibration', 'combat-calibration', 'npc-calibration', 'live', 'role-scene-confirmed', 'seed', 'allow-game-image-upload',
+    'client-profile', 'evaluation-context', 'session-id', 'native-root', 'wait-focus-ms', 'seed-env-file'].some((key) => values[key as keyof typeof values] !== undefined)) throw new Error('system_live_options_only');
   if (mode === 'learn') {
     if (!values['knowledge-dir'] || !values['out-dir']) throw new Error('system_learning_destinations_required');
     print(await reviewRuns(dirs, values['knowledge-dir'], values['out-dir'])); return 0;
