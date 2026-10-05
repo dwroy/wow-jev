@@ -10,6 +10,8 @@
 
 体验：`npm --prefix agent run layers -- demo`，其输出给运行目录；`npm --prefix agent run layers -- replay --run-dir /绝对路径`。真实开发入口需匹配客户端/profile/区域校准和角色场景，未知定位/运动模式/技能状态会阻塞；详见 `docs/layers-runtime.md`、`docs/acceptance/four-layer-runtime.md`。本轮未检测到可用WoW窗口，未进行新时间线的物理输入/释放、正式服布局、真实OCR权重效果、区域Seed token成本、导航/飞行与自主升级验收。战斗日志仍只回填历史；四层任务到既有执行大脑及学习迭代入口的直接接入也待后续。没有读取凭据、调用云API、推送或重启WSL。
 
+最终主目录已fast-forward合入至3ddb3a8，主目录四原生重建、typecheck、六行为demo/replay及原生时间线参数校验通过。238个必要ignored产物逐SHA验证归档至out/acceptance/four-layer-runtime/worktree-archive-1；检查工作树clean及无活动测试进程后，本轮四工作树正常git worktree remove，分支保留，其它历史工作树未清理。后续直接使用主checkout及上述体验命令。
+
 **最新用户目标与小闭环**：用户明确以已知攻略扫任务、自主打怪/拾取快速升级；先体验 NPC 互动小闭环。已通过 Battle.net 正常入口启动12.1.0.69933并进入角色，辅助选中/靠近森德拉克斯并取得真实对话图。`out/acceptance/npc-loop-1/automatic-local-1` 是0模型调用的实际程序运行：6949ms、名字/关闭对话证据unknown、等待后停止、0输入/0效果/释放confirmed，严格回放通过，未证明自动互动。相同捕获/冻结校准对照确认原Bitmap字形555与对应JPEG90字形456，在线unknown、JPEG离线known；不能把JPEG模板自匹配当直播准确率。v2对话头像ROI改进已冻结但名字仍为JPEG，下一轮必须取真实NPC无损源图。用户随后手动打怪；此时停止输入，补录30秒只读27观察/26图/0动作，独立复核取得1个新的4K死亡目标选择事件（非新击杀），全部相邻帧只计1事件。target.dead仅真值已知20图评分：known正确15/错误0/CVunknown5，另6图视觉unknown不计准确率；旧错误汇总与纠正summary-v2均保留。
 
 无损WinEye存档和旧JPEG启动兼容补丁已负责人审查，以34ff5e8/6d4fd96合入；agent完整266项TS、typecheck及6组Windows实际codec/配额通过，主目录四原生模块重建和typecheck通过。主目录尝试真实PNG observe时未检测到可用WoW窗口，保留原失败，未截游戏/未发送输入；同帧游戏PNG实测及NPC自动G仍待现场。300个必要实施产物/SHA归档到out/acceptance/npc-loop-1/lossless-integration-1，确认无活动进程/工作树clean后正常remove，分支保留；没有push。用户最新要讨论整系统架构/运行流程，正在对话中解释；不要新增架构规划文件。已异步请求用户方便时回NPC旁准备约30秒，不依赖无回复继续输入。详见docs/acceptance/npc-loop.md、lossless-eye.md。
