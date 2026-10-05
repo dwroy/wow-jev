@@ -4,6 +4,14 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 里程碑四完成离线闭环，四个里程碑已本地集成验收。** 实现提交a6f5cce已按ff-only合入主checkout，主目录185Python/131TS/0skip、typecheck通过。实际world-demo在固定提交执行接取→两独立目标→交付四任务，ordinal0=2/ordinal1=1，接受/交付/奖励scenario证据完整；game_effect=unverified，real_inputs=0。独立严格回放产生4条experience/4sources，重复来源去重；新知识版本实际召回4条，SQLite索引4候选+评估+注册，simulated_samples=4、actual_game_samples=0。136事件（原始108+28派生依赖）重复索引0新增，444个受保护SHA包含全冻结原件。
+
+world A SHA `5d7576f2ef44b13f7dcaec01d61b85e72348c851d848824378320992ecd1e827` 切到B `90427fa1dea8d30bd0e1491ac4ef7ce79642a1bda86c45c175cbef0c468059aa` 后，旧4run仍按A回放；新B任务不召回A范围经验，持有的冻结snapshot不变；实际rollback到synthetic-world-learned后旧run再通过。知识SHA `9c2aac77dc4cc66a3a4d22e63b3d0815fb69b951bfa6d3fda85e6ae775bee2de`。默认world-demo及learner learn/版本inspect/rollback CLI已实测，本轮全程无模型、凭据读取、Windows/游戏输入或远端push。
+
+主证据 `out/acceptance/game-database-v2/milestone-4/{main-demo,main-close,checks,close.mts}`，main-close/summary.json保存版本/知识/索引/保护集合；代码、世界、prompt、知识及原日志在每run保留。主M3真实包再测current69933 ID/中文/区域not_found、references保持不可采纳；ID/中文/区域新连接/复用连接p50/p95已记录，OS缓存未清除。真实M2仍24任务参考、规范目标23unsupported/1unknown、starter/finisher及当前正式服核实覆盖0；合成闭环不代替正式服接取/完成/交付或性能收益。v2 live/observe继续早于native调用拒绝，后续现场验证需要本机真实客户端/任务/目标/校准和释放证据。
+
+新机器体验：安装项目锁定依赖后 `npm --prefix agent run layers -- world-demo`；按输出四个run目录逐个replay或learner learn。详细入口 `docs/game-database-v2.md`；完整验收 `docs/acceptance/game-database-v2.md`。主原未跟踪wow-jev.bundle及备份HANDOFF完整SHA再核未变；既有pixel-bridge工作树未动。本轮独立树/原件/失败及候选均保留供复核，不删除被旧run引用的证据。
+
 **2026-10-06 里程碑四，步骤4a：执行/学习/固定版本实现通过模块验收。** `.worktrees/game-db-execution` 集成固定世界SHA的不可执行L4规划提示、显式目标断言/ordinal与每次L3/L2发送前身份/原帧时间校验、v2 RuntimeVersion世界/知识/客户端契约、逐run代码/prompt/世界/知识原件、严格三阶段layers回放及独立知识来源。原v1接口、RuntimeVersion/知识字节与旧Eye学习路径保留；带新schema标记但类型非法不能降级旧回放。
 
 185项Python、131项TS定向集成回归通过（两项新拒绝路径/统计字段的旧断言修正后18项重验全通过），typecheck/diff-check通过、0skip。独立审查关闭quest归因错、代码/prompt只标签、event冒kill_credit、schema类型宽松、middle objective漂移/旧帧、live原生因果及索引依赖保护缺口。RuntimeIndex严格回放后才写APSW单writer；原seq+1，原始JSONL/SHA不重写，派生dependency事件保护代码/prompt/计划/世界原件及Eye附件；外层事务完整回滚，正/反例分开，模拟真实样本=0。知识发布为offlinedata评估，父代码/prompt固定，不绕过旧代码提案的真实问题要求。

@@ -17,7 +17,7 @@
 
 ## 里程碑状态
 
-一、二、三已完成离线验收；四实施中。运行库固定修补后的SQLite；世界包与v1接口分开，尚无v2发布或当前客户端已核实覆盖。
+一至四已完成离线实施与主checkout验收。运行库固定修补后的SQLite；世界包与v1接口分开，本地v2包/知识/运行版本已注册。当前正式服核实覆盖仍0，现场动作与实际收益未验收。
 
 ## 步骤1a：世界包与兼容迁移
 
@@ -92,3 +92,24 @@ M2实际包5f762a…2774再次打开查验：当前69933 ID可接/中文/区域�
 独立索引探针：162个冻结文件SHA全部在protected_artifacts（169hash），23原始事件+3依赖事件；重复26duplicates/0inserted。原seq→seq+1；每64依赖SHA新增derived事件。模拟1/真实0样本，重算logSHA伪造game_effect仍前门拒绝。第二来源失败后artifact/run/events/account/character/candidate/evaluation/release均回滚为0。索引保留JSONL、manifest、世界source artifacts、runtime/plan/input知识、代码/prompt与有支持时的原Eye附件；不遍历registry/key。来源批次256、raw总64MiB、依赖总256MiB，单文件64MiB；超预算拒绝。
 
 版本8项独立实际SQLite测试覆盖固定reader不兼容时发布前拒绝、world A/B切换、deepFreeze、旧v1原字节、SHA/原件/部分包/symlink/未声明文件、知识证据、父代码/prompt固定及rollback。真实source/包旧引用不删除。v2 live/observe入口显式尚未现场验证，早于native程序拒绝；本轮只有离线/模拟，尚待固定commit后实际默认CLI及主checkout闭环验收。
+
+## 步骤4b：固定提交与主checkout实际闭环
+
+a6f5cce在独立树完成实际world-demo/close后ff-only集成；主checkout重验185Python/131TS/0skip、typecheck全通过。主CLI demo、独立replay、learner learn以及world-version inspect/rollback通过。受控close.mts仅执行已提交的离线API，源码副本保留在主out，所有原件保留。
+
+- 3个phase/4个有限taskrun全部scenario completed；接取true、ordinal0=2/ordinal1=1、交付true、奖励true。game_effect仍unverified、real_inputs=0。
+- 严格学习4sources/4experience，重复来源去重；新固定知识实际消费4fact IDs。知识SHA9c2aac77…bee2de。
+- 单writer SQLite4run/4candidate/4evaluation/knowledge release，simulated_samples=4、actual_game_samples=0。原始108event+28dependency=136；重复全部duplicates/0inserted。444受保护SHA覆盖冻结代码/prompt/知识/plan/world原件。
+- 实际world A5d7576f2…1e827→B90427fa1…059aa；旧4run保持A回放，B新任务不召回A经验；冻结baseline/learned snapshot不变，rollback到synthetic-world-learned后旧run回放通过。代码/prompt父版本固定，评估只证明离线数据/证据一致性，不证明游戏收益。
+
+主证据路径：milestone-4/main-demo（四run/registry/完整源副本）、main-close/summary.json（学习/索引/消费/换包/回退）、main-cli-learning.json、checks/{ts-tests.tap,python-tests.txt,summary.json,world-version-cli-*}；close.mts是可复核脚本。Git只跟源码与文档，不跟SQLite/来源日志/本机key或二进制。
+
+最终main M3实际源查询与测量（OS缓存未清除，离线验收可能并发）：
+
+| 查询 | 新连接p50/p95 ms | 复用连接p50/p95 ms |
+| --- | --- | --- |
+| ID参考可接 | 11.501 / 12.968 | 1.043 / 1.446 |
+| 中文双字参考 | 18.775 / 21.675 | 6.370 / 9.631 |
+| 区域参考 | 40.278 / 47.172 | 28.058 / 34.434 |
+
+数据仍129实体/779assertions全reference_only/local_only，current69933三类not_found；原件/代码SHA及结果在milestone-3/{query-baseline,real-source-queries}.json。新连接不称物理冷缓存，不含TS启动开销，不承诺广域数据性能。当前真实任务目标动作/starter/finisher/楼层/位面/可达性与正式服实际接取→交付仍unknown或unsupported；v2真实入口尚未现场验证而明确阻止，不把离线闭环当游戏验收。
