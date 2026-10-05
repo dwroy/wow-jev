@@ -21,11 +21,11 @@ const bindings = { forward: 'E', jump: 'SPACE', inventory: 'B', action_slots: {}
 const session = '11111111-1111-4111-8111-111111111111';
 const plan: PlayPlan = { id: 'acceptance-plan', revision: 2, steps: [{ id: 'move', name: 'move_for', duration_ms: 10 }, { id: 'jump', name: 'jump', duration_ms: 10 }] };
 const id = (p: PlayPlan) => ({ id: p.id, revision: p.revision });
-async function fixture(mode: 'simulated' | 'live', p = plan, scenario = 'steady') {
+async function fixture(mode: 'simulated' | 'live', p = plan, scenario = 'steady', dispatch = true) {
   const base = await mkdtemp(join(tmpdir(), 'wow-play-replay-')); const dir = join(base, 'run'); const origin = performance.now();
   const now = () => Math.floor(performance.now() - origin);
   const store = await EyeRunStore.create({ dir, runId: 'test-play', repo, schemaPaths: schemas,
-    config: { mode, play_plan: p, bindings, max_observation_age_ms: 750 } });
+    config: { mode, play_plan: p, bindings, max_observation_age_ms: 750, native_dispatch_logged: mode === 'live' && dispatch } });
   let native: NativeEyeClient | null = null; let runtime: EyeRuntime | null = null;
   if (mode === 'live') {
     native = await NativeEyeClient.start({ executable: process.execPath, prefixArgs: [join(repo, 'agent/tests/fixtures/mock-eye.mjs'), scenario, join(dir, 'native-export')], window: '0xabc', expectedPid: 42, cwd: repo, sessionId: session, now, exportWindowsPath: 'C:\\export',
@@ -52,10 +52,11 @@ async function fixture(mode: 'simulated' | 'live', p = plan, scenario = 'steady'
     else {
       const at = now(); const aid = `play-action-${index}`;
       const action: ActionIntent = { protocol: 'wow-agent', version: 1, type: 'action_intent', id: aid, run_id: 'test-play', at_ms: at, actor: 'code', plan: id(p), based_on_observation_id: before.id, deadline_ms: at + 1500,
-        conditions: [{ field: 'window.focused', op: 'eq', value: true, max_age_ms: 750 }],
+        conditions: [{ field: 'window.focused', op: 'eq', value: true, max_age_ms: 750 }, { field: 'capture.available', op: 'eq', value: true, max_age_ms: 750 }],
         ...(mode === 'simulated' ? { mode, window_token: null, action: { name: 'simulate_noop', args: {} } } : { mode, window_token: before.window!.token, action: { name: 'native_input', args: { kind: 'key', keys: [step.name === 'jump' ? 'SPACE' : step.name === 'move_for' ? 'E' : 'B'], duration_ms: 'duration_ms' in step ? step.duration_ms : 100 } } }) };
       await append('action_intent', action);
       if (mode === 'live') {
+        if (dispatch) await append('native_input', { direction: 'out', message: { protocol: 'wow-input', version: 1, type: 'command', session_id: session, id: aid, op: 'execute', action: action.action.args } });
         const raw: NativeReceipt = { protocol: 'wow-input', version: 1, type: 'receipt', session_id: session, id: aid, op: 'execute', status: 'completed', input: { status: 'released', events_requested: 2, events_inserted: 2, released: true }, effect: { status: 'unknown' }, timing: { clock: 'windows_qpc', started_ms: 9000000, finished_ms: 9000001 }, local_clock: { domain: 'windows-qpc', at_ms: 9000002 } };
         await append('native_input', { direction: 'in', message: raw, action_id: aid });
       }
@@ -84,7 +85,7 @@ test('simulated multi-step replay verifies plan and emits zero real inputs/confi
 });
 test('live mocked movement stays unverified while raw receipt counts are checked', async () => {
   const run = await fixture('live', { ...plan, steps: [plan.steps[0]!] });
-  try { await run.step(0); await run.finish(); const result = await replayPlayRun(run.dir); assert.equal(result.complete, true); assert.equal(result.real_inputs, 1); assert.equal(result.unverified_effects, 1); assert.equal(result.confirmed_effects, 0);
+  try { await run.step(0); await run.finish(); const result = await replayPlayRun(run.dir); assert.equal(result.complete, true); assert.equal(result.real_inputs, 1); assert.equal(result.unverified_effects, 1); assert.equal(result.confirmed_effects, 0); assert.equal(result.dispatch_timing_verified, true);
     const rows = await records(run.dir); const receipt = rows.find((row) => row.kind === 'execution_receipt')!.data as ExecutionReceipt; receipt.input.events_inserted = 3; receipt.input.events_requested = 3;
     for (const row of rows) if (row.kind === 'event') { const event = row.data as { code: string; result?: SkillResult | PlayResult }; if (event.code === 'play.step_result') (event.result as SkillResult).receipt = structuredClone(receipt); if (event.code === 'play.plan_finished') (event.result as PlayResult).steps[0]!.receipt = structuredClone(receipt); }
     await rewrite(run.dir, rows); await assert.rejects(replayPlayRun(run.dir), /native_receipt_counts/);
@@ -128,4 +129,31 @@ test('native input in a simulated run and simulated effect confirmation are refu
       await rewrite(run.dir, rows); await assert.rejects(replayPlayRun(run.dir), /simulated_native_input|simulated_receipt|receipt_plan/);
     } finally { await run.cleanup(); }
   }
+});
+
+test('native dispatch must match intent and gates; no new dispatch after plan stop', async () => {
+  for (const mutation of ['changed_action', 'late_dispatch', 'stale_gate', 'missing_dispatch']) {
+    const run = await fixture('live', { ...plan, steps: [plan.steps[0]!] });
+    try { await run.step(0); await run.finish(); const rows = await records(run.dir); const index = rows.findIndex((row) => row.kind === 'native_input' && (row.data as { direction?: string }).direction === 'out'); const dispatch = rows[index]!;
+      if (mutation === 'changed_action') (dispatch.data as { message: { action: { keys: string[] } } }).message.action.keys = ['W'];
+      else if (mutation === 'missing_dispatch') rows.splice(index, 1);
+      else if (mutation === 'stale_gate') { const delayed = dispatch.at_ms + 800; for (const row of rows.slice(index)) row.at_ms = Math.max(row.at_ms, delayed); }
+      else { rows.splice(index, 1); const finished = rows.findIndex((row) => row.kind === 'event' && (row.data as { code?: string }).code === 'play.plan_finished'); dispatch.at_ms = rows[finished]!.at_ms; rows.splice(finished + 1, 0, dispatch); }
+      await rewrite(run.dir, rows); await assert.rejects(replayPlayRun(run.dir), /native_dispatch|native_execute_outside_step|stale_or_unsatisfied_dispatch/);
+    } finally { await run.cleanup(); }
+  }
+});
+
+test('legacy logs without dispatch time say verification unavailable rather than inventing timing', async () => {
+  const run = await fixture('live', { ...plan, steps: [plan.steps[0]!] }, 'steady', false);
+  try { await run.step(0); await run.finish(); const result = await replayPlayRun(run.dir); assert.equal(result.complete, true); assert.equal(result.dispatch_timing_verified, false); assert.equal(result.dispatch_records, 0); } finally { await run.cleanup(); }
+});
+
+test('already_satisfied is refused when the raw window is unfocused', async () => {
+  const run = await fixture('live', { id: 'closed', revision: 1, steps: [{ id: 'close', name: 'close_panel', panel: 'inventory' }] });
+  try { await run.step(0, { already: true }); await run.finish(); const rows = await records(run.dir);
+    for (const row of rows) { if (row.kind === 'native_eye') { const message = (row.data as { message: { type: string; window: { focused: boolean } } }).message; if (message.type === 'sample') message.window.focused = false; }
+      if (row.kind === 'observation') { const observation = row.data as Observation; observation.window!.focused = false; observation.fields['window.focused']!.value = false; } }
+    await rewrite(run.dir, rows); assert.equal((await replayRun(run.dir)).complete, true); await assert.rejects(replayPlayRun(run.dir), /already_satisfied_gate/);
+  } finally { await run.cleanup(); }
 });

@@ -16,7 +16,7 @@ const equal = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.st
 const identity = (plan: PlayPlan) => ({ id: plan.id, revision: plan.revision });
 function fail(reason: string): never { throw new Error(`play_replay:${reason}`); }
 function assertPlan(value: unknown): asserts value is PlayPlan {
-  if (!object(value) || typeof value.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value.id) || !Number.isSafeInteger(value.revision) || Number(value.revision) < 1 || !Array.isArray(value.steps) || value.steps.length < 1 || value.steps.length > 100) fail('invalid_plan');
+  if (!object(value) || !equal(Object.keys(value).sort(), ['id', 'revision', 'steps']) || typeof value.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value.id) || !Number.isSafeInteger(value.revision) || Number(value.revision) < 1 || !Array.isArray(value.steps) || value.steps.length < 1 || value.steps.length > 50) fail('invalid_plan');
   const ids = new Set<string>();
   for (const step of value.steps) {
     if (!object(step) || typeof step.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(step.id) || ids.has(step.id)) fail('invalid_or_duplicate_step');
@@ -27,9 +27,15 @@ function assertPlan(value: unknown): asserts value is PlayPlan {
     if (step.name === 'use_action_slot' && (typeof step.slot !== 'string' || !step.slot)) fail('step_slot');
     if (['open_panel', 'close_panel'].includes(String(step.name)) && step.panel !== 'inventory') fail('step_panel');
     if (!['move_for', 'turn_for', 'jump', 'use_action_slot', 'open_panel', 'close_panel'].includes(String(step.name))) fail('step_skill');
+    const keys = ['id', 'name', ...(['open_panel', 'close_panel'].includes(String(step.name)) ? ['panel'] : step.name === 'turn_for' ? ['dx', 'duration_ms'] : step.name === 'use_action_slot' ? ['slot', 'duration_ms'] : ['duration_ms'])].sort();
+    if (!equal(Object.keys(step).sort(), keys)) fail('step_fields');
   }
 }
 function expectedAction(step: SkillStep, observation: Observation, bindings: SkillBindings): NativeAction {
+  if (step.name === 'open_panel' || step.name === 'close_panel') {
+    const field = observation.fields['ui.inventory_open'];
+    if (field?.status !== 'known' || field.source !== 'cv' || field.source_observation_id !== observation.id || typeof field.value !== 'boolean' || field.value === (step.name === 'open_panel')) fail('inventory_dispatch_state');
+  }
   if (step.name === 'turn_for') {
     const window = observation.window; if (!window) return fail('turn_window_missing');
     const x = Math.floor(window.client_width / 2); const y = Math.floor(window.client_height * 0.4);
@@ -154,6 +160,10 @@ export async function replayPlayRun(directory: string): Promise<PlayReplay> {
           if (active.action || result.action_id !== null || result.receipt !== null || !before || !['open_panel', 'close_panel'].includes(step.name) || result.after_observation_id !== null) fail('already_satisfied_shape');
           const field = before.fields['ui.inventory_open']; const sample = samples.get(boundaries.get(before.id) ?? '');
           if (field?.status !== 'known' || field.source !== (mode === 'live' ? 'cv' : 'simulated') || field.value !== (step.name === 'open_panel') || field.source_observation_id !== before.id || row.at_ms - field.captured_at_ms > Number(maxAge)) fail('already_satisfied_evidence');
+          for (const name of ['capture.available', 'window.focused']) {
+            const gate = before.fields[name];
+            if (gate?.status !== 'known' || gate.value !== true || row.at_ms - gate.captured_at_ms > Number(maxAge)) fail('already_satisfied_gate');
+          }
           if (mode === 'live' && (!sample?.detectors.inventory_open.calibration_id || sample.detectors.inventory_open.value !== field.value || sample.capture.status !== 'ok' || !before.artifacts.length)) fail('already_satisfied_raw_evidence');
         } else if (active.action) {
           const intent = active.action; const receipt = result.receipt; const link = links.get(intent.id);
