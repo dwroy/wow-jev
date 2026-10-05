@@ -53,7 +53,7 @@ export async function runLayerLive(options: LayerLiveOptions): Promise<number> {
     ...(options.npcCalibrationFile ? { npcCalibrationPath: resolve(options.npcCalibrationFile) } : {}),
     config: { mode: 'live', layer_task: task, body_profile: profile, client_version: client, client_instance: instance, native_build: native.evidence, seed_enabled: false, artifact_format: 'png', role_scene_confirmed: true } });
   for (const [name, bytes] of [['task.json',taskFile.bytes],['body-profile.json',profileFile.bytes],['client-profile.json',clientFile.bytes]] as const) await writeFile(join(dir,name),bytes,{flag:'wx',mode:0o400});
-  const journal = await LayerJournal.create(join(dir,'layer-journal'),runId,now,{ mode:'live',task,body_profile:profile,client_version:client,client_instance:instance,native_build:native.evidence,code:store.manifest.code,protocol_schemas:store.manifest.schemas,
+  const journal = await LayerJournal.create(join(dir,'layer-journal'),runId,now,{ mode:'live',task,body_profile:profile,client_version:client,client_instance:instance,native_build:native.evidence,code:store.manifest.code,protocol_schemas:store.manifest.schemas,hand_session_id:sessionId,
     configuration_sha256:{task:hashBuffer(taskFile.bytes),body_profile:hashBuffer(profileFile.bytes),client_profile:hashBuffer(clientFile.bytes)} });
   const controller = new AbortController(); const abort = () => controller.abort(options.signal.reason);
   options.signal.addEventListener('abort',abort,{once:true}); if(options.signal.aborted) abort();
@@ -77,6 +77,7 @@ export async function runLayerLive(options: LayerLiveOptions): Promise<number> {
     const first = await eyes.collect(true); if (!first.observation.window?.focused || first.observation.fields['capture.available']?.value !== true) throw new Error('layer_capture_not_ready');
     if(controller.signal.aborted) throw new Error('layer_start_cancelled');
     hand = await NativeInputClient.start({...await nativePaths(native.nativeRoot),window:options.window,expectedPid:options.pid,sessionId,cwd:options.repo},await loadNativeValidator(schemas['native-input-v1.schema.json']!)); release='unconfirmed';
+    await append('layer_hand_ready',hand.ready);
     hand.on('disconnect',()=>controller.abort('layer_input_disconnected'));
     hand.on('receipt',message=>{void store.append('native_input',{direction:'in',message,action_id:message.op==='execute'?message.id:null},now()).catch(logFailed);});
     execution = createLayerExecution({ profile,runId,hand,collect:()=>eyes!.collect(true),now,append,currentIdentity:()=>({task_id:task.id,task_revision:task.revision,run_epoch:1}),expectedWindow:first.observation.window });

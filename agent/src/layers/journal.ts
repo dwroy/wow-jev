@@ -71,7 +71,7 @@ export async function replayLayerJournal(dir: string): Promise<{ run_id: string;
     if(value.kind==='body_native_receipt'){
       if(manifest?.mode==='simulated')throw new Error('layer_replay_simulated_native_receipt');
       const data=value.data as {command_id:string;receipt:NativeReceipt};if(!nativeValidator)throw new Error('layer_replay_native_schema_missing');assertNativeMessage(data.receipt,nativeValidator);
-      if(data.receipt.type!=='receipt'||data.receipt.op!=='execute'||data.receipt.status==='accepted'||data.receipt.id!==data.command_id||!bodyCommands.has(data.command_id)||receipts.has(data.command_id))throw new Error('layer_replay_native_receipt_identity');
+      if(data.receipt.type!=='receipt'||data.receipt.op!=='execute'||data.receipt.status==='accepted'||data.receipt.id!==data.command_id||data.receipt.session_id!==manifest?.hand_session_id||!bodyCommands.has(data.command_id)||receipts.has(data.command_id))throw new Error('layer_replay_native_receipt_identity');
       receipts.set(data.command_id,data.receipt);
     }
     if(value.kind==='layer_shutdown'){if(shutdown)throw new Error('layer_replay_duplicate_shutdown');shutdown=value.data as Record<string,unknown>;}
