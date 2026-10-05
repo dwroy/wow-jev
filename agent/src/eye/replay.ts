@@ -9,7 +9,10 @@ import { assertEye, loadEyeValidator, type EyeSample } from './protocol.js';
 import { loadSeedValidator } from './seed.js';
 import { hashFile, hashBuffer, type EyeLogRecord, type RunManifest } from './store.js';
 import { EyeState, type SeedResult, type SourceImage, type TargetContext } from './state.js';
-interface CombatBundle { version: number; kind: string; id: string; client_width: number; client_height: number; signature?: unknown; detectors: Record<string, { templates: Record<string, { file: string; sha256: string }[]> }> }
+interface Template { file: string; sha256: string }
+interface CombatBundle { version: number; kind: string; id: string; client_width: number; client_height: number;
+  signature?: { mask: string; names?: { name: string; signature: string; templates: Template[] }[]; reject_templates?: Template[] };
+  detectors: Record<string, { target_binding?: { target_name: string; target_signature: string }; templates: Record<string, Template[]> }> }
 
 /** Reconstructs recorded facts only; it never launches native processes or model workers. */
 export async function replayRun(directory: string): Promise<{ run_id: string; records: number; observations: number; actions: number; complete: boolean; artifacts: number; confirmed_effects: number }> {
@@ -40,8 +43,39 @@ export async function replayRun(directory: string): Promise<{ run_id: string; re
       if (frozen.files[template.file] !== template.sha256) throw new Error('combat_calibration_template_hash');
       referenced.add(template.file);
     }
+    if (bundle.signature?.mask === 'name-bank-v1') {
+      if (!Array.isArray(bundle.signature.names) || !bundle.signature.names.length || !Array.isArray(bundle.signature.reject_templates) || !bundle.signature.reject_templates.length) throw new Error('identity_bank_manifest');
+      for (const template of [...bundle.signature.names.flatMap((entry) => entry.templates), ...bundle.signature.reject_templates]) {
+        if (frozen.files[template.file] !== template.sha256 || referenced.has(template.file)) throw new Error('identity_bank_template_hash');
+        referenced.add(template.file);
+      }
+    }
     if (referenced.size !== Object.keys(frozen.files).length) throw new Error('combat_calibration_extra_file');
     combatBundle = bundle;
+  }
+  let npcBundle: CombatBundle | null = null;
+  if (manifest.npc_calibration) {
+    const frozen = manifest.npc_calibration;
+    if (!frozen.files['calibration.json']) throw new Error('npc_calibration_manifest');
+    const folder = await lstat(join(dir, 'npc-calibration'));
+    if (!folder.isDirectory() || folder.isSymbolicLink()) throw new Error('npc_calibration_path');
+    for (const [name, hash] of Object.entries(frozen.files)) {
+      if ((name !== 'calibration.json' && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.png$/.test(name)) || !/^[0-9a-f]{64}$/.test(hash)) throw new Error('npc_calibration_manifest');
+      const path = join(dir, 'npc-calibration', name), file = await lstat(path);
+      if (!file.isFile() || file.isSymbolicLink() || await hashFile(path) !== hash) throw new Error('npc_calibration_hash_mismatch');
+    }
+    const bundle = JSON.parse(await readFile(join(dir, 'npc-calibration/calibration.json'), 'utf8')) as CombatBundle;
+    if (bundle.version !== 1 || bundle.kind !== 'npc-ui' || bundle.id !== frozen.id) throw new Error('npc_calibration_id');
+    const referenced = new Set(['calibration.json']);
+    for (const [key, detector] of Object.entries(bundle.detectors)) {
+      if (!['npc_dialog_open', 'npc_in_interaction_range'].includes(key)) throw new Error('npc_detector_not_configured');
+      for (const entries of Object.values(detector.templates)) for (const template of entries) {
+        if (frozen.files[template.file] !== template.sha256 || referenced.has(template.file)) throw new Error('npc_calibration_template_hash');
+        referenced.add(template.file);
+      }
+    }
+    if (referenced.size !== Object.keys(frozen.files).length) throw new Error('npc_calibration_extra_file');
+    npcBundle = bundle;
   }
   for (const prompt of Object.values(extension.extra_prompts ?? {})) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(prompt.file) || !/^[0-9a-f]{64}$/.test(prompt.sha256) || !prompt.version) throw new Error('extra_prompt_manifest');
@@ -79,9 +113,22 @@ export async function replayRun(directory: string): Promise<{ run_id: string; re
       });
       if (data.direction === 'in' && data.message.type === 'sample') {
         for (const [key, detector] of Object.entries(data.message.detectors)) if (key !== 'inventory_open' && detector?.calibration_id) {
+          if (key.startsWith('npc_')) {
+            if (detector.calibration_id !== manifest.npc_calibration?.id || !npcBundle?.detectors[key]) throw new Error('npc_calibration_source_missing');
+            if (detector.status === 'known' && (data.message.window.client_width !== npcBundle.client_width || data.message.window.client_height !== npcBundle.client_height)) throw new Error('npc_layout_mismatch_known');
+            if (key === 'npc_in_interaction_range' && detector.status === 'known') {
+              const binding = npcBundle.detectors[key]!.target_binding, fields = data.message.detectors;
+              if (!binding || fields.target_name?.value !== binding.target_name || fields.target_signature?.value !== binding.target_signature) throw new Error('npc_target_binding_mismatch');
+            }
+            continue;
+          }
           if (detector.calibration_id !== extension.combat_calibration?.id || !combatBundle) throw new Error('combat_calibration_source_missing');
-          if (key === 'target_signature' ? !combatBundle.signature : !combatBundle.detectors[key]) throw new Error('combat_detector_not_configured');
+          if (key === 'target_name' ? combatBundle.signature?.mask !== 'name-bank-v1' : key === 'target_signature' ? !combatBundle.signature : !combatBundle.detectors[key]) throw new Error('combat_detector_not_configured');
           if (detector.status === 'known' && (data.message.window.client_width !== combatBundle.client_width || data.message.window.client_height !== combatBundle.client_height)) throw new Error('combat_layout_mismatch_known');
+          if (key === 'target_name' && detector.status === 'known') {
+            const fields = data.message.detectors, name = combatBundle.signature?.names?.find((entry) => entry.name === detector.value);
+            if (!name || fields.target_signature?.status !== 'known' || fields.target_signature.value !== name.signature || fields.target_signature.calibration_id !== detector.calibration_id) throw new Error('identity_bank_name_mismatch');
+          }
         }
         samples.set(data.message.id, data.message);
       }

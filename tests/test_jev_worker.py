@@ -174,3 +174,62 @@ def test_timeout_and_upload_options_are_strict():
             jw.Worker(timeout=timeout)
     with pytest.raises(sw.Failure):
         jw.Worker(allow_upload='false')
+
+
+def test_frozen_prompt_bytes_are_sent_after_default_source_and_frozen_file_change(jpeg, tmp_path, monkeypatch):
+    original = '冻结版本：只选择有限候选。\n'
+    source = tmp_path / 'source.txt'; source.write_text('旧默认prompt')
+    frozen = tmp_path / 'frozen.txt'; frozen.write_text(original)
+    sha = hashlib.sha256(frozen.read_bytes()).hexdigest()
+    monkeypatch.setattr(jw, 'PROMPT_PATH', source)
+    sent = []
+    def transport(payload, *_):
+        sent.append(payload['messages'][0]['content'])
+        return provider(reply())
+    item = worker(transport, prompt_file=frozen, prompt_sha256=sha)
+    # A running worker owns validated bytes, including across later source changes.
+    source.write_text('不同默认prompt')
+    frozen.write_text('不同冻结路径内容')
+    for _ in range(2):
+        result = item.choose(command(jpeg))
+        assert result['status'] == 'ok' and result['prompt_sha256'] == sha
+    assert sent == [original, original]
+
+
+@pytest.mark.parametrize('kind', ['hash', 'missing-hash', 'bad-hash-type', 'empty', 'large', 'directory', 'missing', 'symlink', 'fifo', 'relative', 'invalid-utf8'])
+def test_prompt_file_rejects_bad_or_nonregular_sources_before_credentials(tmp_path, kind):
+    path = tmp_path / 'prompt.txt'; path.write_text('候选版本\n')
+    sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    expected = 'jev_prompt_'
+    if kind == 'hash': sha = '0' * 64
+    elif kind == 'missing-hash': sha = None
+    elif kind == 'bad-hash-type': sha = True
+    elif kind == 'empty': path.write_bytes(b'')
+    elif kind == 'large': path.write_bytes(b'x' * 65537)
+    elif kind == 'directory': path = tmp_path
+    elif kind == 'missing': path = tmp_path / 'missing.txt'
+    elif kind == 'symlink':
+        link = tmp_path / 'link.txt'; link.symlink_to(path); path = link
+    elif kind == 'fifo':
+        import os
+        path.unlink(); os.mkfifo(path)
+    elif kind == 'relative': path = Path('relative.txt')
+    elif kind == 'invalid-utf8': path.write_bytes(b'\xff'); sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    calls = []
+    with pytest.raises((sw.Failure, UnicodeDecodeError)) as error:
+        jw.Worker(prompt_file=path, prompt_sha256=sha, credential_loader=lambda _: calls.append(1))
+    if isinstance(error.value, sw.Failure): assert error.value.code.startswith(expected)
+    assert not calls
+
+
+def test_real_disabled_frozen_worker_cli_and_bad_hash_fail_without_image_or_credentials(tmp_path):
+    path = tmp_path / 'frozen.txt'; path.write_text('CLI冻结版本\n')
+    sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    args = [sys.executable, str(jw.ROOT / 'jev_worker.py'), '--serve', '--env-file', '/not/read.env', '--prompt-file', str(path), '--prompt-sha256']
+    source = json.dumps(command('/not/read.jpg')) + '\n'
+    accepted = subprocess.run(args + [sha], input=source, text=True, capture_output=True, timeout=3)
+    assert accepted.returncode == 0 and accepted.stderr == ''
+    result = json.loads(accepted.stdout)
+    assert result['status'] == 'disabled' and result['prompt_sha256'] == sha
+    rejected = subprocess.run(args + ['0' * 64], input=source, text=True, capture_output=True, timeout=3)
+    assert rejected.returncode == 2 and rejected.stdout == '' and rejected.stderr.strip() == 'jev_worker_startup_failed'

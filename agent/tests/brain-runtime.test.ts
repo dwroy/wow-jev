@@ -82,6 +82,40 @@ test('missing range waits then escalates; sent input alone never declares arriva
       before_observation_id: context.revalidated.observation.id, after_observation_id: null }] });
   assert.equal((await moved.brain.run(npc)).status, 'escalated');
 });
+
+test('explicit NPC interaction probe permits one attempt with unknown range and needs later dialog', async () => {
+  const goal: BrainGoal = { id: 'probe', revision: 1, kind: 'interact_npc', description: '尝试与已选NPC交互一次', target_signature: npc.target_signature,
+    target_name: npc.target_name, interaction_slot: 'interact' };
+  const s = setup(); delete s.values['npc.in_interaction_range'];
+  const result = await s.brain.run(goal);
+  assert.equal(result.status, 'completed'); assert.equal(result.game_effect, 'unverified');
+  assert.deepEqual(s.plans.map((plan) => plan.steps[0]!.name), ['use_action_slot']);
+  const noEffect = setup(); delete noEffect.values['npc.in_interaction_range'];
+  noEffect.ports.executeCode = async (plan, context) => {
+    noEffect.plans.push(plan);
+    return { plan: { id: plan.id, revision: plan.revision }, status: 'completed', steps: [{ step_id: plan.steps[0]!.id, skill: plan.steps[0]!.name,
+      status: 'completed', action_id: null, receipt: null, before_observation_id: context.revalidated.observation.id, after_observation_id: null }] };
+  };
+  const failed = await noEffect.brain.run(goal);
+  assert.equal(failed.status, 'escalated'); assert.equal(failed.reason, 'npc_probe_dialog_not_observed');
+  assert.equal(noEffect.plans.filter((plan) => plan.steps[0]!.name === 'use_action_slot').length, 1);
+  assert.ok(noEffect.plans.every((plan) => plan.steps[0]!.name !== 'move_for'));
+  assert.throws(() => parseBrainGoal({ ...goal, interaction_slot: null }), /brain_goal_npc_probe/);
+});
+
+test('explicit probe still rejects combat, dead target and name changes after planning', async () => {
+  const goal: BrainGoal = { id: 'probe', revision: 1, kind: 'interact_npc', description: '明确有限交互', target_signature: npc.target_signature,
+    target_name: npc.target_name, interaction_slot: 'interact' };
+  for (const [field, value] of [['player.in_combat', true], ['target.dead', true], ['target.name', '其它NPC']] as const) {
+    const s = setup(); delete s.values['npc.in_interaction_range']; s.values[field] = value;
+    assert.equal((await s.brain.run(goal)).status, 'escalated');
+    assert.ok(s.plans.every((plan) => plan.steps[0]!.name === 'wait'));
+  }
+  const s = setup(); delete s.values['npc.in_interaction_range'];
+  s.ports.planner.plan = async (request) => { s.values['target.name'] = '已换目标'; return response(request); };
+  assert.equal((await s.brain.run(goal)).status, 'escalated');
+  assert.ok(s.plans.every((plan) => plan.steps[0]!.name === 'wait'));
+});
 test('focus, signature/name loss, combat and dead target prevent active skills', async () => {
   for (const [name, value] of [['window.focused', false], ['target.signature', 'other'], ['target.name', 'other'], ['target.present', false],
     ['target.dead', true], ['player.in_combat', true]] as const) {

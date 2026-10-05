@@ -67,6 +67,19 @@ export class EyeState {
       }
       this.targetContext = next; this.targetWindow = window;
     }
+    // A calibrated visible-name bank supplies the name in this same frame. Apply
+    // it after target invalidation so a new frame can never retain an old name.
+    const extraKeys = { target_name: 'target.name', npc_dialog_open: 'ui.npc_dialog_open', npc_in_interaction_range: 'npc.in_interaction_range' } as const;
+    for (const [nativeKey, fieldKey] of Object.entries(extraKeys)) {
+      const detector = sample.detectors[nativeKey as keyof typeof extraKeys];
+      if (detector?.calibration_id !== null && detector?.calibration_id !== undefined) this.cvActive.add(fieldKey);
+      if (!this.cvActive.has(fieldKey)) continue;
+      const ok = sample.capture.status === 'ok' && detector?.calibration_id !== null && detector?.calibration_id !== undefined;
+      const details = { ...metadata, source: 'cv' as const, confidence: ok ? detector.confidence : 0,
+        ...(ok && detector.reason ? { reason: detector.reason } : !ok ? { reason: { code: sample.capture.status === 'ok' ? 'calibrated_detector_missing' : 'capture_unavailable' } } : {}) };
+      update(fieldKey, ok && detector.status === 'known' ? { ...details, status: 'known', value: detector.value! }
+        : { ...details, status: ok ? detector.status as 'unknown' | 'unavailable' : 'unavailable', value: null });
+    }
   }
   seedSourceContext(): Pick<SourceImage, 'target_context'> { return this.targetContext ? { target_context: { ...this.targetContext } } : {}; }
   failedCapture(earliest: number, latest: number, observationId: string, code: string): void {

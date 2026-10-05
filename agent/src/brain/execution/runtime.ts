@@ -204,7 +204,7 @@ export class ExecutionBrain {
       if (this.memory!.goal.kind === 'panel_cycle' && this.memory!.phase === 'open_panel') { this.memory!.completed_phases.push('open_panel'); this.memory!.phase = 'close_panel'; this.memory!.waits = 0; }
       else return { status: 'completed', reason: approved.reason, evidence: [fresh.observation.id] };
     } else if (approved.outcome === 'wait') this.memory!.waits++;
-    else { this.memory!.waits = 0; if (approved.id.startsWith('approach-')) this.memory!.npc_moves++; if (approved.id === 'interact-npc') this.memory!.phase = 'verify'; }
+    else { this.memory!.waits = 0; if (approved.id.startsWith('approach-')) this.memory!.npc_moves++; if (['interact-npc', 'interact-npc-probe'].includes(approved.id)) this.memory!.phase = 'verify'; }
     await this.active(this.event('brain.memory', { memory: this.memory }), epoch); return null;
   }
 }

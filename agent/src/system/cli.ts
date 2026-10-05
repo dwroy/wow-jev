@@ -3,6 +3,7 @@ import { lstat, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 import { parseArgs } from 'node:util';
 import { ExecutionBrain } from '../brain/execution/runtime.js';
 import { validateModelReply as validateBrainReply, strictJson } from '../brain/execution/planner.js';
@@ -21,13 +22,19 @@ import { buildCandidates, candidatesHash } from '../reflex/candidates.js';
 import { compileSkill, DEFAULT_SKILL_BINDINGS } from '../reflex/skills.js';
 import type { KnowledgeSnapshot, RuntimeVersion } from './types.js';
 import { reviewRuns } from './learning.js';
-import { launchFrozenTask } from './launch.js';
+import { launchFrozenTask, loadFrozenExecution } from './launch.js';
 import { replaySystemRun } from './replay.js';
 import { SystemSimulation, SIM_NPC_SIGNATURE, type DemoScenario } from './simulation.js';
+import { runLiveSystem } from './live.js';
+import { requestPlayControl } from '../play/control.js';
 
 const print = (data: unknown) => process.stdout.write(`${JSON.stringify(data)}\n`);
-const HELP = `第5–7阶段工程入口（本轮不操作Windows）：
+const HELP = `三层Agent入口：
 npm run system -- demo [--scenario normal|target-lost|unknown|cancel] [--goal-kind npc|panel|observe] [--knowledge-file FILE] [--registry DIR]
+npm run system -- observe --window HWND --pid PID --client-profile FILE [--registry DIR] [--combat-calibration FILE] [--run-dir DIR]
+npm run system -- live --live --role-scene-confirmed --window HWND --pid PID --client-profile FILE --goal FILE [--registry DIR] [--bindings FILE] [--calibration FILE] [--combat-calibration FILE] [--npc-calibration FILE] [--run-dir DIR]
+npm run system -- status --session-id ID
+npm run system -- cancel --session-id ID
 npm run system -- replay --run-dir DIR
 npm run system -- learn --run-dir DIR [--run-dir DIR...] --knowledge-dir DIR --out-dir NEW_DIR
 npm run system -- inspect --knowledge-file FILE
@@ -39,6 +46,10 @@ npm run system -- version --registry DIR
 npm run system -- rollback --registry DIR --version-id ID
 
 demo始终模拟、不调用API/Windows/凭据；registry模式真正执行已批准的冻结代码。
+observe只读采样；live使用Windows原生眼和手，必须核对实际正式服12.x客户端版本并保持前台。
+live/observe的registry模式必须包含冻结启动支持；从批准C#源码编译并复用签名NativeBuild，日志绑定实际二进制。禁止外部native-root及伪造版本/hash覆盖。
+NPC交互需要名字bank、NPC对话校准及显式键位；interact_npc最多一次有限探测，未知距离不支持自动接近。
+模型需同时显式--seed和--allow-game-image-upload；不带开关不读取凭据。
 learn严格重放既有日志，保留unknown与反例；stage/evaluate运行隔离回归，publish仅接受工具签发的通过报告。
 `;
 function integer(raw: string | undefined, fallback: number, maximum: number): number {
@@ -61,13 +72,45 @@ async function main(): Promise<number> {
     registry: { type: 'string' }, 'candidates-root': { type: 'string' }, proposal: { type: 'string' },
     'candidate-id': { type: 'string' }, 'evaluation-id': { type: 'string' }, 'version-id': { type: 'string' },
     'approved-by': { type: 'string' }, activate: { type: 'boolean' }, 'executing-source-sha256': { type: 'string' },
+    window: { type: 'string' }, pid: { type: 'string' }, goal: { type: 'string' }, bindings: { type: 'string' },
+    calibration: { type: 'string' }, 'combat-calibration': { type: 'string' }, 'npc-calibration': { type: 'string' },
+    live: { type: 'boolean' }, 'role-scene-confirmed': { type: 'boolean' }, seed: { type: 'boolean' }, 'allow-game-image-upload': { type: 'boolean' },
+    'wait-focus-ms': { type: 'string' }, 'native-root': { type: 'string' }, python: { type: 'string' }, 'seed-env-file': { type: 'string' },
+    'client-profile': { type: 'string' }, 'evaluation-context': { type: 'string' }, 'session-id': { type: 'string' },
   } });
   if (values.help) { process.stdout.write(HELP); return 0; }
   const mode = positionals[0];
-  if (positionals.length !== 1 || !mode || !['demo', 'replay', 'learn', 'inspect', 'baseline', 'stage', 'evaluate', 'publish', 'version', 'rollback'].includes(mode)) throw new Error('system_mode_required');
-  const repo = resolve(values['repo-root'] ?? fileURLToPath(new URL('../../..', import.meta.url)));
+  if (positionals.length !== 1 || !mode || !['demo', 'live', 'observe', 'status', 'cancel', 'replay', 'learn', 'inspect', 'baseline', 'stage', 'evaluate', 'publish', 'version', 'rollback'].includes(mode)) throw new Error('system_mode_required');
+  const implementationRepo = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
+  const repo = resolve(values['repo-root'] ?? implementationRepo);
+  if (values.registry && repo !== implementationRepo) throw new Error('system_registry_dependency_repo_must_match_launcher');
   const dirs = values['run-dir'] ?? [];
   if (mode !== 'learn' && dirs.length > 1) throw new Error('system_single_run_required');
+  const frozen = await loadFrozenExecution(repo, mode, values);
+  if (!frozen && (values['runtime-version-file'] || values['executing-source-sha256'])) throw new Error('system_snapshot_metadata_requires_verified_launch');
+  if (mode === 'status' || mode === 'cancel') {
+    if (!values['session-id']) throw new Error('system_session_id_required');
+    print(await requestPlayControl(values['session-id'], mode)); return 0;
+  }
+  if (mode === 'live' || mode === 'observe') {
+    if (values.registry) {
+      if (values['runtime-version-file'] || values['knowledge-file'] || values['knowledge-sha256'] || values['prompt-file'] || values['native-root'] || values['executing-source-sha256']) throw new Error('system_registry_snapshot_cannot_be_overridden');
+      const snapshot = await new RuntimeVersionRegistry(resolve(values.registry)).resolveForTask(values['version-id']);
+      if (!snapshot.prompts['jev-retail-v1'] || !(await readFile(join(snapshot.code_root, 'agent/src/system/cli.ts'), 'utf8')).includes('loadFrozenExecution')) throw new Error('system_version_frozen_live_not_supported');
+      const args = [mode];
+      const fileFlags = ['goal', 'bindings', 'calibration', 'combat-calibration', 'npc-calibration', 'client-profile', 'evaluation-context', 'seed-env-file'] as const;
+      for (const flag of fileFlags) if (values[flag]) args.push(`--${flag}`, resolve(values[flag]!));
+      if (values.seed && !values['seed-env-file']) args.push('--seed-env-file', join(homedir(), '.config/wow-jev/api.env'));
+      for (const flag of ['window', 'pid', 'decisions', 'max-run-ms', 'wait-focus-ms', 'python'] as const) if (values[flag]) args.push(`--${flag}`, values[flag]!);
+      for (const flag of ['live', 'role-scene-confirmed', 'seed', 'allow-game-image-upload'] as const) if (values[flag]) args.push(`--${flag}`);
+      args.push('--run-dir', resolve(dirs[0] ?? join(repo, 'out/system', `brain-${randomUUID()}`)));
+      return launchFrozenTask(snapshot, repo, args, resolve(values.registry));
+    }
+    if (!frozen && values['version-id']) throw new Error('system_live_version_id_requires_registry');
+    return runLiveSystem(values, repo, mode === 'observe', frozen);
+  }
+  if (['window', 'pid', 'goal', 'bindings', 'calibration', 'combat-calibration', 'npc-calibration', 'live', 'role-scene-confirmed', 'seed', 'allow-game-image-upload',
+    'client-profile', 'evaluation-context', 'session-id', 'native-root', 'wait-focus-ms', 'seed-env-file'].some((key) => values[key as keyof typeof values] !== undefined)) throw new Error('system_live_options_only');
   if (mode === 'learn') {
     if (!values['knowledge-dir'] || !values['out-dir']) throw new Error('system_learning_destinations_required');
     print(await reviewRuns(dirs, values['knowledge-dir'], values['out-dir'])); return 0;
@@ -112,11 +155,11 @@ async function main(): Promise<number> {
     const args = ['demo', '--scenario', scenario, '--goal-kind', goalKind,
       '--run-dir', persistentRunDir, ...(values.decisions ? ['--decisions', values.decisions] : []),
       ...(values['max-run-ms'] ? ['--max-run-ms', values['max-run-ms']] : [])];
-    return launchFrozenTask(snapshot, repo, args);
+    return launchFrozenTask(snapshot, repo, args, resolve(values.registry));
   }
   const snapshot = await knowledge(values['knowledge-file'], values['knowledge-sha256']); const knowledgeHash = knowledgeSha256(snapshot);
   const promptPath = resolve(values['prompt-file'] ?? join(repo, 'perception/prompts/brain-retail-v1.txt')); const promptHash = await hashFile(promptPath);
-  const jevPromptPath = join(repo, 'perception/prompts/jev-retail-v1.txt'); const jevPromptHash = await hashFile(jevPromptPath);
+  const jevPromptPath = frozen?.prompt_files['jev-retail-v1'] ?? join(repo, 'perception/prompts/jev-retail-v1.txt'); const jevPromptHash = await hashFile(jevPromptPath);
   const code = await runCommand('git', ['rev-parse', 'HEAD'], { cwd: repo });
   const runtimeVersion: RuntimeVersion = values['runtime-version-file'] ? await objectFile(values['runtime-version-file']) as RuntimeVersion : {
     schema_version: 1, id: 'system-demo-baseline', parent_id: null, created_at: new Date().toISOString(), code_commit: code.stdout.trim(),

@@ -82,7 +82,7 @@ async function main(): Promise<number> {
   const { values, positionals } = parseArgs({ allowPositionals: true, strict: true, options: {
     help: { type: 'boolean' }, window: { type: 'string' }, pid: { type: 'string' }, live: { type: 'boolean' },
     'role-scene-confirmed': { type: 'boolean' }, seed: { type: 'boolean' }, 'allow-game-image-upload': { type: 'boolean' },
-    goal: { type: 'string' }, bindings: { type: 'string' }, calibration: { type: 'string' }, 'combat-calibration': { type: 'string' },
+    goal: { type: 'string' }, bindings: { type: 'string' }, calibration: { type: 'string' }, 'combat-calibration': { type: 'string' }, 'npc-calibration': { type: 'string' },
     decisions: { type: 'string' }, 'max-run-ms': { type: 'string' }, 'run-dir': { type: 'string' },
     'wait-focus-ms': { type: 'string' }, 'repo-root': { type: 'string' }, 'native-root': { type: 'string' },
     python: { type: 'string' }, 'seed-env-file': { type: 'string' }, 'session-id': { type: 'string' },
@@ -101,7 +101,7 @@ async function main(): Promise<number> {
   }
   const simulated = mode === 'demo'; const active = mode === 'live';
   if (!active && (values.live || values['role-scene-confirmed'])) throw new Error('jev_live_options_only_for_live');
-  if (simulated && (values.seed || values['allow-game-image-upload'] || values.window || values.pid || values.calibration || values['combat-calibration'])) throw new Error('jev_demo_options');
+  if (simulated && (values.seed || values['allow-game-image-upload'] || values.window || values.pid || values.calibration || values['combat-calibration'] || values['npc-calibration'])) throw new Error('jev_demo_options');
   if (values['allow-game-image-upload'] && !values.seed) throw new Error('jev_upload_requires_seed');
   if (active && (!values.live || !values['role-scene-confirmed'] || !values.goal || !values['combat-calibration'])) throw new Error('jev_live_scene_goal_calibration_required');
   const repo = resolve(values['repo-root'] ?? fileURLToPath(new URL('../../..', import.meta.url)));
@@ -135,6 +135,7 @@ async function main(): Promise<number> {
   const store = await EyeRunStore.create({ dir, runId, repo, nativeRoot, schemaPaths,
     ...(values.calibration ? { calibrationPath: resolve(values.calibration) } : {}),
     ...(values['combat-calibration'] ? { combatCalibrationPath: resolve(values['combat-calibration']) } : {}),
+    ...(values['npc-calibration'] ? { npcCalibrationPath: resolve(values['npc-calibration']) } : {}),
     extraPrompts: [{ version: 'jev-retail-v1', path: promptPath }],
     config: { mode: simulated ? 'simulated' : 'live', actor: 'jev', jev_goal: goal, bindings,
       max_decisions: maxDecisions, max_run_ms: maxRunMs, max_observation_age_ms: 750, cv_max_age_ms: 750,
@@ -165,6 +166,7 @@ async function main(): Promise<number> {
         exportWindowsPath: await wslPath(join(dir, 'native-export'), 'w'),
         ...(store.manifest.calibration ? { calibrationWindowsPath: await wslPath(join(dir, 'calibration/calibration.json'), 'w') } : {}),
         ...(store.manifest.combat_calibration ? { combatCalibrationWindowsPath: await wslPath(join(dir, 'combat-calibration/calibration.json'), 'w') } : {}),
+        ...(store.manifest.npc_calibration ? { npcCalibrationWindowsPath: await wslPath(join(dir, 'npc-calibration/calibration.json'), 'w') } : {}),
         onMessage: (direction, message) => { void store.append('native_eye', { direction, message }, now()).catch(rawFailure); } },
         await loadEyeValidator(schemaPaths['native-eye-v1.schema.json']!));
       eyes = new EyeRuntime(eye, store, validator, { now, cvMaxAgeMs: 750 });
@@ -183,7 +185,8 @@ async function main(): Promise<number> {
     if (stopRequested) throw new Error('jev_cancelled_during_startup');
     chooser = simulated ? simulatedChooser(promptSha256) : values.seed && values['allow-game-image-upload']
       ? new JevChoiceClient({ python: values.python ?? '/usr/bin/python3', worker: join(repo, 'perception/jev_worker.py'), cwd: repo,
-        allowUpload: true, ...(values['seed-env-file'] ? { envFile: resolve(values['seed-env-file']) } : {}), now, timeoutMs: 15000 })
+        allowUpload: true, promptFile: join(dir, 'prompts/jev-retail-v1.txt'), promptSha256,
+        ...(values['seed-env-file'] ? { envFile: resolve(values['seed-env-file']) } : {}), now, timeoutMs: 15000 })
       : new DisabledJevChooser(promptSha256);
     loop = new JevLoop({ now, append, collect, buildCandidates, candidatesHash, chooser,
       imagePath: (before) => before.artifact ? join(store.dir, before.artifact.path) : null,

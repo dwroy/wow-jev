@@ -6,7 +6,7 @@ import { assertEye, type EyeCommand, type EyeMessage, type EyeReady, type EyeSam
 
 export interface EyeClientOptions {
   executable: string; window: string; expectedPid: number; cwd: string; now: () => number;
-  sessionId?: string; calibrationWindowsPath?: string; combatCalibrationWindowsPath?: string; exportWindowsPath?: string; startupTimeoutMs?: number; sampleTimeoutMs?: number;
+  sessionId?: string; calibrationWindowsPath?: string; combatCalibrationWindowsPath?: string; npcCalibrationWindowsPath?: string; exportWindowsPath?: string; startupTimeoutMs?: number; sampleTimeoutMs?: number;
   prefixArgs?: readonly string[]; onMessage?: (direction: 'out' | 'in', message: EyeMessage) => void;
 }
 interface Pending { op: 'sample' | 'shutdown'; resolve: (value: EyeSample | EyeStopped) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
@@ -23,7 +23,8 @@ export class NativeEyeClient {
   private constructor(private options: EyeClientOptions, private validator: EyeValidator) {
     this.sessionId = options.sessionId ?? randomUUID();
     const args = [...(options.prefixArgs ?? []), 'serve', '--window', options.window, '--expected-pid', String(options.expectedPid), '--session', this.sessionId,
-      ...(options.calibrationWindowsPath ? ['--calibration', options.calibrationWindowsPath] : []), ...(options.combatCalibrationWindowsPath ? ['--combat-calibration', options.combatCalibrationWindowsPath] : []), ...(options.exportWindowsPath ? ['--export-dir', options.exportWindowsPath] : [])];
+      ...(options.calibrationWindowsPath ? ['--calibration', options.calibrationWindowsPath] : []), ...(options.combatCalibrationWindowsPath ? ['--combat-calibration', options.combatCalibrationWindowsPath] : []),
+      ...(options.npcCalibrationWindowsPath ? ['--npc-calibration', options.npcCalibrationWindowsPath] : []), ...(options.exportWindowsPath ? ['--export-dir', options.exportWindowsPath] : [])];
     this.child = spawn(options.executable, args, { cwd: options.cwd, shell: false, windowsHide: true, detached: false, stdio: ['pipe', 'pipe', 'pipe'] });
     this.started = new Promise((resolve, reject) => { this.startResolve = resolve; this.startReject = reject; });
     this.startupTimer = setTimeout(() => this.fail(new Error('eye_startup_timeout')), options.startupTimeoutMs ?? 5000);

@@ -4,6 +4,7 @@ import json
 import signal
 import subprocess
 import sys
+import time
 from types import SimpleNamespace
 
 from tools import vision_record
@@ -95,3 +96,23 @@ def test_sigterm_uses_cleanup_and_retains_segment(monkeypatch, tmp_path):
     assert meta["active"] is False and meta["sealed"] is True and meta["complete"] is False
     assert meta["segments"][0]["exit_code"] == 130
     assert signal.getsignal(signal.SIGTERM) == original
+
+
+def test_actual_short_failed_child_is_detected_without_five_second_idle(monkeypatch, tmp_path):
+    """Real owned POSIX process; only Windows enumeration is replaced."""
+    command = tmp_path / "agent/node_modules/.bin/tsx"
+    command.parent.mkdir(parents=True)
+    command.write_text("#!/bin/sh\nexit 7\n")
+    command.chmod(0o700)
+    out = tmp_path / "recording"
+    monkeypatch.setattr(vision_record.subprocess, "run", lambda *a, **k: SimpleNamespace(
+        stdout=json.dumps({"pid": 6932, "hwnd": "0x6407cc", "proc": "Wow"}) + "\n"))
+    monkeypatch.setattr(sys, "argv", ["vision_record.py", "--repo", str(tmp_path), "--out", str(out),
+                                     "--window", "0x6407cc", "--pid", "6932", "--duration-ms", "1000"])
+    begin = time.monotonic()
+    assert vision_record.main() == 7
+    elapsed = time.monotonic() - begin
+    meta = json.loads((out / "recording.json").read_text())
+    assert elapsed < 2, "completed child should not wait for the old five-second poll"
+    assert meta["sealed"] is True and meta["active"] is False and meta["complete"] is False
+    assert meta["segments"][0]["exit_code"] == 7

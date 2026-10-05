@@ -1,0 +1,46 @@
+{
+  "scope": "installed_client_and_configuration_not_online_server",
+  "observed_at": "2026-10-05T08:10:15.553487+00:00",
+  "file_version": "12.1.0.69933",
+  "product_version": "Version 12.1.0.69933",
+  "configured_region": "CN",
+  "configured_text_locale": "zhCN",
+  "version_key": {
+    "branch": "retail",
+    "expansion": "midnight",
+    "patch": "12.1.0",
+    "build": 69933,
+    "region": "cn",
+    "locale": "zh_CN"
+  },
+  "locale_normalization": {
+    "input": "zhCN",
+    "output": "zh_CN",
+    "rule": "explicit Blizzard API locale spelling map"
+  },
+  "expansion_source": "https://worldofwarcraft.blizzard.com/en-us/news/24250385",
+  "product_build_metadata": {
+    "Branch": "cn",
+    "Active": "1",
+    "Version": "12.1.0.69933",
+    "Product": "wow"
+  },
+  "sources": [
+    {
+      "kind": "exe_file_metadata",
+      "windows_path": "C:\\Program Files (x86)\\World of Warcraft\\_retail_\\Wow.exe",
+      "sha256": "d41f11de411f6fdb280a7c1c6380ba3d1b17614f03e5aca8fabce2cc715cd7dd"
+    },
+    {
+      "kind": "build_product_metadata",
+      "path": "/mnt/c/Program Files (x86)/World of Warcraft/.build.info",
+      "sha256": "da09a988f1d69a757a1ec416b638f27a98e67d2f75d3237b13681f32d9254233"
+    },
+    {
+      "kind": "client_configuration_selected_non_auth_fields",
+      "path": "/mnt/c/Program Files (x86)/World of Warcraft/_retail_/WTF/Config.wtf",
+      "sha256": "c44c5a63f69c2fc3b44bb290d03bfc48f4c0ed63b377fe530ebf28347b497865"
+    }
+  ],
+  "online_server_verified": false
+}

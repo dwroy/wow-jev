@@ -77,14 +77,20 @@ def main():
                 with (out / (name + "-stdout.jsonl")).open("x") as stdout, (out / (name + "-stderr.jsonl")).open("x") as stderr:
                     child = subprocess.Popen(cmd, cwd=repo, stdout=stdout, stderr=stderr, start_new_session=True)
                     print(json.dumps({"event": "segment_started", "segment": name, "duration_ms": duration}), flush=True)
+                    next_progress = begin + 15
                     while child.poll() is None:
                         if time.monotonic() - begin > duration / 1000 + 30:
                             raise TimeoutError("finite_recording_deadline")
-                        time.sleep(5)
-                        elapsed = round(time.monotonic() - begin)
-                        if elapsed % 15 < 5:
+                        # A five-second exit poll added several seconds without
+                        # capture to every rotation. Keep progress sparse while
+                        # noticing exit/cancel promptly; still wait for cleanup.
+                        time.sleep(.25)
+                        current = time.monotonic()
+                        elapsed = round(current - begin)
+                        if current >= next_progress:
                             print(json.dumps({"event": "recording_progress", "segment": name,
                                               "elapsed_seconds": elapsed}), flush=True)
+                            next_progress = current + 15
                     code = child.wait()
             except (KeyboardInterrupt, TimeoutError, OSError) as error:
                 code = 130 if isinstance(error, KeyboardInterrupt) else 124 if isinstance(error, TimeoutError) else 125

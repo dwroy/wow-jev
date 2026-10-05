@@ -1,0 +1,419 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:wow-jev:game-data-v1",
+  "title": "Version-isolated game database bridge v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "ok": {
+          "const": true
+        },
+        "result": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/lookup_result"
+            },
+            {
+              "$ref": "#/$defs/stats"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "ok",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "ok": {
+          "const": false
+        },
+        "error": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "ok",
+        "error"
+      ],
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "version": {
+      "type": "object",
+      "properties": {
+        "branch": {
+          "enum": [
+            "retail",
+            "classic-era",
+            "classic-progression",
+            "classic-seasonal",
+            "classic-anniversary",
+            "custom",
+            "unknown"
+          ]
+        },
+        "expansion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "patch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "build": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "region": {
+          "enum": [
+            "cn",
+            "us",
+            "eu",
+            "kr",
+            "tw",
+            null
+          ]
+        },
+        "locale": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "branch",
+        "expansion",
+        "patch",
+        "build",
+        "region",
+        "locale"
+      ],
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retrieved_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_kind": {
+          "enum": [
+            "external_reference",
+            "external_comment",
+            "blizzard_api",
+            "local_observation",
+            "client_extract"
+          ]
+        },
+        "source_version": {
+          "$ref": "#/$defs/version"
+        },
+        "artifact_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "provider",
+        "url",
+        "retrieved_at",
+        "evidence_kind",
+        "source_version",
+        "artifact_sha256",
+        "locator",
+        "note"
+      ],
+      "additionalProperties": false
+    },
+    "proof": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/version"
+        },
+        "method": {
+          "enum": [
+            "source_exact_build",
+            "local_observation",
+            "client_extract"
+          ]
+        },
+        "evidence_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "verified_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "version",
+        "method",
+        "evidence_url",
+        "verified_at",
+        "evidence_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "assertion": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "creature",
+            "quest",
+            "item",
+            "spell",
+            "zone"
+          ]
+        },
+        "entity_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "facts": {
+          "type": "object"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "applicability": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/proof"
+          },
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "kind",
+        "entity_id",
+        "name",
+        "facts",
+        "source",
+        "applicability"
+      ],
+      "additionalProperties": false
+    },
+    "record": {
+      "type": "object",
+      "properties": {
+        "assertion_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "reference_only": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "creature",
+            "quest",
+            "item",
+            "spell",
+            "zone"
+          ]
+        },
+        "entity_id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "facts": {
+          "type": "object"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "applicability": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/proof"
+          },
+          "maxItems": 32
+        }
+      },
+      "required": [
+        "assertion_sha256",
+        "reference_only",
+        "kind",
+        "entity_id",
+        "name",
+        "facts",
+        "source",
+        "applicability"
+      ],
+      "additionalProperties": false
+    },
+    "lookup_result": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "status": {
+          "enum": [
+            "found",
+            "not_found",
+            "version_unknown",
+            "ambiguous",
+            "conflict",
+            "references"
+          ]
+        },
+        "requested_version": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/version"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/record"
+          },
+          "maxItems": 1000
+        },
+        "automatic_action_eligible": {
+          "const": false
+        },
+        "applicable_to_requested_client": {
+          "const": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "status",
+        "requested_version",
+        "records",
+        "automatic_action_eligible"
+      ],
+      "additionalProperties": false
+    },
+    "stats": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "assertions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reference_only": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "applicable_assertions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "versions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "imports": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "client_profiles": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "schema_version",
+        "assertions",
+        "reference_only",
+        "applicable_assertions",
+        "versions",
+        "imports",
+        "client_profiles"
+      ],
+      "additionalProperties": false
+    },
+    "bundle": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "assertions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/assertion"
+          },
+          "maxItems": 10000
+        }
+      },
+      "required": [
+        "schema_version",
+        "assertions"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

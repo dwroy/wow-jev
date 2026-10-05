@@ -36,6 +36,7 @@ export async function verifyLearningRun(directory: string): Promise<VerifiedRun>
   await frozenFiles('schemas', frozen.schemas, 2 * 1024 * 1024);
   if (frozen.calibration) await frozenFiles('calibration', frozen.calibration.files, 64 * 1024 * 1024);
   if (frozen.combat_calibration) await frozenFiles('combat-calibration', frozen.combat_calibration.files, 64 * 1024 * 1024);
+  if (frozen.npc_calibration) await frozenFiles('npc-calibration', frozen.npc_calibration.files, 64 * 1024 * 1024);
   if (frozen.extra_prompts) {
     if (!object(frozen.extra_prompts)) fail('source_prompts');
     for (const item of Object.values(frozen.extra_prompts)) {

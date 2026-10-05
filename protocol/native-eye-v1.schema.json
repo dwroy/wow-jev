@@ -244,6 +244,15 @@
         },
         "target_signature": {
           "$ref": "#/definitions/signatureDetector"
+        },
+        "target_name": {
+          "$ref": "#/definitions/nameDetector"
+        },
+        "npc_dialog_open": {
+          "$ref": "#/definitions/detector"
+        },
+        "npc_in_interaction_range": {
+          "$ref": "#/definitions/detector"
         }
       }
     },
@@ -716,6 +725,83 @@
               "value": {
                 "type": "string",
                 "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "value": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "nameDetector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "value",
+        "confidence",
+        "calibration_id"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "known",
+            "unknown",
+            "unavailable"
+          ]
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "reason": {
+          "$ref": "#/definitions/reason"
+        },
+        "calibration_id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "known"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
               }
             }
           },

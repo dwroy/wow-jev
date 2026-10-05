@@ -1,6 +1,20 @@
 # 第5–7阶段入口
 
-本轮按用户要求先推进后续工程，第4阶段4K正式服验收保留待补。执行大脑、日志学习和版本迭代已有可运行入口；真实NPC接近/交互与新版本游戏收益尚待实测。
+执行大脑、日志学习和版本迭代已有可运行入口，并已接通正式服只读和有限live运行、版本核对、名字/NPC感知协议、冻结源码启动。4K独立战斗样本、Jev主动动作、当前NPC现场校准/交互和新版本游戏收益尚待实测，状态见[acceptance/retail-closure.md](acceptance/retail-closure.md)。
+
+## 正式服只读入口
+
+先枚举当前窗口，每次重启或重新打开都需复核HWND/PID：
+
+```bash
+npm --prefix agent run input -- list
+npm --prefix agent run system -- observe \
+  --window 0x当前HWND --pid 当前PID \
+  --client-profile /home/dai/Projects/wow-jev/game-data/profiles/retail-cn-12.1.0.69933.json \
+  --run-dir /absolute/new-observation-run
+```
+
+observe核对实际客户端并采样，不创建输入执行器。加`--seed --allow-game-image-upload`可启用已授权游戏截图的Seed规划；默认不调用模型。正式服live入口需要`--live --role-scene-confirmed --goal FILE`及适用的校准/键位，游戏输入要求前台。`interact_npc`只允许一次100ms互动探测，不能从未知距离推出自动移动；当前NPC模板与功能仍待实测。完整已批准版本的真实启动见[frozen-live-runtime.md](frozen-live-runtime.md)。
 
 ## 体验三层执行
 
@@ -23,7 +37,7 @@ npm --prefix agent run system -- replay --run-dir /absolute/run_dir
 
 目标丢失和距离未知升级处理；取消终止旧控制权并等待释放。正常完成退出码0，升级/取消退出码1，参数或回放失败退出码2。演示保存冻结代码指纹、知识、prompt、目标版本、观察、规划、控制权交接和底层输入回执。回放从可信候选重建代码计划，嵌套Jev仍严格核验来源和大脑附加条件。
 
-执行大脑运行开始时冻结目标、运行版本和知识，任务中修改目标会先取消旧执行并完成版本屏障，旧回答不能复活。知识只影响规划或收紧候选，不能创建键位或输入权限。真实NPC路线还需要当前来源的目标名字、交互距离和NPC对话检测；当前Eye尚未提供这些可靠字段，缺失时等待/升级。
+执行大脑运行开始时冻结目标、运行版本和知识，任务中修改目标会先取消旧执行并完成版本屏障，旧回答不能复活。知识只影响规划或收紧候选，不能创建键位或输入权限。Eye已提供可选的名字bank/NPC对话/显式目标交互指示接口；真实NPC路线需要现场可靠校准及当前同帧证据。缺失时等待/升级；未知距离支持明确目标下的一次有限互动探测，自动接近仍需要可靠距离证据。
 
 ## 学习真实日志
 

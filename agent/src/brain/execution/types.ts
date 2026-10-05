@@ -9,6 +9,7 @@ export type BrainGoal = GoalBase & (
   | { kind: 'observe' }
   | { kind: 'panel_cycle'; panel: 'inventory' }
   | { kind: 'approach_npc'; target_signature: string; target_name: string; allow_movement: boolean; interaction_slot: string | null }
+  | { kind: 'interact_npc'; target_signature: string; target_name: string; interaction_slot: string }
 );
 export type BrainPhase = 'observe' | 'open_panel' | 'close_panel' | 'approach' | 'interact' | 'verify';
 export interface WorkingMemory {

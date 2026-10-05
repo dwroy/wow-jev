@@ -329,6 +329,52 @@
                   ]
                 }
               }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "revision",
+                "description",
+                "kind",
+                "target_signature",
+                "target_name",
+                "interaction_slot"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "kind": {
+                  "const": "interact_npc"
+                },
+                "target_signature": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "target_name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "interaction_slot": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                }
+              }
             }
           ]
         },
@@ -952,6 +998,52 @@
                   "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
                 }
               ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "revision",
+            "description",
+            "kind",
+            "target_signature",
+            "target_name",
+            "interaction_slot"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "kind": {
+              "const": "interact_npc"
+            },
+            "target_signature": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "target_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "interaction_slot": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
             }
           }
         }

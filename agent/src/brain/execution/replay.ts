@@ -176,7 +176,7 @@ export async function replayBrainRun(directory: string, options: BrainReplayOpti
         if (!same(event.decision, expected)) fail('decision_content'); decisions.push(expected); current.terminal = true;
         if (current.approved.outcome === 'complete' && memory.goal.kind === 'panel_cycle' && memory.phase === 'open_panel') { memory.completed_phases.push('open_panel'); memory.phase = 'close_panel'; memory.waits = 0; }
         else if (current.approved.outcome === 'wait') memory.waits++;
-        else if (current.approved.outcome === 'run') { memory.waits = 0; if (current.approved.id.startsWith('approach-')) memory.npc_moves++; if (current.approved.id === 'interact-npc') memory.phase = 'verify'; }
+        else if (current.approved.outcome === 'run') { memory.waits = 0; if (current.approved.id.startsWith('approach-')) memory.npc_moves++; if (['interact-npc', 'interact-npc-probe'].includes(current.approved.id)) memory.phase = 'verify'; }
       } else if (code === 'brain.memory') { if (!current?.terminal || !same(event.memory, memory)) fail('memory'); }
       else if (code === 'brain.cancel_requested') { if (!started || typeof event.reason !== 'string' || event.epoch !== memory.epoch) fail('cancel'); cancelled = true; }
       else if (code === 'brain.goal_change_requested') {
