@@ -91,7 +91,8 @@ function fixedConditions(manifest: RunManifest, scope: ComparisonScope): Obj {
   const components = Object.fromEntries(Object.entries(manifest.code.components).filter(([key]) => scope === 'game_effect' && key.startsWith('native/windows/')));
   return { limits: Object.fromEntries(limits.map((key) => [key, c[key] ?? null])), goal_policy: goalPolicy,
     calibration: scope === 'game_effect' ? manifest.calibration ?? null : null,
-    combat_calibration: scope === 'game_effect' ? manifest.combat_calibration ?? null : null, native_components: components };
+    combat_calibration: scope === 'game_effect' ? manifest.combat_calibration ?? null : null,
+    npc_calibration: scope === 'game_effect' ? manifest.npc_calibration ?? null : null, native_components: components };
 }
 function modelMeasurements(records: EyeLogRecord[]): ModelMeasurement[] {
   const result: ModelMeasurement[] = [];
