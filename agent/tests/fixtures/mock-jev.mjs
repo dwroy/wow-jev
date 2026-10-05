@@ -1,8 +1,10 @@
 import readline from 'node:readline';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-const sha = createHash('sha256').update(readFileSync(new URL('../../../perception/prompts/jev-retail-v1.txt', import.meta.url))).digest('hex');
+const promptIndex = process.argv.indexOf('--prompt-file');
 const mode = process.env.WOW_JEV_TEST_MODE ?? 'ok';
+const promptPath = promptIndex >= 0 && mode !== 'default-prompt' ? process.argv[promptIndex + 1] : new URL('../../../perception/prompts/jev-retail-v1.txt', import.meta.url);
+const sha = createHash('sha256').update(readFileSync(promptPath)).digest('hex');
 for await (const line of readline.createInterface({ input: process.stdin })) {
   const command = JSON.parse(line);
   if (mode === 'timeout') continue;

@@ -6,8 +6,10 @@ import base64
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import re
+import stat
 import sys
 import time
 
@@ -106,7 +108,7 @@ def validate_model(raw, request):
 
 class Worker:
     def __init__(self, *, allow_upload=False, env_file=sw.ENV_PATH, timeout=15.0,
-                 transport=sw.ark_transport, credential_loader=sw.read_credentials):
+                 transport=sw.ark_transport, credential_loader=sw.read_credentials, prompt_file=None, prompt_sha256=None):
         if type(timeout) not in (int, float) or not math.isfinite(timeout) or not 0 < timeout <= 15:
             raise sw.Failure('invalid_timeout')
         if type(allow_upload) is not bool:
@@ -114,7 +116,26 @@ class Worker:
         self.allow_upload, self.env_file, self.timeout = allow_upload, Path(env_file).expanduser(), float(timeout)
         self.transport, self.credential_loader = transport, credential_loader
         self.credentials, self.timed_out = None, False
-        data = PROMPT_PATH.read_bytes()
+        if prompt_sha256 is not None and (type(prompt_sha256) is not str or not re.fullmatch('[a-f0-9]{64}', prompt_sha256)):
+            raise sw.Failure('jev_prompt_hash')
+        if prompt_file is not None and prompt_sha256 is None:
+            raise sw.Failure('jev_prompt_hash_required')
+        prompt_path = PROMPT_PATH if prompt_file is None else Path(prompt_file)
+        if not prompt_path.is_absolute():
+            raise sw.Failure('jev_prompt_path')
+        try:
+            fd = os.open(prompt_path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+            with os.fdopen(fd, 'rb') as source:
+                info = os.fstat(source.fileno())
+                if not stat.S_ISREG(info.st_mode) or not 0 < info.st_size <= 65536:
+                    raise sw.Failure('jev_prompt_size')
+                data = source.read(65537)
+            if len(data) != info.st_size or len(data) > 65536:
+                raise sw.Failure('jev_prompt_changed')
+            if prompt_sha256 is not None and hashlib.sha256(data).hexdigest() != prompt_sha256:
+                raise sw.Failure('jev_prompt_hash')
+        except OSError:
+            raise sw.Failure('jev_prompt_unavailable') from None
         self.prompt, self.prompt_sha256 = data.decode('utf-8'), hashlib.sha256(data).hexdigest()
 
     def choose(self, command):
@@ -217,9 +238,12 @@ def main(argv=None):
     parser.add_argument('--allow-game-image-upload', action='store_true')
     parser.add_argument('--env-file', type=Path, default=sw.ENV_PATH)
     parser.add_argument('--timeout', type=float, default=15.0)
+    parser.add_argument('--prompt-file', type=Path)
+    parser.add_argument('--prompt-sha256')
     args = parser.parse_args(argv)
     try:
-        Worker(allow_upload=args.allow_game_image_upload, env_file=args.env_file, timeout=args.timeout).serve(sys.stdin, sys.stdout)
+        Worker(allow_upload=args.allow_game_image_upload, env_file=args.env_file, timeout=args.timeout,
+               prompt_file=args.prompt_file, prompt_sha256=args.prompt_sha256).serve(sys.stdin, sys.stdout)
     except (sw.Failure, OSError, ValueError):
         print('jev_worker_startup_failed', file=sys.stderr)
         return 2

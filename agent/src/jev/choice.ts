@@ -50,9 +50,9 @@ export function validateModelReply(raw: unknown, request: JevRequest): JevModelR
   if (!reply.reason.trim()) throw new Error('jev_reply_empty_reason');
   return { ...reply };
 }
-function result(request: JevRequest, status: 'failed' | 'disabled', code: string, elapsedMs = 0): JevChoiceResult {
+function result(request: JevRequest, status: 'failed' | 'disabled', code: string, elapsedMs = 0, promptSha256 = PROMPT_SHA256): JevChoiceResult {
   return { type: 'jev_choice', id: request.id, status, candidate_id: null, reason: { code }, model: null,
-    prompt_version: 'jev-retail-v1', prompt_sha256: PROMPT_SHA256, elapsed_ms: elapsedMs,
+    prompt_version: 'jev-retail-v1', prompt_sha256: promptSha256, elapsed_ms: elapsedMs,
     usage: { input_tokens: null, output_tokens: null }, raw_text: null };
 }
 /** Disabled observation workflows never spawn a process or read credentials/images. */
@@ -67,7 +67,7 @@ export class DisabledJevChooser implements JevChooser {
 }
 export interface JevChoiceOptions {
   python: string; worker: string; cwd: string; allowUpload?: boolean; envFile?: string;
-  prefixArgs?: readonly string[]; timeoutMs?: number; now?: () => number; onRequest?: (request: unknown) => void;
+  prefixArgs?: readonly string[]; promptFile?: string; promptSha256?: string; timeoutMs?: number; now?: () => number; onRequest?: (request: unknown) => void;
 }
 /** One request in flight. Every result remains associated with the original frozen candidate set. */
 export class JevChoiceClient implements JevChooser {
@@ -75,12 +75,17 @@ export class JevChoiceClient implements JevChooser {
   private pending: { request: JevRequest; started: number; resolve: (value: JevChoiceResult) => void; timer: ReturnType<typeof setTimeout> } | null = null;
   private decoder = new StringDecoder('utf8'); private buffer = ''; private stderrBytes = 0; private stopped = false;
   private now: () => number;
+  private readonly promptSha256: string;
   constructor(private options: JevChoiceOptions) {
+    if ((options.promptFile === undefined) !== (options.promptSha256 === undefined) || options.promptFile !== undefined &&
+      (!isAbsolute(options.promptFile) || options.promptFile.includes('\0') || options.promptFile.length > 32768 || !/^[a-f0-9]{64}$/.test(options.promptSha256!))) throw new Error('jev_prompt_config');
+    this.promptSha256 = options.promptSha256 ?? PROMPT_SHA256;
     this.now = options.now ?? (() => Math.floor(performance.now()));
     const timeout = options.timeoutMs ?? 15000;
     if (!Number.isFinite(timeout) || timeout < 1 || timeout > 15000) throw new Error('jev_choice_timeout_bounds');
     const args = [...(options.prefixArgs ?? []), options.worker, '--serve', '--timeout', String(timeout / 1000),
-      ...(options.allowUpload ? ['--allow-game-image-upload'] : []), ...(options.envFile ? ['--env-file', options.envFile] : [])];
+      ...(options.allowUpload ? ['--allow-game-image-upload'] : []), ...(options.envFile ? ['--env-file', options.envFile] : []),
+      ...(options.promptFile ? ['--prompt-file', options.promptFile, '--prompt-sha256', this.promptSha256] : [])];
     this.child = spawn(options.python, args, { cwd: options.cwd, shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdout.on('data', (chunk: Buffer) => this.receive(chunk));
     this.child.stderr.on('data', (chunk: Buffer) => { this.stderrBytes += chunk.byteLength; if (this.stderrBytes > 16384) this.fail('jev_worker_stderr_limit'); });
@@ -91,11 +96,11 @@ export class JevChoiceClient implements JevChooser {
   get busy(): boolean { return this.pending !== null; }
   async choose(request: JevRequest, imagePath: string | null): Promise<JevChoiceResult> {
     validateSelectionRequest(request);
-    if (this.stopped) return result(request, 'failed', 'jev_worker_stopped');
-    if (this.pending) return result(request, 'failed', 'jev_worker_busy');
-    if (imagePath !== null && (!isAbsolute(imagePath) || !/\.jpe?g$/i.test(imagePath) || imagePath.includes('\0'))) return result(request, 'failed', 'jev_requires_absolute_jpeg');
+    if (this.stopped) return result(request, 'failed', 'jev_worker_stopped', 0, this.promptSha256);
+    if (this.pending) return result(request, 'failed', 'jev_worker_busy', 0, this.promptSha256);
+    if (imagePath !== null && (!isAbsolute(imagePath) || !/\.jpe?g$/i.test(imagePath) || imagePath.includes('\0'))) return result(request, 'failed', 'jev_requires_absolute_jpeg', 0, this.promptSha256);
     const started = this.now();
-    if (started >= request.deadline_ms || started < request.at_ms) return result(request, 'failed', 'jev_request_expired');
+    if (started >= request.deadline_ms || started < request.at_ms) return result(request, 'failed', 'jev_request_expired', 0, this.promptSha256);
     const frozen = structuredClone(request);
     const command = { id: frozen.id, op: 'choose', image_path: imagePath, prompt_version: 'jev-retail-v1', request: frozen };
     return new Promise((resolve) => {
@@ -117,7 +122,7 @@ export class JevChoiceClient implements JevChooser {
       if (Buffer.byteLength(line) > 65536) { this.fail('jev_worker_line_limit'); return; }
       try {
         const value: unknown = strictJson(line);
-        if (!validateResult(value) || !this.pending || value.id !== this.pending.request.id || value.prompt_sha256 !== PROMPT_SHA256) throw new Error('jev_worker_result_schema');
+        if (!validateResult(value) || !this.pending || value.id !== this.pending.request.id || value.prompt_sha256 !== this.promptSha256) throw new Error('jev_worker_result_schema');
         if (value.status === 'ok') {
           const reply = validateModelReply(value.raw_text, this.pending.request);
           if (reply.candidate_id !== value.candidate_id) throw new Error('jev_worker_result_candidate');
@@ -131,7 +136,7 @@ export class JevChoiceClient implements JevChooser {
   }
   private fail(code: string): void {
     if (this.stopped) return; this.stopped = true;
-    if (this.pending) { clearTimeout(this.pending.timer); this.pending.resolve(result(this.pending.request, 'failed', code, Math.max(0, this.now() - this.pending.started))); this.pending = null; }
+    if (this.pending) { clearTimeout(this.pending.timer); this.pending.resolve(result(this.pending.request, 'failed', code, Math.max(0, this.now() - this.pending.started), this.promptSha256)); this.pending = null; }
     this.child.stdin.destroy(); this.child.stdout.destroy(); this.child.stderr.destroy(); this.child.kill(); this.child.unref();
   }
   close(): void { this.fail('jev_worker_closed'); }

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { JevRequest } from '../src/jev/types.js';
 import { DisabledJevChooser, JevChoiceClient, validateModelReply, validateSelectionRequest } from '../src/jev/choice.js';
 import { buildCandidates, candidatesHash } from '../src/reflex/candidates.js';
@@ -77,4 +81,45 @@ test('client times out with no retry and rejects late model choice while retaini
     assert.equal(value.reason.code, 'jev_request_expired'); assert.equal(value.candidate_id, null);
     assert.ok(value.raw_text); assert.equal(value.usage.input_tokens, 12);
   } finally { late.close(); }
+});
+
+test('frozen prompt options require an absolute path/hash pair before spawning', () => {
+  const base = { python: '/never/spawn', worker: '/no/worker.py', cwd: repo };
+  for (const invalid of [{ promptFile: '/tmp/prompt.txt' }, { promptSha256: 'a'.repeat(64) },
+    { promptFile: 'relative.txt', promptSha256: 'a'.repeat(64) }, { promptFile: '/tmp/prompt.txt', promptSha256: 'bad' },
+    { promptFile: '/tmp/prompt\0.txt', promptSha256: 'a'.repeat(64) }]) assert.throws(() => new JevChoiceClient({ ...base, ...invalid }), /jev_prompt_config/);
+});
+
+test('actual disabled Python client reads the frozen prompt and failures retain expected SHA', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'jev-frozen-'));
+  const path = join(dir, 'prompt.txt'), link = join(dir, 'link.txt');
+  const bytes = '冻结有限候选prompt\n', sha = createHash('sha256').update(bytes).digest('hex');
+  await writeFile(path, bytes); await symlink(path, link);
+  try {
+    for (const [file, expectedHash, success] of [[path, sha, true], [path, '0'.repeat(64), false], [link, sha, false]] as const) {
+      const client = new JevChoiceClient({ python: '/usr/bin/python3', worker: `${repo}/perception/jev_worker.py`, cwd: repo, now: () => 125,
+        envFile: '/not/read.env', timeoutMs: 1500, promptFile: file, promptSha256: expectedHash });
+      try {
+        const value = await client.choose(request(), '/not/read.jpg');
+        assert.equal(value.status, success ? 'disabled' : 'failed'); assert.equal(value.prompt_sha256, expectedHash);
+        assert.equal(value.model, null); assert.equal(value.raw_text, null);
+      } finally { client.close(); }
+    }
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('custom frozen prompt replies are accepted; default-source reply SHA is rejected', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'jev-versioned-')); const path = join(dir, 'prompt.txt');
+  const bytes = '自定义冻结版本\n', sha = createHash('sha256').update(bytes).digest('hex'); await writeFile(path, bytes);
+  try {
+    for (const [mode, expected] of [['ok', 'ok'], ['hash', 'failed'], ['default-prompt', 'failed']] as const) {
+      const previous = process.env.WOW_JEV_TEST_MODE; process.env.WOW_JEV_TEST_MODE = mode;
+      const client = new JevChoiceClient({ python: process.execPath, worker: `${repo}/agent/tests/fixtures/mock-jev.mjs`, cwd: repo, now: () => 125,
+        timeoutMs: 1500, promptFile: path, promptSha256: sha });
+      if (previous === undefined) delete process.env.WOW_JEV_TEST_MODE; else process.env.WOW_JEV_TEST_MODE = previous;
+      try {
+        const value = await client.choose(request(), null); assert.equal(value.status, expected); assert.equal(value.prompt_sha256, sha);
+      } finally { client.close(); }
+    }
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
