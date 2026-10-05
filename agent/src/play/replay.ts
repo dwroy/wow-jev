@@ -6,7 +6,7 @@ import { Ajv } from 'ajv';
 import { loadProtocolValidator, validateMessage, type ActionIntent, type ExecutionReceipt, type Observation, type ProtocolValidator } from '../core/protocol.js';
 import { replayRun } from '../eye/replay.js';
 import { hashBuffer, hashFile, type EyeLogRecord, type RunManifest } from '../eye/store.js';
-import { assertNativeMessage, loadNativeValidator, type NativeAction, type NativeReceipt, type NativeValidator } from '../hand/protocol.js';
+import { assertNativeMessage, loadNativeValidator, type NativeAction, type NativeReceipt, type NativeValidator, type NativeReady } from '../hand/protocol.js';
 import type { EyeSample } from '../eye/protocol.js';
 import type { PlayPlan, PlayResult, SkillBindings, SkillResult, SkillStep } from './types.js';
 
@@ -115,6 +115,7 @@ export interface PlayJournalOptions {
   nested?: boolean;
   requiredConditions?: ActionIntent['conditions'];
   firstObservationId?: string;
+  requireNativeReady?: boolean;
 }
 /** Pure plan audit; callers must globally validate schemas, sequence and raw source facts with loadPlayJournal first. */
 export function replayPlayJournal(journal: PlayJournal, options: PlayJournalOptions): PlayReplay {
@@ -129,6 +130,7 @@ export function replayPlayJournal(journal: PlayJournal, options: PlayJournalOpti
   const intents = new Map<string, ActionIntent>(); const receipts = new Map<string, ExecutionReceipt>(); const raw = new Map<string, NativeReceipt>();
   const links = new Map<string, { action_id: string; native_receipt_id: string | null; before_observation_id: string; after_observation_id: string; receipt_id: string; received_input_at_ms: number | null }>();
   const usedActions = new Set<string>(); const dispatches = new Set<string>(); const results: SkillResult[] = [];
+  const readySessions = new Map<string, NativeReady>(); const dispatchSessions = new Map<string, string>();
   let seq = 0; let lastObservationSeq = -1; let started = false; let finished: PlayResult | null = null; let ended = false; let endStatus: unknown;
   let active: { step: SkillStep; index: number; action: ActionIntent | null } | null = null; let next = 0; let terminal = false;
   let waitStarted: Obj | null = null; let waitFinished: Obj | null = null;
@@ -161,20 +163,32 @@ export function replayPlayJournal(journal: PlayJournal, options: PlayJournalOpti
       if (mode === 'simulated') fail('simulated_native_input');
       const data = row.data as { direction: 'in' | 'out'; message: unknown }; assertNativeMessage(data.message, native);
       const message = data.message;
+      if (message.type === 'ready') {
+        if (data.direction !== 'in' || readySessions.has(message.session_id)) fail('native_ready');
+        readySessions.set(message.session_id, message);
+      }
       if ('op' in message && message.op === 'execute') {
         if (message.type === 'command') {
           if (finished || !active || !active.action || message.id !== active.action.id) fail('native_execute_outside_step');
           if (dispatches.has(message.id) || data.direction !== 'out' || !equal(message.action, active.action.action.args) || row.at_ms > active.action.deadline_ms) fail('native_dispatch');
           const before = observations.get(active.action.based_on_observation_id)!;
+          if (options.requireNativeReady) {
+            const ready = readySessions.get(message.session_id); const window = before.window;
+            if (!ready || !window || !/^0x[0-9a-f]+$/i.test(ready.window.hwnd) || !/^0x[0-9a-f]+$/i.test(window.hwnd) ||
+              BigInt(ready.window.hwnd) !== BigInt(window.hwnd) || ready.window.pid !== window.pid ||
+              ready.window.client_width !== window.client_width || ready.window.client_height !== window.client_height) fail('native_ready_window_binding');
+          }
           if (!conditionsHold(active.action, before, row.at_ms)) fail('stale_or_unsatisfied_dispatch');
           for (const field of ['capture.available', 'window.focused']) {
             const condition = active.action.conditions.find((item) => item.field === field);
             if (!condition || condition.op !== 'eq' || condition.value !== true || condition.max_age_ms > Number(maxAge)) fail('missing_dispatch_gate');
           }
           dispatches.add(message.id);
+          dispatchSessions.set(message.id, message.session_id);
         }
         if (message.type === 'receipt' && message.status !== 'accepted') {
           if (!intents.has(message.id)) fail('native_receipt_without_intent');
+          if (dispatchSessions.has(message.id) && dispatchSessions.get(message.id) !== message.session_id) fail('native_receipt_session');
           if (data.direction !== 'in' || raw.has(message.id)) fail('duplicate_or_misdirected_native_receipt'); raw.set(message.id, message);
         }
       }

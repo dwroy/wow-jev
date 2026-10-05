@@ -44,6 +44,7 @@ async function fixture() {
   const ready: NativeReady = { protocol: 'wow-input', version: 1, type: 'ready', session_id: session, executor_pid: 901, watchdog_pid: 902,
     window: { hwnd: '0xabc', pid: 42, client_width: 800, client_height: 600, focused: true },
     capabilities: { keys: ['E', 'B', 'SPACE'], max_duration_ms: 5000, heartbeat_lease_ms: 1000 }, local_clock: { domain: 'windows-qpc', at_ms: 9000000 } };
+  await store.append('native_input', { direction: 'in', message: ready, action_id: null }, now());
   const raw = (id: string, op: NativeReceipt['op'] = 'execute'): NativeReceipt => ({ protocol: 'wow-input', version: 1, type: 'receipt', session_id: session,
     id, op, status: op === 'execute' ? 'completed' : 'ok', input: { status: 'released', events_requested: op === 'execute' ? 2 : 0,
       events_inserted: op === 'execute' ? 2 : 0, released: true }, effect: { status: 'unknown' },
@@ -87,14 +88,17 @@ test('Jev live mock pipeline audits two independent plans, source images and raw
   } finally { await run.cleanup(); }
 });
 test('Jev live replay refuses wrong source artifact, missing native dispatch and altered terminal event counts', async () => {
-  for (const mutation of ['source', 'dispatch', 'counts']) {
+  for (const mutation of ['source', 'dispatch', 'counts', 'ready', 'session']) {
     const run = await fixture();
     try {
       const rows = await records(run.dir);
       if (mutation === 'source') (rows.find((row) => row.kind === 'event' && (row.data as { code?: string }).code === 'jev.request')!.data as { image_artifact_id: string }).image_artifact_id = 'missing';
+      else if (mutation === 'ready') (rows.find((row) => row.kind === 'native_input' && (row.data as { message: { type: string } }).message.type === 'ready')!.data as { message: NativeReady }).message.window.pid++;
       else {
-        const index = rows.findIndex((row) => row.kind === 'native_input' && (row.data as { direction: string }).direction === (mutation === 'dispatch' ? 'out' : 'in'));
+        const index = rows.findIndex((row) => row.kind === 'native_input' && (row.data as { message: { op?: string }; direction: string }).message.op === 'execute' &&
+          (row.data as { direction: string }).direction === (mutation === 'dispatch' ? 'out' : 'in'));
         if (mutation === 'dispatch') rows.splice(index, 1);
+        else if (mutation === 'session') (rows[index]!.data as { message: NativeReceipt }).message.session_id = '22222222-2222-4222-8222-222222222222';
         else (rows[index]!.data as { message: NativeReceipt }).message.input.events_requested = 3;
       }
       await rewrite(run.dir, rows); await assert.rejects(replayJevRun(run.dir, builders), /jev_replay:|play_replay:|native_counts:|unsupported_effect/);

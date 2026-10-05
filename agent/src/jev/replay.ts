@@ -118,6 +118,7 @@ export async function replayJevRun(directory: string, builders: JevReplayBuilder
     } else if (row.kind === 'native_input') {
       if (mode === 'simulated') fail('simulated_native_input');
       const message = (row.data as { direction?: string; message?: Obj }).message;
+      if (message?.type === 'ready') sourceRecords.push(row);
       if (message?.op === 'execute') {
         const decision = typeof message.id === 'string' ? actionDecisions.get(message.id) : null;
         if (!decision || message.type === 'command' && (cancelled || decision !== current || decision.planFinished)) fail('native_outside_approved_plan');
@@ -228,7 +229,8 @@ export async function replayJevRun(directory: string, builders: JevReplayBuilder
     if (!decision.result?.plan) continue;
     const rows = [...sourceRecords, ...decision.records].sort((a, b) => a.seq - b.seq);
     const replay = replayPlayJournal({ ...journal, records: rows }, { plan: decision.result.plan, bindings, maxObservationAgeMs: maxAge,
-      actor: 'jev', decisionId: decision.id, nested: true, requiredConditions: decision.approved!.conditions, firstObservationId: decision.fresh!.id });
+      actor: 'jev', decisionId: decision.id, nested: true, requiredConditions: decision.approved!.conditions, firstObservationId: decision.fresh!.id,
+      requireNativeReady: true });
     if (replay.status !== decision.result.result?.status) fail('iteration_execution_result');
     plans.push(replay);
   }
