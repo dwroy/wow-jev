@@ -1,6 +1,6 @@
 # 版本隔离的本地游戏数据库
 
-下一阶段设计与跨机器接续见 [WoW 游戏数据库交接](handoff-game-database.md)。该设计尚待实施；本文件继续说明现有v1协议与行为。
+下一阶段设计与跨机器接续见 [WoW 游戏数据库交接](handoff-game-database.md)。v2实施与入口见 [世界包与运行库](game-database-v2.md)，验收状态以HANDOFF为准；本文件继续说明独立的v1协议与行为。
 
 `game_database/` 使用 Python 标准库 SQLite，`agent/src/game-data/` 提供只读 TypeScript 异步桥。数据库收集外部参考资料与实际本地观察，和既有严格日志学习的知识快照分开。实体断言按来源与内容 SHA 保存，同 ID 不同版本、同名不同 ID、历史评论与当前页面冲突均并存。
 

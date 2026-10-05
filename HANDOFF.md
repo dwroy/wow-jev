@@ -4,6 +4,10 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 里程碑一，步骤1a完成：v2世界包与v1兼容迁移。** `.worktrees/game-db-foundation` 新增受控中间格式/关系schema、字段级冲突解析、固定manifest SHA的只读批量Python查询、原子staging发布、来源原件校验及v1映射。独立审查发现的本地证明SHA未绑定、孤立资产分发标记、迁移来源/条件及保留谓词语义问题均修正并有反例；旧库19+世界包27=46项Python通过，无skip。运行库/TS批量桥尚在独立树实施，里程碑一整体尚未验收。
+
+实际重新导入11条seed并迁移，得到9实体/27字段，全部reference_only；当前69933 query仍not_found，references保留来源冲突。没有注册旧机器安装profile为新机器证据。体验入口见 `docs/game-database-v2.md`；验收见 `docs/acceptance/game-database-v2.md`。步骤0已在主checkout fast-forward集成并再次通过19Python/2TS/typecheck；本步骤将按同样流程集成验收。不读取凭据、调用模型、发送游戏输入或push。
+
 **2026-10-06 新机器接续：准备完成，里程碑一实施中。** 主 checkout `/home/dw/Projects/wow-jev` 已 fetch 并安全切到 `codex/agent-system`（远端起点47423e8）；旧的未跟踪 HANDOFF.md 与目标分支冲突，已完整移到 `.worktrees/backups/pre-agent-system-20261005/HANDOFF.md`，SHA `6f35f53b9a9a8aea7de885390e16d160386735aed57fb87c6823c6db23c117d7`。未跟踪 `wow-jev.bundle` 保留原位，SHA `7a6ebc4daef3a421d357ff2ab41a659e605e5954c7c20cb5d2e65256ff6c1931`；既有 pixel-bridge 工作树未修改。
 
 已读 AGENTS、本交接、数据库交接及要求的 game-database/four-layer-agent-design/agent-roadmap。实施工作树 `.worktrees/game-db-foundation`（共同schema/世界包/迁移/桥）、`.worktrees/game-db-runtime`（运行库）分别有单一负责人；来源和学习链路只读核查已完成。依赖按 lock 安装；本机旧库19项Python、2项TS整链及typecheck通过。沙箱网络/tsx IPC拒绝经同一命令正常权限审查后运行，保留首次环境失败，不作为程序失败或测试通过。未读取凭据、调用模型、操作游戏或推送。
