@@ -77,6 +77,9 @@ function parseStep(value: unknown): SkillStep {
     case 'jump':
       exact(step, ['id', 'name', 'duration_ms'], 'skill_jump');
       return { id, name: step.name, duration_ms: integer(step.duration_ms, 1, 500, 'skill_jump_duration') };
+    case 'wait':
+      exact(step, ['id', 'name', 'duration_ms'], 'skill_wait');
+      return { id, name: step.name, duration_ms: integer(step.duration_ms, 1, 1000, 'skill_wait_duration') };
     case 'open_panel':
     case 'close_panel':
       exact(step, ['id', 'name', 'panel'], 'skill_panel');
@@ -114,6 +117,8 @@ export function compileSkill(rawStep: SkillStep, before: Collected, rawBindings:
   ];
   const unverified = { kind: 'unverified' as const };
   switch (step.name) {
+    case 'wait':
+      return { action: null, conditions: [], effect: { kind: 'wait', duration_ms: step.duration_ms } };
     case 'move_for':
       return { action: { kind: 'key', keys: [bindings.forward], duration_ms: step.duration_ms }, conditions, effect: unverified };
     case 'jump':

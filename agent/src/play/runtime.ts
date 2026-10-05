@@ -46,6 +46,9 @@ export class CodePlay {
     this.effectWait = validOption(options.effectWaitMs, 1500, 1500, 0);
     this.effectPoll = validOption(options.effectPollMs, 100, 500);
     if (!options.runId || !['live', 'simulated'].includes(options.mode)) throw new Error('invalid_play_options');
+    if (options.actor !== undefined && !['code', 'jev'].includes(options.actor) || options.actor === 'jev' &&
+      (!options.decisionId || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(options.decisionId)) ||
+      options.actor !== 'jev' && options.decisionId !== undefined) throw new Error('invalid_play_actor');
     this.options = Object.freeze({ ...options });
   }
   status(): PlayStatus { return { state: this.state, cancelled: this.cancelled, plan: this.plan ? { ...this.plan } : null }; }
@@ -68,7 +71,8 @@ export class CodePlay {
     this.releaseJob ??= (async () => {
       if (this.options.mode === 'simulated') return { release: 'confirmed' as const };
       const hand = this.ports.hand;
-      if (!hand?.ready) return { release: 'unconfirmed' as const };
+      if (!hand) return { release: 'confirmed' as const }; // No input transport was acquired by a wait-only caller.
+      if (!hand.ready) return { release: 'unconfirmed' as const };
       for (const op of ['cancel', 'releaseAll'] as const) {
         try {
           const receipt = await this.bounded(Promise.resolve().then(() => hand[op]()), 1500);
@@ -115,7 +119,8 @@ export class CodePlay {
     const steps: SkillResult[] = [];
     let result: PlayResult;
     try {
-      await this.append('event', { code: 'play.plan_started', plan, mode: this.options.mode, plan_sha256: createHash('sha256').update(frozenText).digest('hex') });
+      await this.append('event', { code: 'play.plan_started', plan, mode: this.options.mode, actor: this.options.actor ?? 'code',
+        ...(this.options.decisionId ? { decision_id: this.options.decisionId } : {}), plan_sha256: createHash('sha256').update(frozenText).digest('hex') });
       const window = { current: null as { token: string; hwnd: string; pid: number } | null };
       for (const [index, step] of plan.steps.entries()) {
         if (this.stop) throw this.stop;
@@ -165,13 +170,33 @@ export class CodePlay {
     try {
       before = await this.active(this.ports.collect(true));
       compiled = this.ports.compile(step, before);
+      if (step.name === 'wait') {
+        if (compiled.action !== null || compiled.effect.kind !== 'wait' || compiled.effect.duration_ms !== step.duration_ms ||
+          !Number.isSafeInteger(step.duration_ms) || step.duration_ms < 1 || step.duration_ms > 1000) throw new Error('invalid_wait_skill');
+        const start = this.ports.now();
+        await this.append('event', { code: 'play.wait_started', plan: { id: plan.id, revision: plan.revision }, step_id: step.id,
+          before_observation_id: before.observation.id, duration_ms: step.duration_ms, started_at_ms: start });
+        try {
+          await this.active(delay(step.duration_ms));
+          after = await this.active(this.ports.collect(true));
+          status = 'completed';
+        } catch (error) {
+          reason = detail(error); status = error instanceof Stopped && error.status === 'cancelled' ? 'cancelled' : 'failed';
+        }
+        await this.finalAppend('event', { code: 'play.wait_finished', plan: { id: plan.id, revision: plan.revision }, step_id: step.id,
+          before_observation_id: before.observation.id, after_observation_id: after?.observation.id ?? null,
+          duration_ms: step.duration_ms, started_at_ms: start, finished_at_ms: this.ports.now(), status });
+        return { step_id: step.id, skill: step.name, status, action_id: null, receipt: null,
+          before_observation_id: before.observation.id, after_observation_id: after?.observation.id ?? null, ...(reason ? { reason } : {}) };
+      }
       if (!window.current && before.observation.window) {
         const { token, hwnd, pid } = before.observation.window; window.current = { token, hwnd, pid };
       }
       const at = this.ports.now();
       const id = `play-${randomUUID()}`;
       const common = { protocol: 'wow-agent' as const, version: 1 as const, type: 'action_intent' as const, id, run_id: this.options.runId, at_ms: at,
-        actor: 'code' as const, plan: { id: plan.id, revision: plan.revision }, based_on_observation_id: before.observation.id,
+        actor: this.options.actor ?? 'code', ...(this.options.decisionId ? { decision_id: this.options.decisionId } : {}),
+        plan: { id: plan.id, revision: plan.revision }, based_on_observation_id: before.observation.id,
         deadline_ms: at + this.maxAge, conditions: compiled.conditions };
       const candidate: ActionIntent = this.options.mode === 'simulated'
         ? { ...common, mode: 'simulated', window_token: before.observation.window?.token ?? null, action: { name: 'simulate_noop', args: {} } }
