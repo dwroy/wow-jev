@@ -45,7 +45,7 @@ Ports 提供 `now/collect/append/planner/executeCode/executeJev/release`，不�
 
 ## 知识与回放
 
-系统先通过学习模块加载并校验 KnowledgeSnapshot，Brain 再按目标、技能阶段、目标名、场景、窗口布局、校准以及来源完整性查询。完整 live 经验可以在模拟中咨询，但来源模式仍为 live；live 运行拒绝 simulated 经验。`journal_complete` 与 `mode` 是来源约束，`panel`、布局与校准是场景约束。observed 事实和 inferred 建议在请求中保留 certainty，审批另记 inferred_fact_ids。保守建议只能关闭运动、收紧移动次数或延长有限等待，不能增加技能或键鼠授权。
+系统先通过学习模块加载并校验 KnowledgeSnapshot，Brain 再按目标、技能阶段、目标名、场景、窗口布局、校准以及来源完整性查询。完整 live 经验可以在模拟中咨询，但来源模式仍为 live；live 运行拒绝 simulated 经验。`journal_complete` 与 `mode` 是来源约束，`panel`、布局与校准是场景约束。游戏目标默认 test_target=false，专用输入测试窗口的 true 经验不进入游戏决策。observed 事实和 inferred 建议在请求中保留 certainty，审批另记 inferred_fact_ids。保守建议只能关闭运动、收紧移动次数或延长有限等待，不能增加技能或键鼠授权。
 
 每个 brain.request 和 brain.approval 都记录实际 consulted_fact_ids、完整 consulted_facts 与 knowledge_sha256；版本清单不能代替这一实际消费记录。知识文件使用统一 canonical JSON 字节 SHA，无尾部换行。
 

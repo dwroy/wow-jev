@@ -13,7 +13,7 @@ export function freezeCopy<T>(value: T): T {
 export function consultKnowledge(snapshot: KnowledgeSnapshot, goal: BrainGoal, phase: BrainPhase, observation: Observation,
   mode: 'live' | 'simulated', calibrationId: string | null = null): KnowledgeFact[] {
   const scene = observation.fields['scene.summary'];
-  const scope: Record<string, string | number | boolean | null> = { goal_kind: goal.kind, calibration_id: calibrationId,
+  const scope: Record<string, string | number | boolean | null> = { goal_kind: goal.kind, calibration_id: calibrationId, test_target: false,
     skill: phase === 'open_panel' || phase === 'close_panel' ? phase : phase === 'approach' ? 'move_for' : phase,
     ...(observation.window ? { layout: `${observation.window.client_width}x${observation.window.client_height}` } : {}),
     ...(goal.kind === 'panel_cycle' ? { panel: goal.panel } : {}),

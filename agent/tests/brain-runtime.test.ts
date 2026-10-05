@@ -109,8 +109,9 @@ test('interaction slot requires explicit configuration; manual or seed range can
 });
 test('knowledge is consulted, SHA frozen, inferred advice narrows candidates and cannot grant slots', async () => {
   const k = snapshot(); k.sources.push({ id: 'source', run_id: 'history', kind: 'code_play', mode: 'live', complete: true, manifest_sha256: 'a'.repeat(64), events_sha256: 'b'.repeat(64) });
-  k.facts.push({ id: 'avoid', kind: 'experience', statement: '运动效果未确认，建议先等待', certainty: 'inferred', scope: { goal_kind: 'approach_npc', layout: '3840x2160', mode: 'live' },
+  k.facts.push({ id: 'avoid', kind: 'experience', statement: '运动效果未确认，建议先等待', certainty: 'inferred', scope: { goal_kind: 'approach_npc', layout: '3840x2160', mode: 'live', test_target: false, journal_complete: true },
     sample_count: 15, counterexamples: 0, evidence: [{ source_id: 'source', record_seq: 2, observation_ids: ['old-observation'], artifact_ids: [] }], metrics: { avoid_movement: true } });
+  k.facts.push({ ...structuredClone(k.facts[0]!), id: 'test-window-only', scope: { ...k.facts[0]!.scope, test_target: true } });
   const s = setup(options(k)); k.facts[0]!.metrics.avoid_movement = false;
   const result = await s.brain.run(npc); assert.equal(result.reason, 'npc_movement_restricted'); assert.equal(s.entered(), 0);
   const req = s.events.find((event) => event.code === 'brain.request')!.request as BrainRequest;
