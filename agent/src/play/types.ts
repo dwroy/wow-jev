@@ -9,6 +9,7 @@ export type SkillStep = { id: string } & (
   | { name: 'jump'; duration_ms: number }
   | { name: 'open_panel' | 'close_panel'; panel: 'inventory' }
   | { name: 'use_action_slot'; slot: string; duration_ms: number }
+  | { name: 'wait'; duration_ms: number }
 );
 export interface SkillBindings {
   forward: string;
@@ -20,7 +21,7 @@ export interface PlayPlan { id: string; revision: number; steps: SkillStep[] }
 export interface CompiledSkill {
   action: NativeAction | null;
   conditions: ActionCondition[];
-  effect: { kind: 'inventory'; desired: boolean; calibration_id: string } | { kind: 'unverified' };
+  effect: { kind: 'inventory'; desired: boolean; calibration_id: string } | { kind: 'unverified' } | { kind: 'wait'; duration_ms: number };
 }
 export interface PlayHand {
   readonly ready: NativeReady | null;
@@ -42,6 +43,8 @@ export interface PlayOptions {
   maxObservationAgeMs?: number;
   effectWaitMs?: number;
   effectPollMs?: number;
+  actor?: 'code' | 'jev';
+  decisionId?: string;
 }
 export interface SkillResult {
   step_id: string;
