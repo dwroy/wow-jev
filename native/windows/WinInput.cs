@@ -34,11 +34,19 @@ static class WinInput
         public string Fingerprint;
         public Dictionary<string, object> Reply;
     }
+    sealed class TimelineEvent
+    {
+        public string Kind;
+        public int At, Button, X, Y, Dx, Dy;
+        public KeySpec Key;
+    }
     sealed class Work
     {
         public Command Command;
         public string Kind, Mode;
         public KeySpec[] Keys;
+        public TimelineEvent[] Events;
+        public long TimelineStart;
         public int Duration, Button, X, Y, Dx, Dy, Delta, FromX, FromY, ToX, ToY;
         public long StartedMs = -1;
         public long Requested, Inserted;
@@ -132,7 +140,7 @@ static class WinInput
             ready.Add("executor_pid", Process.GetCurrentProcess().Id); ready.Add("watchdog_pid", watchdogPid);
             ready.Add("window", Obj("hwnd", "0x" + hwnd.ToInt64().ToString("x", CultureInfo.InvariantCulture), "pid", info.Pid,
                 "client_width", info.Width, "client_height", info.Height, "focused", info.Focused));
-            ready.Add("capabilities", Obj("keys", names, "max_duration_ms", MaxDurationMs, "heartbeat_lease_ms", HeartbeatLeaseMs));
+            ready.Add("capabilities", Obj("keys", names, "max_duration_ms", MaxDurationMs, "heartbeat_lease_ms", HeartbeatLeaseMs, "timeline", true));
             Emit(ready);
         }
         Dictionary<string, object> Reply(Command command, string status, string inputStatus, long requested, long inserted,
@@ -273,6 +281,69 @@ static class WinInput
                 CheckSafe(work, store.Read());
             }
         }
+        void WaitUntil(Work work, long deadline)
+        {
+            while (Clock.NowMs < deadline)
+            {
+                int remaining = (int)Math.Min(10, deadline - Clock.NowMs);
+                if (work.Cancel.WaitOne(Math.Max(1, remaining))) throw new InputFailure(work.CancelReason, "Action cancelled");
+                CheckSafe(work, store.Read());
+            }
+        }
+        void RunTimeline(Work work)
+        {
+            // One command owns all keys/buttons. Each same-time batch is one SendInput.
+            work.TimelineStart = Clock.NowMs;
+            ulong expectedKeys = 0; int expectedMouse = 0;
+            int cursor = 0;
+            while (cursor < work.Events.Length)
+            {
+                int at = work.Events[cursor].At, end = cursor + 1;
+                while (end < work.Events.Length && work.Events[end].At == at) end++;
+                WaitUntil(work, work.TimelineStart + at);
+                List<Native.InputPacket> packets = new List<Native.InputPacket>();
+                ulong downKeys = 0, upKeys = 0; int downMouse = 0, upMouse = 0;
+                for (int i = cursor; i < end; i++)
+                {
+                    TimelineEvent item = work.Events[i];
+                    if (item.Kind == "key_down") { downKeys |= item.Key.Mask; packets.Add(Native.KeyEvent(item.Key, false)); }
+                    else if (item.Kind == "key_up") { upKeys |= item.Key.Mask; packets.Add(Native.KeyEvent(item.Key, true)); }
+                    else if (item.Kind == "button_down") { downMouse |= item.Button; packets.Add(Native.MouseButton(item.Button, false)); }
+                    else if (item.Kind == "button_up") { upMouse |= item.Button; packets.Add(Native.MouseButton(item.Button, true)); }
+                    else if (item.Kind == "relative_mouse_move") packets.Add(Native.MouseRelative(item.Dx, item.Dy));
+                    else { CheckPoint(item.X, item.Y); packets.Add(Native.MouseAbsolute(hwnd, item.X, item.Y)); }
+                }
+                store.WithRegisteredInput(delegate(LeaseSnapshot state)
+                {
+                    CheckSafe(work, state);
+                    if (state.HeldKeysMask != expectedKeys || state.HeldMouseMask != expectedMouse)
+                        throw new InputFailure("timeline_ownership_changed", "Timeline ledger no longer matches this command");
+                    if ((upKeys & state.HeldKeysMask) != upKeys || (upMouse & state.HeldMouseMask) != upMouse)
+                        throw new InputFailure("timeline_unowned_up", "Timeline cannot release another owner's input");
+                    for (int i = cursor; i < end; i++)
+                    {
+                        TimelineEvent item = work.Events[i];
+                        if (item.Kind == "key_down" && Native.IsKeyDown(item.Key)) throw new InputFailure("user_key_held", "Key already held: " + item.Key.Name);
+                        if (item.Kind == "button_down" && Native.IsMouseDown(item.Button)) throw new InputFailure("user_button_held", "Mouse button is already held");
+                        if (item.Kind == "absolute_mouse_move") CheckPoint(item.X, item.Y);
+                    }
+                    // Registration is persisted before DOWN. Keep all ownership after a partial batch.
+                    state.HeldKeysMask |= downKeys; state.HeldMouseMask |= downMouse;
+                    if (downKeys != 0 || downMouse != 0) { work.OwnedEver = true; work.ReleaseAccounted = false; }
+                    state.LeaseDeadlineMs = work.TimelineStart + work.Duration + 250;
+                    StartTimestamp(work);
+                }, delegate(LeaseSnapshot state)
+                {
+                    CheckSafe(work, state); SendEvents(work, packets.ToArray());
+                    state.HeldKeysMask &= ~upKeys; state.HeldMouseMask &= ~upMouse;
+                    expectedKeys = state.HeldKeysMask; expectedMouse = state.HeldMouseMask;
+                    if (state.HeldKeysMask == 0 && state.HeldMouseMask == 0)
+                    { state.LeaseDeadlineMs = 0; if (work.OwnedEver) work.ReleaseAccounted = true; }
+                });
+                cursor = end;
+            }
+            WaitUntil(work, work.TimelineStart + work.Duration);
+        }
         ReleaseResult TryRelease(Work work, int timeoutMs)
         {
             if (work != null) lock (work.ReleaseSync) return ReleaseLoop(work, timeoutMs);
@@ -317,7 +388,8 @@ static class WinInput
             string status = "completed", reason = null, message = null;
             try
             {
-                if (work.Kind == "key") { PressOwned(work); WaitDuration(work); }
+                if (work.Kind == "timeline") RunTimeline(work);
+                else if (work.Kind == "key") { PressOwned(work); WaitDuration(work); }
                 else if (work.Kind == "mouse_move")
                 {
                     SendUnowned(work, delegate() { return new[] { work.Mode == "absolute" ? Native.MouseAbsolute(hwnd, work.X, work.Y) : Native.MouseRelative(work.Dx, work.Dy) }; });
@@ -396,7 +468,12 @@ static class WinInput
         {
             Dictionary<string, object> action = command.Action;
             Work work = new Work { Command = command, Kind = Text(action, "kind") };
-            if (work.Kind == "key")
+            if (work.Kind == "timeline")
+            {
+                WindowInfo info = Native.GetWindow(hwnd);
+                work.Events = ParseTimeline(action, info.Width, info.Height, out work.Duration);
+            }
+            else if (work.Kind == "key")
             {
                 Exact(action, "kind", "keys", "duration_ms");
                 object[] names = Required(action, "keys") as object[];
@@ -554,6 +631,82 @@ static class WinInput
     }
     // Preserve strict native command semantics before JavaScriptSerializer can
     // overwrite duplicate member names (including escaped aliases).
+    static TimelineEvent[] ParseTimeline(Dictionary<string, object> action, int width, int height, out int duration)
+    {
+        Exact(action, "kind", "duration_ms", "events");
+        if (Text(action, "kind") != "timeline") throw new InputFailure("invalid_action", "Expected timeline");
+        duration = Integer(action, "duration_ms", 1, MaxDurationMs);
+        object[] raw = Required(action, "events") as object[];
+        if (raw == null || raw.Length < 1 || raw.Length > 256) throw new InputFailure("invalid_timeline", "Timeline needs 1..256 events");
+        TimelineEvent[] events = new TimelineEvent[raw.Length];
+        Dictionary<string, int> held = new Dictionary<string, int>(StringComparer.Ordinal);
+        HashSet<string> touched = new HashSet<string>(StringComparer.Ordinal);
+        int previous = -1;
+        for (int i = 0; i < raw.Length; i++)
+        {
+            Dictionary<string, object> value = Map(raw[i], "timeline event");
+            TimelineEvent item = new TimelineEvent { Kind = Text(value, "kind"), At = Integer(value, "at_ms", 0, duration) };
+            if (item.At < previous) throw new InputFailure("invalid_timeline", "Timeline event times must be sorted");
+            if (item.At != previous) touched.Clear(); previous = item.At;
+            string resource = null;
+            if (item.Kind == "key_down" || item.Kind == "key_up")
+            {
+                Exact(value, "kind", "at_ms", "key"); string key = Text(value, "key");
+                try { item.Key = KeyCatalog.Get(key); }
+                catch (ArgumentException error) { throw new InputFailure("invalid_timeline", error.Message); }
+                resource = "key:" + key;
+            }
+            else if (item.Kind == "button_down" || item.Kind == "button_up")
+            { Exact(value, "kind", "at_ms", "button"); string button = Text(value, "button"); item.Button = Button(button); resource = "button:" + button; }
+            else if (item.Kind == "relative_mouse_move")
+            { Exact(value, "kind", "at_ms", "dx", "dy"); item.Dx = Integer(value, "dx", -32767, 32767); item.Dy = Integer(value, "dy", -32767, 32767); }
+            else if (item.Kind == "absolute_mouse_move")
+            {
+                Exact(value, "kind", "at_ms", "x", "y"); item.X = Integer(value, "x", 0, 65535); item.Y = Integer(value, "y", 0, 65535);
+                if (item.X >= width || item.Y >= height) throw new InputFailure("invalid_timeline", "Timeline coordinate outside client area");
+            }
+            else throw new InputFailure("invalid_timeline", "Unsupported timeline event");
+            if (resource != null)
+            {
+                if (!touched.Add(resource)) throw new InputFailure("invalid_timeline", "Resource repeated at one timestamp");
+                if (item.Kind == "key_down" || item.Kind == "button_down")
+                {
+                    if (held.ContainsKey(resource)) throw new InputFailure("invalid_timeline", "Duplicate DOWN");
+                    held.Add(resource, item.At);
+                }
+                else
+                {
+                    int down;
+                    if (!held.TryGetValue(resource, out down) || down >= item.At) throw new InputFailure("invalid_timeline", "UP needs an earlier DOWN");
+                    held.Remove(resource);
+                }
+            }
+            events[i] = item;
+        }
+        if (held.Count != 0) throw new InputFailure("invalid_timeline", "Every DOWN needs a paired UP in this command");
+        return events;
+    }
+    static int ValidateTimelineFixture(string[] args)
+    {
+        int width = 65536, height = 65536;
+        if (args.Length != 1 && (args.Length != 5 || args[1] != "--width" || args[3] != "--height" ||
+            !int.TryParse(args[2], out width) || !int.TryParse(args[4], out height) || width < 1 || width > 65536 || height < 1 || height > 65536))
+        { Console.Error.WriteLine("Usage: validate-timeline [--width N --height N]"); return 2; }
+        string line; int failed = 0;
+        while ((line = Console.ReadLine()) != null)
+        {
+            try
+            {
+                new JsonMemberCheck(line).Check();
+                Dictionary<string, object> value = Map(new JavaScriptSerializer().DeserializeObject(line), "timeline");
+                int duration; TimelineEvent[] events = ParseTimeline(value, width, height, out duration);
+                Console.WriteLine(new JavaScriptSerializer().Serialize(Obj("status", "valid", "duration_ms", duration, "events", events.Length, "real_inputs", 0, "effect", "unverified")));
+            }
+            catch (Exception error)
+            { failed++; Console.WriteLine(new JavaScriptSerializer().Serialize(Obj("status", "invalid", "reason", error.Message, "real_inputs", 0))); }
+        }
+        return failed == 0 ? 0 : 2;
+    }
     sealed class JsonMemberCheck
     {
         readonly string text;
@@ -671,6 +824,7 @@ static class WinInput
     static int Main(string[] args)
     {
         Console.InputEncoding = new UTF8Encoding(false); Console.OutputEncoding = new UTF8Encoding(false);
+        if (args.Length > 0 && args[0] == "validate-timeline") return ValidateTimelineFixture(args);
         Native.MakeDpiAware(); string session = Guid.Empty.ToString("D");
         Mutex admission = null; bool ownsAdmission = false;
         try

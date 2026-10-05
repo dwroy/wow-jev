@@ -290,6 +290,31 @@
               "$ref": "#/definitions/duration"
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "duration_ms",
+            "events"
+          ],
+          "properties": {
+            "kind": {
+              "const": "timeline"
+            },
+            "duration_ms": {
+              "$ref": "#/definitions/duration"
+            },
+            "events": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "items": {
+                "$ref": "#/definitions/timeline_event"
+              }
+            }
+          }
         }
       ]
     },
@@ -477,6 +502,9 @@
             },
             "heartbeat_lease_ms": {
               "const": 1000
+            },
+            "timeline": {
+              "type": "boolean"
             }
           }
         },
@@ -741,6 +769,150 @@
           "$ref": "#/definitions/clock"
         }
       }
+    },
+    "timeline_event": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "at_ms",
+            "key"
+          ],
+          "properties": {
+            "kind": {
+              "const": "key_down"
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5000
+            },
+            "key": {
+              "$ref": "#/definitions/key"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "at_ms",
+            "key"
+          ],
+          "properties": {
+            "kind": {
+              "const": "key_up"
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5000
+            },
+            "key": {
+              "$ref": "#/definitions/key"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "at_ms",
+            "button"
+          ],
+          "properties": {
+            "kind": {
+              "const": "button_down"
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5000
+            },
+            "button": {
+              "$ref": "#/definitions/button"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "at_ms",
+            "button"
+          ],
+          "properties": {
+            "kind": {
+              "const": "button_up"
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5000
+            },
+            "button": {
+              "$ref": "#/definitions/button"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "at_ms",
+            "dx",
+            "dy"
+          ],
+          "properties": {
+            "kind": {
+              "const": "relative_mouse_move"
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5000
+            },
+            "dx": {
+              "$ref": "#/definitions/relative"
+            },
+            "dy": {
+              "$ref": "#/definitions/relative"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "at_ms",
+            "x",
+            "y"
+          ],
+          "properties": {
+            "kind": {
+              "const": "absolute_mouse_move"
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5000
+            },
+            "x": {
+              "$ref": "#/definitions/coordinate"
+            },
+            "y": {
+              "$ref": "#/definitions/coordinate"
+            }
+          }
+        }
+      ]
     }
   }
 }

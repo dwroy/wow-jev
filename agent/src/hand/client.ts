@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptionsWithoutStd
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { StringDecoder } from 'node:string_decoder';
-import { assertNativeMessage, type NativeAction, type NativeCommand, type NativeOp, type NativeReady, type NativeReceipt, type NativeValidator } from './protocol.js';
+import { assertNativeMessage, assertNativeTimeline, type NativeAction, type NativeCommand, type NativeOp, type NativeReady, type NativeReceipt, type NativeValidator } from './protocol.js';
 
 export interface InputProfile {
   heartbeat_interval_ms: number; heartbeat_lease_ms: number; startup_timeout_ms: number;
@@ -186,6 +186,10 @@ export class NativeInputClient extends EventEmitter {
   async execute(action: NativeAction, options: { id?: string; timeoutMs?: number } = {}): Promise<NativeReceipt> {
     if (this.state !== 'ready') throw new Error(`native_not_ready: ${this.state}`);
     if (this.inFlight) throw new Error('action_in_flight');
+    if (action.kind === 'timeline') {
+      if (this.ready?.capabilities.timeline !== true) throw new Error('native_timeline_unsupported');
+      assertNativeTimeline(action);
+    }
     this.inFlight = true;
     try {
       const duration = 'duration_ms' in action ? action.duration_ms : 0;

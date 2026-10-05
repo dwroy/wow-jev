@@ -1,0 +1,164 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import type { BodyAction, ExecutionContext } from '../src/layers/contracts.js';
+import type { NativeReady, NativeReceipt, NativeAction } from '../src/hand/protocol.js';
+import { BodyRuntime, type BodyHand } from '../src/actions/runtime.js';
+import { compileBodyAction } from '../src/actions/compiler.js';
+import { bodyBindingsSha256, parseBodyProfile, profileFromBindingsCache } from '../src/actions/profile.js';
+import { bodyProfile, bodySample } from './fixtures/actions-body.js';
+const context = (mode: ExecutionContext['mode'] = 'simulated'): ExecutionContext => ({ command_id: 'command-1', task_id: 'task', task_revision: 1, run_epoch: 1, mode, conditions: [], signal: new AbortController().signal });
+const identity = () => ({ task_id: 'task', task_revision: 1, run_epoch: 1 });
+const window = { token: 'target-token', hwnd: '0xabc', pid: 99 };
+function mockHand(send: (action: NativeAction, id: string) => Promise<NativeReceipt>) {
+  const ready: NativeReady = { protocol: 'wow-input', version: 1, type: 'ready', session_id: 'hand-session', executor_pid: 1, watchdog_pid: 2,
+    window: { ...window, client_width: 1000, client_height: 800, focused: true }, capabilities: { keys: ['E', 'D', 'S', 'F', 'G', 'SPACE', '1'], max_duration_ms: 5000, heartbeat_lease_ms: 1000, timeline: true }, local_clock: { domain: 'windows-qpc', at_ms: 9999999 } };
+  let cancels = 0;
+  const receipt = (id: string, count = 0, op: NativeReceipt['op'] = 'execute', status: NativeReceipt['status'] = 'completed'): NativeReceipt => ({ protocol: 'wow-input', version: 1, type: 'receipt', id, session_id: ready.session_id, op, status,
+    input: { status: count ? 'released' : 'not_sent', events_requested: count, events_inserted: count, released: true }, effect: { status: 'unknown' }, timing: { clock: 'windows_qpc', started_ms: 9000000, finished_ms: 9000001 }, local_clock: { domain: 'windows-qpc', at_ms: 9999999 } });
+  const hand: BodyHand = { ready, sessionId: ready.session_id, execute: async (a, options) => send(a, options?.id ?? ''), cancel: async () => { cancels++; return receipt('cancel', 0, 'cancel', 'ok'); }, releaseAll: async () => receipt('release', 0, 'release_all', 'ok') };
+  return { hand, receipt, cancels: () => cancels };
+}
+
+test('actual per-character cache imports E/D/S/F/G and preserves source hash, new profiles may bind other keys', () => {
+  const cache = 'bind E MOVEFORWARD\nbind D MOVEBACKWARD\nbind S STRAFELEFT\nbind F STRAFERIGHT\nbind G INTERACTTARGET\n';
+  const p = profileFromBindingsCache(cache, { id: 'retail', revision: 1, character_id: null, layout_id: 'actual-layout', build: 'retail-build', locale: 'zhCN' });
+  assert.deepEqual(p.bindings.forward?.keys, ['E']); assert.deepEqual(p.bindings.interact?.keys, ['G']); assert.match(p.source.binding_artifact_sha256!, /^[a-f0-9]{64}$/);
+  assert.deepEqual(profileFromBindingsCache(cache.replace('bind E', 'bind W'), { id: 'custom', revision: 2, character_id: null, layout_id: 'new-layout', build: 'retail-build', locale: 'zhCN' }).bindings.forward?.keys, ['W']);
+  assert.throws(() => parseBodyProfile({ ...p, bindings_sha256: 'a'.repeat(64) }), /bindings_hash/);
+});
+
+test('all shared BodyActions compile actual finite input, wait has no dispatch', () => {
+  const profile = bodyProfile(), observation = bodySample('before', 100).observation;
+  const actions: BodyAction[] = [ ...(['forward', 'backward', 'strafe_left', 'strafe_right'] as const).map((axis) => ({ kind: 'move' as const, axis, duration_ms: 400 })),
+    { kind: 'turn', dx: 40, duration_ms: 400 }, { kind: 'arc', dx: -40, duration_ms: 400 },
+    { kind: 'jump', duration_ms: 50 }, { kind: 'mount', duration_ms: 50 }, { kind: 'dismount', duration_ms: 50 },
+    ...(['forward', 'ascend', 'descend', 'brake'] as const).map((axis) => ({ kind: 'fly' as const, axis, duration_ms: 100 })),
+    { kind: 'cast', ability: 'fireball', duration_ms: 50 }, { kind: 'interact', target_signature: 'target-one', duration_ms: 50 }, { kind: 'wait', duration_ms: 100 } ];
+  for (const action of actions) {
+    const sample = structuredClone(observation);
+    if (action.kind === 'fly') sample.fields['player.movement_mode'] = { ...sample.fields['player.movement_mode']!, status: 'known', value: 'steady_flight' };
+    assert.equal(compileBodyAction(action, profile, sample).status, 'ready', JSON.stringify(action));
+  }
+  const arc = compileBodyAction({ kind: 'arc', dx: -43, duration_ms: 400 }, profile, observation); assert.equal(arc.status, 'ready');
+  if (arc.status !== 'ready' || !arc.action) throw new Error('arc missing');
+  assert.ok(arc.action.events.some((event) => event.kind === 'key_down' && event.key === 'E' && event.at_ms === 0));
+  assert.ok(arc.action.events.some((event) => event.kind === 'button_down' && event.at_ms === 0));
+  assert.equal(arc.action.events.reduce((sum, event) => sum + (event.kind === 'relative_mouse_move' ? event.dx : 0), 0), -43);
+});
+
+test('missing mapping, unknown movement, flight mode incompatibility and unsupported abilities are explicit', () => {
+  const profile = bodyProfile(), observation = bodySample('before', 100).observation;
+  const raw = JSON.parse(JSON.stringify(profile)); delete raw.bindings.forward; raw.bindings_sha256 = bodyBindingsSha256(raw);
+  assert.deepEqual(compileBodyAction({ kind: 'move', axis: 'forward', duration_ms: 100 }, parseBodyProfile(raw), observation), { status: 'unbound', reason: 'binding:forward' });
+  observation.fields['player.movement_mode'] = { ...observation.fields['player.movement_mode']!, status: 'unknown', value: null };
+  assert.deepEqual(compileBodyAction({ kind: 'move', axis: 'forward', duration_ms: 100 }, profile, observation), { status: 'blocked', reason: 'movement_mode_unknown' });
+  observation.fields['player.movement_mode'] = { ...observation.fields['player.movement_mode']!, status: 'known', value: 'skyriding' };
+  assert.equal(compileBodyAction({ kind: 'fly', axis: 'ascend', duration_ms: 100 }, profile, observation).status, 'blocked');
+});
+
+test('click must bind enabled same-frame element coordinates and current layout', () => {
+  const observation = bodySample('before', 100).observation; observation.fields['input.mouse_mode'] = { ...observation.fields['input.mouse_mode']!, status: 'known', value: 'ui' };
+  const action: BodyAction = { kind: 'click', element_id: 'accept', button: 'left', x: 100, y: 200, duration_ms: 50 };
+  assert.equal(compileBodyAction(action, bodyProfile(), observation).status, 'ready');
+  assert.equal(compileBodyAction({ ...action, x: 101 }, bodyProfile(), observation).status, 'blocked');
+  observation.fields['dialog.elements']!.source_observation_id = 'old';
+  assert.equal(compileBodyAction(action, bodyProfile(), observation).status, 'blocked');
+});
+
+test('simulation logs full identity/profile/source IDs and never invents input or game effect', async () => {
+  let now = 100, seq = 0; const logs: { kind: string; data: any }[] = [];
+  const runtime = new BodyRuntime({ profile: bodyProfile(), runId: 'run', hand: null, now: () => now, currentIdentity: identity,
+    collect: async () => bodySample(`obs-${seq++}`, now), sleep: async (duration) => { now += duration; }, append: async (kind, data) => { logs.push({ kind, data }); } });
+  const result = await runtime.execute({ kind: 'arc', dx: 40, duration_ms: 400 }, context());
+  assert.equal(result.status, 'completed'); assert.equal(result.real_inputs, 0); assert.equal(result.receipt, null); assert.equal(result.release, 'confirmed'); assert.equal(result.game_effect, 'unverified');
+  assert.deepEqual(result.evidence_observation_ids, ['obs-0', 'obs-1']);
+  const intent = logs.find((log) => log.kind === 'body_action_intent')!.data;
+  assert.equal(intent.context.run_epoch, 1); assert.match(intent.profile_sha256, /^[a-f0-9]{64}$/); assert.equal(intent.native_action.kind, 'timeline');
+  assert.equal((await runtime.execute({ kind: 'wait', duration_ms: 1 }, context())).reason, 'duplicate_command_id');
+});
+
+test('runtime merges parent target conditions; refreshed observation and stale fields cannot bypass gate', async () => {
+  for (const stale of [false, true]) {
+    const sample = bodySample('new-observation', 100); sample.observation.fields['target.signature'] = { ...sample.observation.fields['target.signature']!, status: 'known', value: stale ? 'target-one' : 'target-two', captured_at_ms: stale ? 0 : 100 };
+    const runtime = new BodyRuntime({ profile: bodyProfile(), runId: 'run', hand: null, now: () => 100, currentIdentity: identity, collect: async () => sample });
+    const c = context(); c.conditions = [{ field: 'target.signature', op: 'eq', value: 'target-one', max_age_ms: 50 }];
+    const result = await runtime.execute({ kind: 'move', axis: 'forward', duration_ms: 100 }, c);
+    assert.equal(result.status, 'blocked'); assert.match(result.reason!, /condition_(failed|unknown_or_stale):target.signature/);
+  }
+});
+
+test('epoch/profile/action mutation after intent logging prevents dispatch', async () => {
+  let task = identity(), sends = 0;
+  const fake = mockHand(async (a, id) => { sends++; return fake.receipt(id, a.kind === 'timeline' ? a.events.length : 0); });
+  const runtime = new BodyRuntime({ profile: bodyProfile(), runId: 'run', hand: fake.hand, now: () => 100, currentIdentity: () => task,
+    expectedWindow: window, collect: async () => bodySample('before', 100, 'live'), append: async (kind) => { if (kind === 'body_action_intent') task = { ...task, run_epoch: 2 }; } });
+  const result = await runtime.execute({ kind: 'move', axis: 'forward', duration_ms: 100 }, context('live'));
+  assert.equal(result.status, 'blocked'); assert.equal(result.reason, 'plan_changed'); assert.equal(sends, 0);
+});
+
+test('live native receipt confirms input command and release, foreign QPC never becomes coordinator effect', async () => {
+  let seq = 0;
+  const fake = mockHand(async (a, id) => fake.receipt(id, a.kind === 'timeline' ? a.events.length : 0));
+  const runtime = new BodyRuntime({ profile: bodyProfile(), runId: 'run', hand: fake.hand, now: () => 100, currentIdentity: identity, expectedWindow: window, collect: async () => bodySample(`obs-${seq++}`, 100, 'live') });
+  const result = await runtime.execute({ kind: 'move', axis: 'forward', duration_ms: 100 }, context('live'));
+  assert.equal(result.status, 'completed'); assert.equal(result.real_inputs, 1); assert.equal(result.receipt?.input.events_inserted, 2); assert.equal(result.release, 'confirmed'); assert.equal(result.game_effect, 'unverified');
+  assert.equal(result.started_at_ms, 100); assert.equal(result.finished_at_ms, 100);
+});
+
+test('cancel interrupts pending native command, transport loss retains unknown input count and release', async () => {
+  const abort = new AbortController(); let finish!: (r: NativeReceipt) => void;
+  const fake = mockHand(async (a, id) => new Promise((resolve) => { finish = resolve; setTimeout(() => { abort.abort(); finish(fake.receipt(id, 2, 'execute', 'cancelled')); }, 15); }));
+  let seq = 0;
+  const runtime = new BodyRuntime({ profile: bodyProfile(), runId: 'run', hand: fake.hand, now: () => 100, currentIdentity: identity, expectedWindow: window, collect: async () => bodySample(`obs-${seq++}`, 100, 'live') });
+  const result = await runtime.execute({ kind: 'move', axis: 'forward', duration_ms: 100 }, { ...context('live'), signal: abort.signal });
+  assert.equal(result.status, 'cancelled'); assert.ok(fake.cancels() > 0); assert.equal(result.release, 'confirmed');
+  const failed = mockHand(async () => { throw new Error('native_disconnected'); });
+  const deadRuntime = new BodyRuntime({ profile: bodyProfile(), runId: 'run', hand: failed.hand, now: () => 100, currentIdentity: identity, expectedWindow: window, collect: async () => bodySample('before', 100, 'live') });
+  const lost = await deadRuntime.execute({ kind: 'move', axis: 'forward', duration_ms: 100 }, context('live'));
+  assert.equal(lost.status, 'failed'); assert.equal(lost.real_inputs, 0); assert.equal(lost.input_count_scope, 'lower_bound'); assert.equal(lost.release, 'unconfirmed');
+});
+
+test('live critical mode, mouse, layout/element and ability conditions require current raw CV provenance', async () => {
+  for (const [action, path] of [
+    [{ kind: 'move', axis: 'forward', duration_ms: 50 }, 'player.movement_mode'],
+    [{ kind: 'turn', dx: 20, duration_ms: 50 }, 'input.mouse_mode'],
+    [{ kind: 'cast', ability: 'fireball', duration_ms: 50 }, 'ability.fireball.ready'],
+    [{ kind: 'click', element_id: 'accept', button: 'left', x: 100, y: 200, duration_ms: 50 }, 'dialog.elements'],
+  ] as const) {
+    for (const mutate of ['seed', 'manual', 'simulated', 'old_source', 'old_time']) {
+      let sends = 0;
+      const sample = bodySample('before', 100, 'live');
+      if (action.kind === 'click') sample.observation.fields['input.mouse_mode'] = { ...sample.observation.fields['input.mouse_mode']!, status: 'known', value: 'ui' };
+      const field = sample.observation.fields[path]!;
+      if (mutate === 'old_source') field.source_observation_id = 'older';
+      else if (mutate === 'old_time') field.captured_at_ms = 99;
+      else field.source = mutate as 'seed' | 'manual' | 'simulated';
+      const fake = mockHand(async (a, id) => { sends++; return fake.receipt(id, a.kind === 'timeline' ? a.events.length : 0); });
+      const runtime = new BodyRuntime({ profile: bodyProfile(), runId: 'run', hand: fake.hand, now: () => 100, currentIdentity: identity, expectedWindow: window, collect: async () => sample });
+      const result = await runtime.execute(action, context('live'));
+      assert.equal(result.status, 'blocked', `${path}:${mutate}`); assert.equal(sends, 0);
+    }
+  }
+});
+
+test('held command is cancelled when task epoch changes while native execution is active', async () => {
+  let task = identity(), terminal!: () => void;
+  const fake = mockHand(async (a, id) => new Promise((resolve) => { terminal = () => resolve(fake.receipt(id, 2, 'execute', 'cancelled')); setTimeout(() => { task = { ...task, run_epoch: 2 }; }, 5); }));
+  const originalCancel = fake.hand.cancel;
+  fake.hand.cancel = async () => { const receipt = await originalCancel(); terminal(); return receipt; };
+  let seq = 0;
+  const runtime = new BodyRuntime({ profile: bodyProfile(), runId: 'run', hand: fake.hand, now: () => 100, currentIdentity: () => task, expectedWindow: window, collect: async () => bodySample(`obs-${seq++}`, 100, 'live') });
+  const result = await runtime.execute({ kind: 'move', axis: 'forward', duration_ms: 400 }, context('live'));
+  assert.equal(result.status, 'cancelled'); assert.equal(result.release, 'confirmed'); assert.ok(fake.cancels() > 0);
+});
+
+test('cast stationary and profile conditions remain actual gate checks, live wait needs no hand', async () => {
+  const before = bodySample('before', 100); before.observation.fields['player.moving'] = { ...before.observation.fields['player.moving']!, status: 'known', value: true };
+  const runtime = new BodyRuntime({ profile: bodyProfile(), runId: 'run', hand: null, now: () => 100, currentIdentity: identity, collect: async () => before });
+  const blocked = await runtime.execute({ kind: 'cast', ability: 'fireball', duration_ms: 50 }, context());
+  assert.equal(blocked.reason, 'condition_failed:player.moving');
+  let seq = 0, now = 100;
+  const waiting = new BodyRuntime({ profile: bodyProfile(), runId: 'run', hand: null, now: () => now, currentIdentity: identity, collect: async () => bodySample(`obs-${seq++}`, now, 'live'), sleep: async (duration) => { now += duration; } });
+  const result = await waiting.execute({ kind: 'wait', duration_ms: 50 }, context('live'));
+  assert.equal(result.status, 'completed'); assert.equal(result.real_inputs, 0); assert.equal(result.release, 'confirmed'); assert.equal(result.game_effect, 'unverified');
+});
