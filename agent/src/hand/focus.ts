@@ -4,13 +4,18 @@ import { runCommand } from '../core/process.js';
 
 /** Wait for a human to focus the exact HWND/PID; no SetForegroundWindow or input. */
 export async function waitForTargetFocus(executable: string, window: string, expectedPid: number, cwd: string,
-  waitMs: number, command: typeof runCommand = runCommand): Promise<void> {
+  waitMs: number, command: typeof runCommand = runCommand, signal?: AbortSignal): Promise<void> {
   if (!Number.isInteger(waitMs) || waitMs < 0 || waitMs > 30000) throw new Error('Invalid --wait-focus-ms (0..30000)');
+  const checkCancelled = () => { if (signal?.aborted) throw new Error('focus_cancelled: 未发送输入。'); };
+  checkCancelled();
   if (waitMs === 0) return;
   const deadline = performance.now() + waitMs;
   while (performance.now() < deadline) {
+    checkCancelled();
     const remaining = Math.max(1, Math.floor(deadline - performance.now()));
     const result = await command(executable, ['list'], { cwd, timeoutMs: Math.min(2000, remaining), maxOutputBytes: 65536 });
+    // A probe already in flight remains bounded by its <=2s timeout. Cancellation must outrank its result.
+    checkCancelled();
     if (result.status !== 'ok') throw new Error(`focus_probe_failed: ${result.status}/${result.error_code ?? result.exit_code}`);
     for (const line of result.stdout.split(/\r?\n/).filter((line) => line.trim())) {
       const row: unknown = JSON.parse(line);
@@ -18,7 +23,11 @@ export async function waitForTargetFocus(executable: string, window: string, exp
         !('pid' in row) || !Number.isInteger(row.pid) || !('focused' in row) || typeof row.focused !== 'boolean') throw new Error('Invalid focus probe output');
       if (BigInt(row.hwnd) === BigInt(window) && row.pid === expectedPid && row.focused) return;
     }
-    await delay(Math.max(1, Math.min(100, deadline - performance.now())));
+    checkCancelled();
+    try { await delay(Math.max(1, Math.min(100, deadline - performance.now())), undefined, signal ? { signal } : undefined); }
+    catch (error) { checkCancelled(); throw error; }
+    checkCancelled();
   }
+  checkCancelled();
   throw new Error('focus_timeout: 请手动切回指定 HWND/PID 窗口后重试；未发送输入。');
 }
