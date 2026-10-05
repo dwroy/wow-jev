@@ -1,0 +1,4 @@
+# Optional; install only into a project-owned venv. Weights are supplied explicitly.
+rapidocr>=3.9.0,<3.10
+onnxruntime>=1.19,<2
+Pillow>=10,<13

@@ -5,6 +5,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep, win32 } fr
 import { Ajv, type ValidateFunction } from 'ajv';
 import type { Artifact } from '../core/protocol.js';
 import { runCommand } from '../core/process.js';
+import { freezeRegionProfile } from './regions/profile.js';
 import type { EyeSample } from './protocol.js';
 
 export type LogKind = 'manifest' | 'native_eye' | 'sample_boundary' | 'artifact' | 'observation' | 'seed_request' | 'seed_result' | 'action_intent' | 'native_input' | 'execution_receipt' | 'action_link' | 'event' | 'run_end';
@@ -17,6 +18,7 @@ export interface RunManifest {
   calibration: { id: string; files: Record<string, string> } | null;
   combat_calibration?: { id: string; files: Record<string, string> };
   npc_calibration?: { id: string; files: Record<string, string> };
+  regional_profile?: { id: string; files: Record<string, string> };
   extra_prompts?: Record<string, { version: string; sha256: string; file: string }>;
   schemas: Record<string, string>;
 }
@@ -76,7 +78,7 @@ export class EyeRunStore {
   static async create(options: {
     dir: string; runId: string; repo: string; schemaPaths: Record<string, string>; config: Record<string, unknown>;
     promptSha256?: string | null; calibrationPath?: string; nativeRoot?: string;
-    combatCalibrationPath?: string; npcCalibrationPath?: string; extraPrompts?: { version: string; path: string }[];
+    combatCalibrationPath?: string; npcCalibrationPath?: string; regionProfilePath?: string; regionContextPath?: string; extraPrompts?: { version: string; path: string }[];
   }): Promise<EyeRunStore> {
     const dir = resolve(options.dir);
     await mkdir(dirname(dir), { recursive: true }); await mkdir(dir, { recursive: false, mode: 0o700 });
@@ -87,6 +89,16 @@ export class EyeRunStore {
       const bytes = await readFile(path); schemas[name] = hashBuffer(bytes);
       await writeFile(join(dir, 'schemas', name), bytes, { flag: 'wx', mode: 0o400 });
     }
+    if (schemas['native-eye-v1.schema.json'] && !schemas['regional-eye-v1.schema.json']) {
+      const native = await readFile(join(dir, 'schemas/native-eye-v1.schema.json'), 'utf8');
+      if (native.includes('urn:wow-agent:regional-eye-v1')) {
+        const bytes = await readFile(options.schemaPaths['regional-eye-v1.schema.json'] ?? join(options.repo, 'protocol/regional-eye-v1.schema.json'));
+        schemas['regional-eye-v1.schema.json'] = hashBuffer(bytes); await writeFile(join(dir, 'schemas/regional-eye-v1.schema.json'), bytes, { flag: 'wx', mode: 0o400 });
+      }
+    }
+    let regionalProfile: RunManifest['regional_profile'];
+    if (Boolean(options.regionProfilePath) !== Boolean(options.regionContextPath)) throw new Error('region_profile_context_pair_required');
+    if (options.regionProfilePath) { const frozen = await freezeRegionProfile(options.regionProfilePath, join(dir, 'regional-profile'), options.regionContextPath!); regionalProfile = { id: frozen.id, files: frozen.files }; }
     let calibration: RunManifest['calibration'] = null;
     if (options.calibrationPath) {
       const raw = await readFile(options.calibrationPath); const bundle = JSON.parse(raw.toString('utf8')) as { id: string; templates?: { open?: string; closed?: string } };
@@ -194,7 +206,7 @@ export class EyeRunStore {
     }
     const manifest: RunManifest = { protocol: 'wow-eye-run', version: 1, run_id: options.runId, created_at: new Date().toISOString(), code: await codeVersion(options.repo, options.nativeRoot),
       config: options.config, config_sha256: hashBuffer(JSON.stringify(options.config)), prompts: { version: 'eye-retail-v1', sha256: options.promptSha256 ?? null }, calibration, schemas,
-      ...(combatCalibration ? { combat_calibration: combatCalibration } : {}), ...(npcCalibration ? { npc_calibration: npcCalibration } : {}), ...(extraPrompts ? { extra_prompts: extraPrompts } : {}) };
+      ...(combatCalibration ? { combat_calibration: combatCalibration } : {}), ...(npcCalibration ? { npc_calibration: npcCalibration } : {}), ...(regionalProfile ? { regional_profile: regionalProfile } : {}), ...(extraPrompts ? { extra_prompts: extraPrompts } : {}) };
     await writeFile(join(dir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx', mode: 0o400 });
     const schema = JSON.parse(await readFile(join(dir, 'schemas/eye-log-v1.schema.json'), 'utf8')) as object;
     const validator = new Ajv({ strict: true, allErrors: true }).compile<EyeLogRecord>(schema);

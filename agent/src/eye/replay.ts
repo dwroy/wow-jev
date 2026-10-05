@@ -1,3 +1,4 @@
+import { loadRegionProfile, templateReferences } from './regions/profile.js';
 import { createReadStream } from 'node:fs';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -54,6 +55,20 @@ export async function replayRun(directory: string): Promise<{ run_id: string; re
     combatBundle = bundle;
   }
   let npcBundle: CombatBundle | null = null;
+  if (manifest.regional_profile) {
+    const frozen = manifest.regional_profile, folder = join(dir, 'regional-profile');
+    const info = await lstat(folder); if (!info.isDirectory() || info.isSymbolicLink() || !frozen.files['profile.json'] || !frozen.files['context.json']) throw new Error('regional_profile_manifest');
+    const profile = await loadRegionProfile(join(folder, 'profile.json'));
+    if (profile.id !== frozen.id) throw new Error('regional_profile_id');
+    const expected = new Set(['profile.json','context.json',...templateReferences(profile).map((r)=>r.path)]);
+    if (expected.size !== Object.keys(frozen.files).length) throw new Error('regional_profile_extra_file');
+    for (const [name, hash] of Object.entries(frozen.files)) {
+      if (!expected.has(name) || !/^[A-Za-z0-9_.-]+$/.test(name) || !/^[a-f0-9]{64}$/.test(hash)) throw new Error('regional_profile_manifest');
+      const path = join(folder,name), file = await lstat(path);
+      if (!file.isFile() || file.isSymbolicLink() || await hashFile(path) !== hash) throw new Error('regional_profile_hash_mismatch');
+    }
+    for (const ref of templateReferences(profile)) if (frozen.files[ref.path] !== ref.sha256) throw new Error('regional_profile_template_hash');
+  }
   if (manifest.npc_calibration) {
     const frozen = manifest.npc_calibration;
     if (!frozen.files['calibration.json']) throw new Error('npc_calibration_manifest');
@@ -108,6 +123,10 @@ export async function replayRun(directory: string): Promise<{ run_id: string; re
     if (record.kind === 'native_eye') {
       const data = record.data as { direction: 'out' | 'in'; message: unknown };
       assertEye(data.message, eye);
+      if (data.direction === 'in' && data.message.type === 'sample' && data.message.regions) {
+        const batch = data.message.regions;
+        if (!manifest.regional_profile || batch.profile_id !== manifest.regional_profile.id || batch.profile_sha256 !== manifest.regional_profile.files['profile.json']) throw new Error('regional_profile_source_missing');
+      }
       if (data.direction === 'in' && data.message.type === 'ready') state = new EyeState(manifest.run_id, data.message.session_id, 'observation-0', {
         cvMaxAgeMs: Number(manifest.config.cv_max_age_ms ?? 1500), seedMaxAgeMs: Number(manifest.config.seed_max_age_ms ?? 5000),
       });

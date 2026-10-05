@@ -66,6 +66,73 @@
         "latest_ms": { "$ref": "#/definitions/milliseconds" }
       }
     },
+    "regionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "layout_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "frame_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "region_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "element_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "content_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "parsed_at_qpc_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "pixels_verified_at_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "verification_observation_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      },
+      "required": [
+        "profile_id",
+        "layout_id",
+        "frame_id",
+        "region_id",
+        "element_id",
+        "content_sha256",
+        "parsed_at_qpc_ms",
+        "pixels_verified_at_ms",
+        "verification_observation_id"
+      ]
+    },
     "observedField": {
       "type": "object",
       "additionalProperties": false,
@@ -74,7 +141,7 @@
         "value": { "$ref": "#/definitions/jsonValue" },
         "status": { "enum": ["known", "unknown", "unavailable"] },
         "captured_at_ms": { "$ref": "#/definitions/milliseconds" },
-        "source": { "enum": ["cv", "seed", "pixel_bridge", "window", "simulated", "manual"] },
+        "source": { "enum": ["cv", "seed", "pixel_bridge", "window", "simulated", "manual", "local_ocr"] },
         "source_observation_id": { "$ref": "#/definitions/identifier" },
         "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
         "artifact_ids": {
@@ -84,6 +151,7 @@
         },
         "source_clock": { "$ref": "#/definitions/sourceClock" },
         "capture_window": { "$ref": "#/definitions/captureWindow" },
+        "region_evidence": { "$ref": "#/definitions/regionEvidence" },
         "reason": { "$ref": "#/definitions/reason" }
       },
       "allOf": [

@@ -21,10 +21,12 @@ static class WinEye
     const long MaxArtifactBytes = 128L * 1024 * 1024;
     static readonly Regex Identifier = new Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$");
     [DllImport("user32.dll", SetLastError = true)] static extern bool PrintWindow(IntPtr hwnd, IntPtr deviceContext, uint flags);
+    [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hwnd);
+    static int WindowDpi(IntPtr hwnd) { try { return checked((int)GetDpiForWindow(hwnd)); } catch { return 0; } }
 
     sealed class Options
     {
-        public string Mode, Session, Calibration, Combat, Npc, Image, ExportDirectory;
+        public string Mode, Session, Calibration, Combat, Npc, Image, ExportDirectory, RegionProfile, RegionContext;
         public string ArtifactFormat = "jpeg";
         public IntPtr Window;
         public int Pid;
@@ -51,6 +53,8 @@ static class WinEye
                 else if (args[i] == "--calibration") options.Calibration = Absolute(value);
                 else if (args[i] == "--combat-calibration") options.Combat = Absolute(value);
                 else if (args[i] == "--npc-calibration") options.Npc = Absolute(value);
+                else if (args[i] == "--region-profile") options.RegionProfile = Absolute(value);
+                else if (args[i] == "--region-context") options.RegionContext = Absolute(value);
                 else if (args[i] == "--image" && options.Mode == "classify") options.Image = Absolute(value);
                 else throw new EyeFailure("invalid_options");
             }
@@ -61,6 +65,7 @@ static class WinEye
                     throw new EyeFailure("invalid_options");
             }
             else if (options.Image == null) throw new EyeFailure("missing_image");
+            if ((options.RegionProfile == null) != (options.RegionContext == null)) throw new EyeFailure("region_profile_context_pair_required");
             return options;
         }
         static string Absolute(string value)
@@ -76,6 +81,7 @@ static class WinEye
         readonly InventoryCalibration calibration;
         readonly CombatCalibration combat;
         readonly NpcCalibration npc;
+        readonly RegionVision regions;
         readonly long targetStart;
         readonly string artifactRoot;
         readonly HashSet<string> ids = new HashSet<string>(StringComparer.Ordinal);
@@ -96,6 +102,7 @@ static class WinEye
             calibration = options.Calibration == null ? null : new InventoryCalibration(options.Calibration);
             combat = options.Combat == null ? null : new CombatCalibration(options.Combat);
             npc = options.Npc == null ? null : new NpcCalibration(options.Npc);
+            regions = options.RegionProfile == null ? null : new RegionVision(options.RegionProfile, options.RegionContext);
             WindowInfo window = CheckWindow();
             targetStart = Native.GetProcessStartTicks(options.Pid);
             artifactRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WowJevEye", options.Session);
@@ -220,6 +227,7 @@ static class WinEye
                     Dictionary<string, object> detectors = combat == null ? CombatCalibration.Unsupported(failure ?? "calibration_unavailable") : combat.Detect(image, failure);
                     if (npc != null) foreach (KeyValuePair<string, object> pair in npc.Detect(image, detectors, failure)) detectors[pair.Key] = pair.Value;
                     detectors["inventory_open"] = detector; message["detectors"] = detectors; message["artifact"] = artifact;
+                    if (regions != null) message["regions"] = regions.Detect(image, "frame-" + options.Session + "-" + seq, started, WindowDpi(options.Window), failure);
                     lock (state) { if (!ending) Emit(message); }
                 }
             }
@@ -327,21 +335,26 @@ static class WinEye
         InventoryCalibration calibration = options.Calibration == null ? null : new InventoryCalibration(options.Calibration);
         CombatCalibration combat = options.Combat == null ? null : new CombatCalibration(options.Combat);
         NpcCalibration npc = options.Npc == null ? null : new NpcCalibration(options.Npc);
+        RegionVision regions = options.RegionProfile == null ? null : new RegionVision(options.RegionProfile, options.RegionContext);
         FileInfo file = new FileInfo(options.Image);
         if (!file.Exists || file.Length < 1 || file.Length > 64L * 1024 * 1024 || (file.Attributes & FileAttributes.ReparsePoint) != 0) throw new EyeFailure("invalid_image_file");
         using (Bitmap image = new Bitmap(options.Image))
         {
             if (image.Width > 65535 || image.Height > 65535 || (long)image.Width * image.Height > 64000000) throw new EyeFailure("frame_too_large");
+            long regionStarted = Clock.NowMs;
             FrameMetrics metrics = new FrameMetrics(image);
             object detector = metrics.Empty ? InventoryCalibration.Unsupported("empty_or_near_black_frame") :
                 calibration == null ? InventoryCalibration.Unsupported("calibration_unavailable") : calibration.Detect(image);
             Dictionary<string, object> detectors = combat == null ? CombatCalibration.Unsupported("calibration_unavailable") : combat.Detect(image, metrics.Empty ? "empty_or_near_black_frame" : null);
             if (npc != null) foreach (KeyValuePair<string, object> pair in npc.Detect(image, detectors, metrics.Empty ? "empty_or_near_black_frame" : null)) detectors[pair.Key] = pair.Value;
             detectors["inventory_open"] = detector;
-            Console.WriteLine(new JavaScriptSerializer().Serialize(EyeJson.Obj("protocol", "wow-eye", "version", 1, "type", "offline_result",
+            Dictionary<string, object> result = EyeJson.Obj("protocol", "wow-eye", "version", 1, "type", "offline_result",
                 "image", EyeJson.Obj("width", image.Width, "height", image.Height, "sha256", EyeJson.Hash(options.Image)),
                 "frame_status", metrics.Empty ? "unavailable" : "ok", "metrics", metrics.Json(null),
-                "detectors", detectors, "local_clock", LocalClock())));
+                "detectors", detectors, "local_clock", LocalClock());
+            if (regions != null) result["regions"] = regions.Detect(image, "offline-frame", regionStarted, regions.ContextDpi, metrics.Empty ? "empty_or_near_black_frame" : null);
+            result["local_clock"] = LocalClock();
+            Console.WriteLine(new JavaScriptSerializer().Serialize(result));
         }
         return 0;
     }

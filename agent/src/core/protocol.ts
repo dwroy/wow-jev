@@ -15,7 +15,7 @@ export interface Envelope {
 
 interface ObservedFieldMetadata {
   captured_at_ms: number;
-  source: 'cv' | 'seed' | 'pixel_bridge' | 'window' | 'simulated' | 'manual';
+  source: 'cv' | 'seed' | 'pixel_bridge' | 'window' | 'simulated' | 'manual' | 'local_ocr';
   source_observation_id: string;
   confidence?: number;
   artifact_ids?: string[];
@@ -23,6 +23,7 @@ interface ObservedFieldMetadata {
   /** WSL request-to-receive interval; captured_at_ms is its conservative lower bound. */
   capture_window?: { earliest_ms: number; latest_ms: number };
   reason?: { code: string; message?: string };
+  region_evidence?: import('../eye/regions/types.js').RegionEvidence;
 }
 
 export type ObservedField = ObservedFieldMetadata & (

@@ -1,4 +1,5 @@
 import type { Artifact, Observation, ObservedField } from '../core/protocol.js';
+import { RegionState } from './regions/state.js';
 import type { EyeReason, EyeWindow, SampleBracket } from './protocol.js';
 export interface SeedField { status: 'known' | 'unknown' | 'unavailable'; value: string | number | boolean | null; confidence: number; reason?: EyeReason }
 export interface SeedResult { type: 'seed_result'; id: string; status: 'ok' | 'disabled' | 'failed'; model: string | null; prompt_sha256: string; fields: Record<string, SeedField>; usage: { input_tokens: number | null; output_tokens: number | null }; elapsed_ms: number; reason?: EyeReason; prompt_version?: 'eye-retail-v1'; schema_version?: 1; raw_text?: string | null }
@@ -8,6 +9,8 @@ export interface SourceImage { captured_at_ms: number; received_at_ms: number; s
 export interface Adoption { accepted: string[]; rejected: { field: string; reason: string }[] }
 const SEED_FIELDS = ['player.name', 'player.level', 'target.present', 'target.name', 'player.in_combat', 'scene.summary'];
 export class EyeState {
+  private regional = new RegionState();
+  private regionalActive = new Set<string>();
   private fields = new Map<string, { field: ObservedField; measured: boolean }>();
   private window: EyeWindow | null = null;
   private token: string;
@@ -80,6 +83,14 @@ export class EyeState {
       update(fieldKey, ok && detector.status === 'known' ? { ...details, status: 'known', value: detector.value! }
         : { ...details, status: ok ? detector.status as 'unknown' | 'unavailable' : 'unavailable', value: null });
     }
+    if (sample.regions) {
+      const parsed = this.regional.apply(sample.regions, bracket, observationId, artifact?.id);
+      for (const [key, field] of Object.entries(parsed.fields)) {
+        this.regionalActive.add(key);
+        if (this.cvActive.has(key) && this.fields.get(key)?.field.status === 'known' && field.reason?.code !== 'region_occluded') continue;
+        update(key, field);
+      }
+    } else for (const key of this.regionalActive) update(key, { ...metadata, source: 'cv', status: 'unknown', value: null, reason: { code: 'regional_sample_missing' } });
   }
   seedSourceContext(): Pick<SourceImage, 'target_context'> { return this.targetContext ? { target_context: { ...this.targetContext } } : {}; }
   failedCapture(earliest: number, latest: number, observationId: string, code: string): void {
@@ -88,11 +99,12 @@ export class EyeState {
     this.fields.set('capture.available', { measured: true, field: { ...metadata, source: 'cv', status: 'known', value: false } });
     this.fields.set('window.focused', { measured: false, field: { ...metadata, source: 'window', status: 'unknown', value: null } });
     this.fields.set('scene.frame_delta', { measured: false, field: { ...metadata, source: 'cv', status: 'unavailable', value: null } });
-    for (const key of this.cvActive) this.fields.set(key, { measured: true, field: { ...metadata, source: 'cv', status: 'unavailable', value: null } });
+    for (const key of new Set([...this.cvActive, ...this.regionalActive])) this.fields.set(key, { measured: true, field: { ...metadata, source: 'cv', status: 'unavailable', value: null } });
     if (this.targetContext) {
       this.targetContext = { epoch: ++this.targetEpoch, signature: null, status: 'unavailable', present: null }; this.targetWindow = null;
       for (const key of this.fields.keys()) if (key.startsWith('target.')) this.fields.set(key, { measured: true, field: { ...metadata, source: 'cv', status: 'unavailable', value: null } });
     }
+
   }
   applySeed(result: SeedResult, source: SourceImage, now: number): Adoption {
     const adoption: Adoption = { accepted: [], rejected: [] };

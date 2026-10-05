@@ -11,7 +11,7 @@ export function parseEyeArtifactFormat(value: unknown = 'jpeg'): EyeArtifactForm
 }
 export interface EyeClientOptions {
   executable: string; window: string; expectedPid: number; cwd: string; now: () => number;
-  artifactFormat?: EyeArtifactFormat; sessionId?: string; calibrationWindowsPath?: string; combatCalibrationWindowsPath?: string; npcCalibrationWindowsPath?: string; exportWindowsPath?: string; startupTimeoutMs?: number; sampleTimeoutMs?: number;
+  artifactFormat?: EyeArtifactFormat; regionProfileWindowsPath?: string; regionContextWindowsPath?: string; sessionId?: string; calibrationWindowsPath?: string; combatCalibrationWindowsPath?: string; npcCalibrationWindowsPath?: string; exportWindowsPath?: string; startupTimeoutMs?: number; sampleTimeoutMs?: number;
   prefixArgs?: readonly string[]; onMessage?: (direction: 'out' | 'in', message: EyeMessage) => void;
 }
 interface Pending { op: 'sample' | 'shutdown'; resolve: (value: EyeSample | EyeStopped) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }
@@ -30,7 +30,8 @@ export class NativeEyeClient {
     const args = [...(options.prefixArgs ?? []), 'serve', '--window', options.window, '--expected-pid', String(options.expectedPid), '--session', this.sessionId,
       ...(options.calibrationWindowsPath ? ['--calibration', options.calibrationWindowsPath] : []), ...(options.combatCalibrationWindowsPath ? ['--combat-calibration', options.combatCalibrationWindowsPath] : []),
       ...(options.npcCalibrationWindowsPath ? ['--npc-calibration', options.npcCalibrationWindowsPath] : []), ...(options.exportWindowsPath ? ['--export-dir', options.exportWindowsPath] : []),
-      ...(options.artifactFormat === 'png' ? ['--artifact-format', 'png'] : [])];
+      ...(options.artifactFormat === 'png' ? ['--artifact-format', 'png'] : []),
+      ...(options.regionProfileWindowsPath ? ['--region-profile', options.regionProfileWindowsPath, '--region-context', options.regionContextWindowsPath!] : [])];
     this.child = spawn(options.executable, args, { cwd: options.cwd, shell: false, windowsHide: true, detached: false, stdio: ['pipe', 'pipe', 'pipe'] });
     this.started = new Promise((resolve, reject) => { this.startResolve = resolve; this.startReject = reject; });
     this.startupTimer = setTimeout(() => this.fail(new Error('eye_startup_timeout')), options.startupTimeoutMs ?? 5000);
@@ -44,6 +45,7 @@ export class NativeEyeClient {
     if (!/^0x[0-9a-fA-F]{1,16}$/.test(options.window) || !Number.isSafeInteger(options.expectedPid) || options.expectedPid < 1 || options.expectedPid > 4294967295 ||
       options.sessionId !== undefined && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(options.sessionId)) throw new Error('eye_invalid_binding');
     parseEyeArtifactFormat(options.artifactFormat);
+    if (Boolean(options.regionProfileWindowsPath) !== Boolean(options.regionContextWindowsPath)) throw new Error('region_profile_context_pair_required');
     const client = new NativeEyeClient(options, validator); await client.started; return client;
   }
   private fail(error: Error): void {
