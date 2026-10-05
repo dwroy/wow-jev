@@ -8,7 +8,8 @@ import { loadNativeValidator, assertNativeMessage, type NativeReceipt } from '..
 import { assertEye, loadEyeValidator, type EyeSample } from './protocol.js';
 import { loadSeedValidator } from './seed.js';
 import { hashFile, hashBuffer, type EyeLogRecord, type RunManifest } from './store.js';
-import { EyeState, type SeedResult, type SourceImage } from './state.js';
+import { EyeState, type SeedResult, type SourceImage, type TargetContext } from './state.js';
+interface CombatBundle { version: number; kind: string; id: string; client_width: number; client_height: number; signature?: unknown; detectors: Record<string, { templates: Record<string, { file: string; sha256: string }[]> }> }
 
 /** Reconstructs recorded facts only; it never launches native processes or model workers. */
 export async function replayRun(directory: string): Promise<{ run_id: string; records: number; observations: number; actions: number; complete: boolean; artifacts: number; confirmed_effects: number }> {
@@ -20,6 +21,32 @@ export async function replayRun(directory: string): Promise<{ run_id: string; re
   }
   if (manifest.calibration) for (const [name, hash] of Object.entries(manifest.calibration.files)) {
     if (!['calibration.json', 'open.png', 'closed.png'].includes(name) || await hashFile(join(dir, 'calibration', name)) !== hash) throw new Error('calibration_hash_mismatch');
+  }
+  const extension = manifest as RunManifest & { combat_calibration?: { id: string; files: Record<string, string> }; extra_prompts?: Record<string, { version: string; sha256: string; file: string }> };
+  let combatBundle: CombatBundle | null = null;
+  if (extension.combat_calibration) {
+    const frozen = extension.combat_calibration;
+    const folder = await lstat(join(dir, 'combat-calibration')); if (!folder.isDirectory() || folder.isSymbolicLink()) throw new Error('combat_calibration_path');
+    if (!frozen.files['calibration.json']) throw new Error('combat_calibration_manifest');
+    for (const [name, hash] of Object.entries(frozen.files)) {
+      if (name !== 'calibration.json' && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.png$/.test(name) || !/^[0-9a-f]{64}$/.test(hash)) throw new Error('combat_calibration_manifest');
+      const path = join(dir, 'combat-calibration', name); const file = await lstat(path);
+      if (!file.isFile() || file.isSymbolicLink() || await hashFile(path) !== hash) throw new Error('combat_calibration_hash_mismatch');
+    }
+    const bundle = JSON.parse(await readFile(join(dir, 'combat-calibration/calibration.json'), 'utf8')) as CombatBundle;
+    if (bundle.version !== 1 || bundle.kind !== 'combat-ui' || bundle.id !== frozen.id) throw new Error('combat_calibration_id');
+    const referenced = new Set(['calibration.json']);
+    for (const detector of Object.values(bundle.detectors)) for (const entries of Object.values(detector.templates)) for (const template of entries) {
+      if (frozen.files[template.file] !== template.sha256) throw new Error('combat_calibration_template_hash');
+      referenced.add(template.file);
+    }
+    if (referenced.size !== Object.keys(frozen.files).length) throw new Error('combat_calibration_extra_file');
+    combatBundle = bundle;
+  }
+  for (const prompt of Object.values(extension.extra_prompts ?? {})) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(prompt.file) || !/^[0-9a-f]{64}$/.test(prompt.sha256) || !prompt.version) throw new Error('extra_prompt_manifest');
+    const path = join(dir, 'prompts', prompt.file); const file = await lstat(path);
+    if (!file.isFile() || file.isSymbolicLink() || await hashFile(path) !== prompt.sha256) throw new Error('extra_prompt_hash_mismatch');
   }
   const logSchema = JSON.parse(await readFile(join(dir, 'schemas/eye-log-v1.schema.json'), 'utf8')) as object;
   const logValidator = new Ajv({ strict: true, allErrors: true }).compile<EyeLogRecord>(logSchema);
@@ -34,6 +61,7 @@ export async function replayRun(directory: string): Promise<{ run_id: string; re
   const artifacts = new Map<string, Artifact>(); const samples = new Map<string, EyeSample>(); const boundaries = new Map<string, { native_id: string; started_at_ms: number; received_at_ms: number }>();
   const inputReceipts = new Map<string, NativeReceipt>(); let seq = 0; let lastAt = 0; let lastObservationSeq = -1; let complete = false; let ended = false; let confirmed = 0;
   let state: EyeState | null = null;
+  const sourceContexts = new Map<string, TargetContext | undefined>();
   const linkedReceipts = new Set<string>();
   const lines = createInterface({ input: createReadStream(logPath), crlfDelay: Infinity });
   for await (const line of lines) {
@@ -49,7 +77,14 @@ export async function replayRun(directory: string): Promise<{ run_id: string; re
       if (data.direction === 'in' && data.message.type === 'ready') state = new EyeState(manifest.run_id, data.message.session_id, 'observation-0', {
         cvMaxAgeMs: Number(manifest.config.cv_max_age_ms ?? 1500), seedMaxAgeMs: Number(manifest.config.seed_max_age_ms ?? 5000),
       });
-      if (data.direction === 'in' && data.message.type === 'sample') samples.set(data.message.id, data.message);
+      if (data.direction === 'in' && data.message.type === 'sample') {
+        for (const [key, detector] of Object.entries(data.message.detectors)) if (key !== 'inventory_open' && detector?.calibration_id) {
+          if (detector.calibration_id !== extension.combat_calibration?.id || !combatBundle) throw new Error('combat_calibration_source_missing');
+          if (key === 'target_signature' ? !combatBundle.signature : !combatBundle.detectors[key]) throw new Error('combat_detector_not_configured');
+          if (detector.status === 'known' && (data.message.window.client_width !== combatBundle.client_width || data.message.window.client_height !== combatBundle.client_height)) throw new Error('combat_layout_mismatch_known');
+        }
+        samples.set(data.message.id, data.message);
+      }
     } else if (record.kind === 'sample_boundary') {
       const data = record.data as { native_id: string; observation_id: string; started_at_ms: number; received_at_ms: number };
       if (!samples.has(data.native_id) || data.started_at_ms > data.received_at_ms || data.received_at_ms > record.at_ms) throw new Error('sample_boundary_invalid');
@@ -85,13 +120,17 @@ export async function replayRun(directory: string): Promise<{ run_id: string; re
       }
       const expected = state.snapshot(observation.id, observation.observation_seq, observation.at_ms, observation.artifacts);
       if (JSON.stringify(expected) !== JSON.stringify(observation)) throw new Error('observation_does_not_match_recorded_state');
+      sourceContexts.set(observation.id, state.seedSourceContext().target_context);
       observations.set(observation.id, observation); lastObservationSeq = observation.observation_seq;
     } else if (record.kind === 'seed_result') {
       const data = record.data as { raw: SeedResult; source: SourceImage; adoption: unknown; adoption_at_ms: number };
       if (!seed || !seed(data.raw) || !observations.has(data.source.source_observation_id) || !artifacts.has(data.source.artifact_id)) throw new Error('seed_source_or_schema');
       const boundary = boundaries.get(data.source.source_observation_id);
-      if (!boundary || boundary.started_at_ms !== data.source.captured_at_ms) throw new Error('seed_source_time');
-      if (!state || !Number.isSafeInteger(data.adoption_at_ms) || data.adoption_at_ms > record.at_ms) throw new Error('seed_adoption_time');
+      const sourceSample = boundary ? samples.get(boundary.native_id) : undefined;
+      if (!boundary || boundary.started_at_ms !== data.source.captured_at_ms || boundary.received_at_ms !== data.source.received_at_ms || sourceSample?.capture.started_qpc_ms !== data.source.source_qpc_ms ||
+        !observations.get(data.source.source_observation_id)!.artifacts.some((artifact) => artifact.id === data.source.artifact_id && artifact.id === sourceSample?.artifact?.id)) throw new Error('seed_source_time');
+      if (JSON.stringify(data.source.target_context) !== JSON.stringify(sourceContexts.get(data.source.source_observation_id))) throw new Error('seed_source_target_context');
+      if (!state || !Number.isSafeInteger(data.adoption_at_ms) || data.adoption_at_ms > record.at_ms || data.adoption_at_ms < data.source.received_at_ms) throw new Error('seed_adoption_time');
       if (JSON.stringify(state.applySeed(data.raw, data.source, data.adoption_at_ms)) !== JSON.stringify(data.adoption)) throw new Error('seed_adoption_mismatch');
     } else if (record.kind === 'action_intent') {
       const action = record.data as ActionIntent; const valid = validateMessage(action, agent);

@@ -2,13 +2,19 @@ import type { Artifact, Observation, ObservedField } from '../core/protocol.js';
 import type { EyeReason, EyeWindow, SampleBracket } from './protocol.js';
 export interface SeedField { status: 'known' | 'unknown' | 'unavailable'; value: string | number | boolean | null; confidence: number; reason?: EyeReason }
 export interface SeedResult { type: 'seed_result'; id: string; status: 'ok' | 'disabled' | 'failed'; model: string | null; prompt_sha256: string; fields: Record<string, SeedField>; usage: { input_tokens: number | null; output_tokens: number | null }; elapsed_ms: number; reason?: EyeReason; prompt_version?: 'eye-retail-v1'; schema_version?: 1; raw_text?: string | null }
-export interface SourceImage { captured_at_ms: number; received_at_ms: number; source_observation_id: string; artifact_id: string; source_qpc_ms: number }
+/** Visible target UI context, not an entity GUID. Repeated identical units can share a signature. */
+export interface TargetContext { epoch: number; signature: string | null; status: 'known' | 'unknown' | 'unavailable'; present: boolean | null }
+export interface SourceImage { captured_at_ms: number; received_at_ms: number; source_observation_id: string; artifact_id: string; source_qpc_ms: number; target_context?: TargetContext }
 export interface Adoption { accepted: string[]; rejected: { field: string; reason: string }[] }
 const SEED_FIELDS = ['player.name', 'player.level', 'target.present', 'target.name', 'player.in_combat', 'scene.summary'];
 export class EyeState {
   private fields = new Map<string, { field: ObservedField; measured: boolean }>();
   private window: EyeWindow | null = null;
   private token: string;
+  private cvActive = new Set<string>();
+  private targetEpoch = 0;
+  private targetContext: TargetContext | null = null;
+  private targetWindow: string | null = null;
   constructor(private runId: string, sessionId: string, firstObservationId: string, private options = { cvMaxAgeMs: 1500, seedMaxAgeMs: 5000 }) {
     this.token = `window-${sessionId}`;
     for (const key of SEED_FIELDS) this.fields.set(key, { measured: false, field: { status: 'unknown', value: null, captured_at_ms: 0, source: 'seed', source_observation_id: firstObservationId, reason: { code: 'not_observed' } } });
@@ -34,13 +40,46 @@ export class EyeState {
         ? { ...metadata, source: 'cv', status: 'known', value: inventory.value, confidence: inventory.confidence }
         : { ...metadata, source: 'cv', status: 'unknown', value: null, confidence: inventory.confidence, ...(inventory.reason ? { reason: inventory.reason } : {}) });
     }
+    const combatKeys = { target_present: 'target.present', target_dead: 'target.dead', target_signature: 'target.signature', player_in_combat: 'player.in_combat' } as const;
+    for (const [nativeKey, fieldKey] of Object.entries(combatKeys)) {
+      const detector = sample.detectors[nativeKey as keyof typeof combatKeys];
+      if (!detector && !this.cvActive.has(fieldKey)) continue; // Missing optional fields preserve historical v1 replay.
+      if (detector?.calibration_id !== null && detector?.calibration_id !== undefined) this.cvActive.add(fieldKey);
+      if (!this.cvActive.has(fieldKey)) continue; // No calibration: existing read-only Seed observations remain usable.
+      const ok = sample.capture.status === 'ok' && detector?.calibration_id !== null && detector?.calibration_id !== undefined;
+      const details = { ...metadata, source: 'cv' as const, confidence: ok ? detector.confidence : 0,
+        ...((ok && detector.reason) ? { reason: detector.reason } : !ok ? { reason: { code: sample.capture.status === 'ok' ? 'combat_detector_missing' : 'capture_unavailable' } } : {}) };
+      update(fieldKey, ok && detector.status === 'known' ? { ...details, status: 'known', value: detector.value! }
+        : { ...details, status: ok ? detector.status as 'unknown' | 'unavailable' : 'unavailable', value: null });
+    }
+    if (this.cvActive.has('target.present') || this.cvActive.has('target.signature') || this.cvActive.has('target.dead')) {
+      const present = this.fields.get('target.present')?.field;
+      const signature = this.fields.get('target.signature')?.field;
+      const known = present?.status === 'known' && present.value === true && signature?.status === 'known' && typeof signature.value === 'string';
+      const window = sample.capture.status === 'ok' ? `${sample.window.hwnd.toLowerCase()}:${sample.window.pid}:${sample.window.client_width}:${sample.window.client_height}` : null;
+      const next: TargetContext = { epoch: this.targetEpoch, signature: known ? signature.value as string : null,
+        status: known ? 'known' : sample.capture.status === 'ok' ? 'unknown' : 'unavailable', present: present?.status === 'known' && typeof present.value === 'boolean' ? present.value : null };
+      const changed = !this.targetContext || window !== this.targetWindow || !known || next.signature !== this.targetContext.signature || next.present !== this.targetContext.present;
+      if (changed) {
+        next.epoch = ++this.targetEpoch;
+        for (const key of this.fields.keys()) if (key.startsWith('target.') && !['target.present', 'target.dead', 'target.signature'].includes(key))
+          update(key, { ...metadata, status: 'unknown', value: null, source: 'cv', reason: { code: 'target_context_changed' } });
+      }
+      this.targetContext = next; this.targetWindow = window;
+    }
   }
+  seedSourceContext(): Pick<SourceImage, 'target_context'> { return this.targetContext ? { target_context: { ...this.targetContext } } : {}; }
   failedCapture(earliest: number, latest: number, observationId: string, code: string): void {
     this.window = null;
     const metadata = { captured_at_ms: earliest, capture_window: { earliest_ms: earliest, latest_ms: latest }, source_observation_id: observationId, reason: { code } };
     this.fields.set('capture.available', { measured: true, field: { ...metadata, source: 'cv', status: 'known', value: false } });
     this.fields.set('window.focused', { measured: false, field: { ...metadata, source: 'window', status: 'unknown', value: null } });
     this.fields.set('scene.frame_delta', { measured: false, field: { ...metadata, source: 'cv', status: 'unavailable', value: null } });
+    for (const key of this.cvActive) this.fields.set(key, { measured: true, field: { ...metadata, source: 'cv', status: 'unavailable', value: null } });
+    if (this.targetContext) {
+      this.targetContext = { epoch: ++this.targetEpoch, signature: null, status: 'unavailable', present: null }; this.targetWindow = null;
+      for (const key of this.fields.keys()) if (key.startsWith('target.')) this.fields.set(key, { measured: true, field: { ...metadata, source: 'cv', status: 'unavailable', value: null } });
+    }
   }
   applySeed(result: SeedResult, source: SourceImage, now: number): Adoption {
     const adoption: Adoption = { accepted: [], rejected: [] };
@@ -49,6 +88,9 @@ export class EyeState {
       let rejection: string | null = null;
       if (result.status !== 'ok') rejection = result.status;
       else if (now - source.captured_at_ms > this.options.seedMaxAgeMs) rejection = 'stale_source';
+      else if (this.cvActive.has(key)) rejection = 'calibrated_cv_priority';
+      else if (key.startsWith('target.') && this.targetContext && (!source.target_context || this.targetContext.status !== 'known' || this.targetContext.present !== true ||
+        source.target_context.status !== 'known' || source.target_context.present !== true || source.target_context.epoch !== this.targetContext.epoch || source.target_context.signature !== this.targetContext.signature)) rejection = 'target_context_changed';
       else if (old?.measured && old.field.captured_at_ms > source.captured_at_ms) rejection = 'newer_measurement_exists';
       else if (key === 'ui.inventory_open' && old?.measured && old.field.source === 'cv' && old.field.status === 'known' && now - old.field.captured_at_ms <= this.options.cvMaxAgeMs) rejection = 'calibrated_cv_priority';
       if (rejection) { adoption.rejected.push({ field: key, reason: rejection }); continue; }
