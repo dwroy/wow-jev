@@ -21,6 +21,7 @@ interface TaskDescriptor {
   schema_version: 1; registry_root: string; version_id: string; task_root: string;
   repo_root: string; dependency_repo: string; code_source_sha256: string;
   version_file: string; knowledge_file: string; prompt_files: Record<string, string>;
+  loader_sha256: string;
 }
 export interface FrozenNativeBuild {
   schema_version: 1; code_source_sha256: string; native_source_sha256: string;
@@ -129,6 +130,7 @@ async function nativeBuild(execution: FrozenExecution): Promise<void> {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     const built = await ownedBuild(join(native, 'build.sh'), native);
     for (const [name, digest] of Object.entries(sourceFiles)) if (sha(await regularFile(join(native, name))) !== digest) throw new Error('system_frozen_native_source_changed');
+    if (sha(await regularFile(compiler)) !== compilerHash) throw new Error('system_frozen_native_compiler_changed');
     const binaries: Record<string, string> = {};
     if (!equal((await readdir(join(native, 'bin'))).sort(), [...NATIVE_BINS].sort())) throw new Error('system_frozen_native_unexpected_outputs');
     for (const name of NATIVE_BINS) binaries[name] = sha(await regularFile(join(native, 'bin', name)));
@@ -155,13 +157,27 @@ async function nativeBuild(execution: FrozenExecution): Promise<void> {
     }
   }
   await mkdir(join(native, 'bin'), { recursive: true });
-  for (const name of NATIVE_BINS) { await cp(join(cache, 'bin', name), join(native, 'bin', name), { force: true }); await chmod(join(native, 'bin', name), 0o500); }
+  for (const name of NATIVE_BINS) {
+    await cp(join(cache, 'bin', name), join(native, 'bin', name), { force: true });
+    if (sha(await regularFile(join(native, 'bin', name))) !== retained.build.binaries[name]) throw new Error('system_frozen_native_copied_binary_changed');
+    await chmod(join(native, 'bin', name), 0o500);
+  }
   for (const [name, digest] of Object.entries(sourceFiles)) if (sha(await regularFile(join(native, name))) !== digest) throw new Error('system_frozen_native_source_changed');
   execution.native_root = nativeRoot;
   execution.native_build = { ...retained.build, code_source_sha256: execution.code_source_sha256, cache_reused: reused };
   execution.native_cache_proof = retained.proof;
   await writeFile(join(execution.task_root, 'native-build.stdout.txt'), retained.stdout, { flag: 'wx', mode: 0o400 });
   await writeFile(join(execution.task_root, 'native-build.stderr.txt'), retained.stderr, { flag: 'wx', mode: 0o400 });
+  await verifyFrozenNativeFiles(execution);
+}
+
+/** Recheck the actual executable path before the first Windows process invocation. */
+export async function verifyFrozenNativeFiles(execution: FrozenExecution): Promise<void> {
+  const root = execution.native_root, build = execution.native_build;
+  if (!root || !build) throw new Error('system_frozen_native_build_missing');
+  for (const [name, digest] of Object.entries(build.source_files)) if (sha(await regularFile(join(root, 'native/windows', name))) !== digest) throw new Error('system_frozen_native_source_changed');
+  for (const [name, digest] of Object.entries(build.binaries)) if (sha(await regularFile(join(root, 'native/windows/bin', name))) !== digest) throw new Error('system_frozen_native_binary_changed');
+  if (sha(await regularFile(build.compiler.path)) !== build.compiler.sha256) throw new Error('system_frozen_native_compiler_changed');
 }
 
 /** Internal metadata is a locator, never authority: re-verify the signed package and actual source. */
@@ -172,12 +188,16 @@ export async function loadFrozenExecution(repo: string, mode: string, values: Re
   const raw = await regularFile(location); if (raw.length > 65536) throw new Error('system_frozen_context_size');
   const descriptor = JSON.parse(raw.toString('utf8')) as TaskDescriptor;
   const keys = ['schema_version', 'registry_root', 'version_id', 'task_root', 'repo_root', 'dependency_repo', 'code_source_sha256', 'version_file', 'knowledge_file', 'prompt_files'];
+  keys.push('loader_sha256');
   if (!object(descriptor) || !equal(Object.keys(descriptor).sort(), keys.sort()) || descriptor.schema_version !== 1 || !object(descriptor.prompt_files) ||
     keys.filter((key) => !['schema_version', 'prompt_files'].includes(key)).some((key) => typeof (descriptor as unknown as Record<string, unknown>)[key] !== 'string')) throw new Error('system_frozen_context_shape');
   const taskRoot = resolve(descriptor.task_root);
   if (!isAbsolute(location) || resolve(location) !== join(taskRoot, 'task-context.json') || resolve(descriptor.repo_root) !== join(taskRoot, 'code') || resolve(repo) !== resolve(descriptor.repo_root)) throw new Error('system_frozen_context_location');
   if ((await lstat(taskRoot)).isSymbolicLink() || await realpath(taskRoot) !== taskRoot) throw new Error('system_frozen_task_root');
   const snapshot = await new RuntimeVersionRegistry(descriptor.registry_root).resolveForTask(descriptor.version_id);
+  const loader = join(descriptor.dependency_repo, 'agent/node_modules/tsx/dist/loader.mjs');
+  if (process.execArgv.length !== 2 || process.execArgv[0] !== '--import' || resolve(process.execArgv[1]!) !== resolve(loader) ||
+    sha(await regularFile(loader)) !== descriptor.loader_sha256) throw new Error('system_frozen_bootstrap_loader_mismatch');
   const actualHash = await executingSourceHash(repo, descriptor.dependency_repo);
   if (actualHash !== snapshot.code_source_sha256 || descriptor.code_source_sha256 !== actualHash) throw new Error('system_frozen_executing_source_mismatch');
   const lock = await regularFile(join(repo, 'agent/package-lock.json'));
@@ -280,11 +300,14 @@ export async function verifyFrozenRunEvidence(directory: string): Promise<void> 
 
 /** Execute the approved code snapshot. Selecting a version is more than changing the journal label. */
 export async function launchFrozenTask(snapshot: ResolvedRuntimeSnapshot, dependencyRepo: string, args: string[], registryRoot?: string): Promise<number> {
+  const launcherRepo = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
+  if (resolve(dependencyRepo) !== launcherRepo) throw new Error('system_dependency_root_not_launching_module');
   const reserved = new Set(['--registry', '--repo-root', '--runtime-version-file', '--knowledge-file', '--knowledge-sha256', '--prompt-file', '--executing-source-sha256', '--native-root']);
   if (args.some((arg) => reserved.has(arg.split('=')[0]!))) throw new Error('system_task_reserved_argument');
   const frozenLock = await readFile(join(snapshot.code_root, 'agent/package-lock.json'));
   const installedLock = await readFile(join(dependencyRepo, 'agent/package-lock.json'));
   if (sha(frozenLock) !== sha(installedLock)) throw new Error('system_version_dependency_lock_mismatch');
+  const loader = join(launcherRepo, 'agent/node_modules/tsx/dist/loader.mjs'), loaderHash = sha(await regularFile(loader));
   const temp = await mkdtemp(join(tmpdir(), 'wow-system-task-'));
   let child: ReturnType<typeof spawn> | null = null;
   let cancelled = false;
@@ -320,11 +343,11 @@ export async function launchFrozenTask(snapshot: ResolvedRuntimeSnapshot, depend
     const contextFile = join(temp, 'task-context.json');
     const descriptor: TaskDescriptor = { schema_version: 1, registry_root: resolve(registryRoot ?? join(snapshot.code_root, '../../../..')), version_id: snapshot.version.id,
       task_root: temp, repo_root: code, dependency_repo: resolve(dependencyRepo), code_source_sha256: snapshot.code_source_sha256,
-      version_file: versionFile, knowledge_file: knowledgeFile, prompt_files: promptFiles };
+      version_file: versionFile, knowledge_file: knowledgeFile, prompt_files: promptFiles, loader_sha256: loaderHash };
     await writeFile(contextFile, JSON.stringify(descriptor), { flag: 'wx', mode: 0o400 });
     if (cancelled) return 1;
     return await new Promise<number>((resolve, reject) => {
-      child = spawn(process.execPath, ['--import', join(dependencyRepo, 'agent/node_modules/tsx/dist/loader.mjs'), join(code, 'agent/src/system/cli.ts'), ...args,
+      child = spawn(process.execPath, ['--import', loader, join(code, 'agent/src/system/cli.ts'), ...args,
         '--repo-root', code, '--runtime-version-file', versionFile, '--knowledge-file', knowledgeFile, '--knowledge-sha256', snapshot.version.knowledge.sha256,
         '--prompt-file', promptFile, '--executing-source-sha256', snapshot.code_source_sha256],
       { cwd: code, shell: false, detached: process.platform !== 'win32', stdio: ['ignore', 'inherit', 'inherit'],

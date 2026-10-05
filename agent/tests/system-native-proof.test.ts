@@ -8,7 +8,7 @@ import { canonicalJson } from '../src/knowledge/validation.js';
 import { createKnowledgeSnapshot, knowledgeSha256 } from '../src/knowledge/index.js';
 import { RuntimeVersionRegistry } from '../src/learner/iteration/registry.js';
 import { directoryHash, git, json, sha256 } from '../src/learner/iteration/util.js';
-import { verifyFrozenRunEvidence, type FrozenNativeBuild } from '../src/system/launch.js';
+import { verifyFrozenRunEvidence, verifyFrozenNativeFiles, type FrozenNativeBuild, type FrozenExecution } from '../src/system/launch.js';
 
 /** Signed synthetic proof-integrity fixture; no compiler, window or real game input. */
 async function fixture() {
@@ -75,4 +75,20 @@ test('equal hashes in manifest cannot hide changed bytes or an invalid cache sig
     await writeFile(join(f.run, 'manifest.json'), JSON.stringify(f.manifest));
     await assert.rejects(verifyFrozenRunEvidence(f.run), /native_cache_signature/);
   } finally { await rm(f.temp, { recursive: true, force: true }); }
+});
+
+test('actual copied executable bytes and compiler must match before a first process call', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'wow-native-preexec-'));
+  try {
+    const root = join(temp, 'runtime'), native = join(root, 'native/windows'); await mkdir(join(native, 'bin'), { recursive: true });
+    await writeFile(join(native, 'Guard.cs'), 'source'); await writeFile(join(native, 'bin/WinInput.exe'), 'approved exe');
+    const compiler = join(temp, 'compiler'); await writeFile(compiler, 'stable compiler');
+    const build = { source_files: { 'Guard.cs': sha256('source') }, binaries: { 'WinInput.exe': sha256('approved exe') }, compiler: { path: compiler, sha256: sha256('stable compiler') } };
+    const execution = { native_root: root, native_build: build } as unknown as FrozenExecution;
+    await verifyFrozenNativeFiles(execution);
+    await writeFile(join(native, 'bin/WinInput.exe'), 'tampered before first list');
+    await assert.rejects(verifyFrozenNativeFiles(execution), /native_binary_changed/);
+    await writeFile(join(native, 'bin/WinInput.exe'), 'approved exe'); await writeFile(compiler, 'compiler replaced during build');
+    await assert.rejects(verifyFrozenNativeFiles(execution), /native_compiler_changed/);
+  } finally { await rm(temp, { recursive: true, force: true }); }
 });

@@ -28,7 +28,7 @@ import { compileSkill, DEFAULT_SKILL_BINDINGS, parseBindings } from '../reflex/s
 import { buildCandidates, candidatesHash } from '../reflex/candidates.js';
 import type { RuntimeVersion } from './types.js';
 import { replaySystemRun } from './replay.js';
-import { freezeNativeBuildEvidence, type FrozenExecution } from './launch.js';
+import { freezeNativeBuildEvidence, verifyFrozenNativeFiles, type FrozenExecution } from './launch.js';
 
 type Options = Record<string, unknown>;
 const text = (o: Options, key: string): string | undefined => typeof o[key] === 'string' ? o[key] as string : undefined;
@@ -72,6 +72,7 @@ export async function runLiveSystem(values: Options, repo: string, observeOnly =
   const bindings = parseBindings(text(values, 'bindings') ? await objectFile(text(values, 'bindings')!) : DEFAULT_SKILL_BINDINGS);
   const nativeRoot = frozen ? frozen.native_root : resolve(text(values, 'native-root') ?? repo);
   if (!nativeRoot) throw new Error('system_frozen_native_root_required');
+  if (frozen) await verifyFrozenNativeFiles(frozen);
   const listed = await runCommand(join(nativeRoot, 'native/windows/bin/WinInput.exe'), ['list'], { cwd: repo, timeoutMs: 3000 });
   if (listed.status !== 'ok') throw new Error('system_live_list_failed');
   const windows = listed.stdout.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as { hwnd: string; pid: number; proc: string });

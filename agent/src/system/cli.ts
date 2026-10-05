@@ -81,7 +81,9 @@ async function main(): Promise<number> {
   if (values.help) { process.stdout.write(HELP); return 0; }
   const mode = positionals[0];
   if (positionals.length !== 1 || !mode || !['demo', 'live', 'observe', 'status', 'cancel', 'replay', 'learn', 'inspect', 'baseline', 'stage', 'evaluate', 'publish', 'version', 'rollback'].includes(mode)) throw new Error('system_mode_required');
-  const repo = resolve(values['repo-root'] ?? fileURLToPath(new URL('../../..', import.meta.url)));
+  const implementationRepo = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
+  const repo = resolve(values['repo-root'] ?? implementationRepo);
+  if (values.registry && repo !== implementationRepo) throw new Error('system_registry_dependency_repo_must_match_launcher');
   const dirs = values['run-dir'] ?? [];
   if (mode !== 'learn' && dirs.length > 1) throw new Error('system_single_run_required');
   const frozen = await loadFrozenExecution(repo, mode, values);

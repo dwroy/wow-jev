@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { cp, mkdtemp, mkdir, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';
+import { access, cp, mkdtemp, mkdir, readFile, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { directoryHash } from '../src/learner/iteration/util.js';
-import { executingSourceHash } from '../src/system/launch.js';
+import { executingSourceHash, launchFrozenTask } from '../src/system/launch.js';
+import { createKnowledgeSnapshot, knowledgeSha256 } from '../src/knowledge/index.js';
 
 const repo = new URL('../..', import.meta.url).pathname;
 const cli = join(repo, 'agent/src/system/cli.ts'), loader = join(repo, 'agent/node_modules/tsx/dist/loader.mjs');
@@ -34,6 +35,26 @@ test('registry live/observe refuses external native, prompt or knowledge before 
     const result = await command(['observe', '--registry', '/nonexistent/registry', `--${flag}`, '/untrusted/override']);
     assert.equal(result.code, 2); assert.match(result.stderr, /registry_snapshot_cannot_be_overridden/);
   }
+});
+
+test('identical lock cannot grant a foreign bootstrap loader authority or create its marker', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'wow-foreign-loader-'));
+  try {
+    const approved = join(temp, 'approved'), foreign = join(temp, 'foreign'), marker = join(temp, 'foreign-loader-ran');
+    await mkdir(join(approved, 'agent/src/system'), { recursive: true }); await mkdir(join(foreign, 'agent/node_modules/tsx/dist'), { recursive: true });
+    const lock = await readFile(join(repo, 'agent/package-lock.json'));
+    await writeFile(join(approved, 'agent/package-lock.json'), lock); await writeFile(join(foreign, 'agent/package-lock.json'), lock);
+    await writeFile(join(approved, 'agent/src/system/cli.ts'), 'process.exit(0);');
+    await writeFile(join(foreign, 'agent/node_modules/tsx/dist/loader.mjs'), `import {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(marker)},'foreign-loader');process.exit(17);`);
+    const knowledge = createKnowledgeSnapshot([], [], '2026-10-05T00:00:00.000Z');
+    const snapshot = { version: { schema_version: 1 as const, id: 'synthetic-bootstrap-test', parent_id: null, created_at: knowledge.created_at, code_commit: 'a'.repeat(40),
+      knowledge: { id: knowledge.id, sha256: knowledgeSha256(knowledge), file: 'knowledge.json' }, prompts: [] },
+      knowledge, prompts: { 'brain-retail-v1': 'synthetic test prompt' }, code_root: approved, code_source_sha256: await directoryHash(approved) };
+    await assert.rejects(launchFrozenTask(snapshot, foreign, ['demo', '--run-dir', join(temp, 'result')]), /dependency_root_not_launching_module/);
+    await assert.rejects(access(marker));
+    const response = await command(['observe', '--registry', '/nonexistent/registry', '--repo-root', foreign]);
+    assert.equal(response.code, 2); assert.match(response.stderr, /dependency_repo_must_match_launcher/); await assert.rejects(access(marker));
+  } finally { await rm(temp, { recursive: true, force: true }); }
 });
 
 test('executing-source hash excludes only the validated dependency link and detects other files', async () => {
