@@ -20,6 +20,10 @@
 
 SQLite与TypeScript查询桥按branch、expansion、patch、build、region、locale六维精确隔离，保留原始资料SHA、来源、采集时间、适用版本证明及冲突。公开资料首批11条任务/怪物断言因build未知作为reference_only，69933精确查询返回not_found；不取最近版本，不按名字合并阵营任务。详细使用见 [../game-database.md](../game-database.md)。
 
+负责人已实际初始化主目录 `out/runtime/game-data.sqlite`：11条参考断言、1次导入、1份安装profile；当前版本精确任务查询正确not_found，独立参考检索可用。初始化及查询原始结果见 `out/acceptance/retail-closure/game-database-initialization-1.json`，数据库属运行产物，不进入Git。
+
+`brain-seed-observe-2` 实际游戏截图→冻结Brain prompt→Seed→重新采样→Brain严格回放通过，21条日志/2张图片/0输入。模型返回有效complete-observe选择，耗时1808.847ms，输入2280/output79 tokens；知识为空，没有效果或学习收益声明。最初一次相对profile路径因npm运行目录位于agent而在模型调用前被拒，改用绝对路径后完成。
+
 ## 实际只读长跑
 
 `out/acceptance/retail-closure/soak-10m-1`：十分钟任务已封存，7段退出0并逐段严格回放；492次capture全部ok、491张图491个不同SHA、0原始输入记录/0出站输入命令，前后客户端PID/启动ticks与版本一致。所有样本focused=false，说明当前营地场景在非前台可读取变化画面。不能推广到最小化或所有后台渲染模式。
