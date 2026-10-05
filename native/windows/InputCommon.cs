@@ -351,7 +351,8 @@ namespace WowJev.Input
                     string name = info.ProcessName.ToLowerInvariant();
                     bool game = name == "wow" || name == "wowclassic" || name == "wowclassict" || name == "wowb";
                     bool recorder = name == "inputrecorder" && info.Title.StartsWith("WoW Jev Input Recorder - ", StringComparison.Ordinal);
-                    if (game || recorder) result.Add(info);
+                    bool playFixture = name == "playfixture" && info.Title.StartsWith("WoW Jev Play Fixture - ", StringComparison.Ordinal);
+                    if (game || recorder || playFixture) result.Add(info);
                 }
                 catch { }
                 return true;

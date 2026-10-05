@@ -120,16 +120,26 @@ export class CodePlay {
       for (const [index, step] of plan.steps.entries()) {
         if (this.stop) throw this.stop;
         if (!unchanged()) throw new Error('plan_changed');
-        await this.append('event', { code: 'play.step_started', plan: identity, step, index });
-        const outcome = await this.runStep(step, plan, unchanged, window);
+        let outcome: SkillResult;
+        try {
+          await this.append('event', { code: 'play.step_started', plan: identity, step, index });
+          outcome = await this.runStep(step, plan, unchanged, window);
+        } catch (error) {
+          // A queued step-start must be closed even when cancellation beats its disk acknowledgement.
+          outcome = { step_id: step.id, skill: step.name,
+            status: error instanceof Stopped && error.status === 'cancelled' ? 'cancelled' : 'failed',
+            action_id: null, receipt: null, before_observation_id: null, after_observation_id: null, reason: detail(error) };
+        }
         steps.push(outcome);
         await this.finalAppend('event', { code: 'play.step_result', plan: identity, index, result: outcome });
         if (outcome.status !== 'completed' && outcome.status !== 'already_satisfied') break;
       }
       const last = steps.at(-1);
       const stop = this.currentStop();
-      result = { plan: identity, status: stop?.status ?? (steps.length === plan.steps.length && last && ['completed', 'already_satisfied'].includes(last.status) ? 'completed' : last?.status === 'cancelled' ? 'cancelled' : 'failed'),
-        steps, ...(stop ? { reason: stop.message } : last?.reason ? { reason: last.reason } : {}) };
+      // A known native failure outranks a subsequent disconnect/cancel notification.
+      const failedStep = steps.find((step) => step.status === 'failed' || step.status === 'rejected');
+      result = { plan: identity, status: failedStep ? 'failed' : stop?.status ?? (steps.length === plan.steps.length && last && ['completed', 'already_satisfied'].includes(last.status) ? 'completed' : last?.status === 'cancelled' ? 'cancelled' : 'failed'),
+        steps, ...(failedStep?.reason ? { reason: failedStep.reason } : stop ? { reason: stop.message } : last?.reason ? { reason: last.reason } : {}) };
     } catch (error) {
       result = { plan: identity, status: error instanceof Stopped ? error.status : 'failed', steps, reason: detail(error) };
     } finally { clearTimeout(deadline); this.state = 'stopped'; }
@@ -169,7 +179,7 @@ export class CodePlay {
       const gate = () => evaluateGate(candidate, before!, { runId: this.options.runId, mode: this.options.mode,
         plan: { id: plan.id, revision: plan.revision }, now: this.ports.now(), maxObservationAgeMs: this.maxAge, cancelled: this.stop !== null,
         planUnchanged: unchanged(), handReady: this.ports.hand?.ready ?? null, expectedWindow: window.current });
-      const first = gate(); if (!first.ok) throw new Error(first.reason);
+      const first = gate(); if (!first.ok) { if (this.stop) throw this.stop; throw new Error(first.reason); }
       if (compiled.action === null) {
         const field = before.observation.fields['ui.inventory_open'];
         const detector = before.bracket.sample.detectors.inventory_open;
@@ -185,7 +195,7 @@ export class CodePlay {
       if (this.usedActions.has(id)) throw new Error('duplicate_action');
       this.usedActions.add(id);
       await this.append('action_intent', intent);
-      const second = gate(); if (!second.ok) throw new Error(second.reason);
+      const second = gate(); if (!second.ok) { if (this.stop) throw this.stop; throw new Error(second.reason); }
       if (this.options.mode === 'simulated') {
         status = 'completed';
       } else {

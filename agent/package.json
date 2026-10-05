@@ -11,6 +11,7 @@
     "demo": "tsx src/cli.ts demo",
     "input": "tsx src/hand/cli.ts",
     "eye": "tsx src/eye/cli.ts",
+    "play": "tsx src/play/cli.ts",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

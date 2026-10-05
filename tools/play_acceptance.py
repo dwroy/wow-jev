@@ -120,7 +120,8 @@ def main():
     run_dir = args.run_dir.resolve() if args.run_dir else out / "run"
     command = ["npm", "--prefix", "agent", "run", "play", "--"]
     extra = ["--window", args.window, "--pid", str(args.pid), "--live", "--role-scene-confirmed",
-             "--calibration", str(args.calibration.resolve()), "--rounds", str(args.rounds)] if args.mode == "live" else []
+             "--calibration", str(args.calibration.resolve()), "--rounds", str(args.rounds)] if args.mode == "live" else (
+                 ["--rounds", str(args.rounds)] if args.mode == "demo" else [])
     summary = {"started_utc": datetime.now(timezone.utc).isoformat(), "mode": args.mode,
                "seed_enabled": False, "windows_focus_changed_by_tool": False, "commands": [], "ok": False,
                "run_dir": str(run_dir), "game_effects_must_be_confirmed_individually": True}

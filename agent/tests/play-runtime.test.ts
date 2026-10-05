@@ -210,3 +210,43 @@ test('inventory post-capture itself has a bounded wait rather than the full plan
   const start = performance.now(); const result = await s.play.run(plan({ id: 'open', name: 'open_panel', panel: 'inventory' }));
   assert.equal(result.status, 'failed'); assert.equal(s.calls.length, 1); assert.ok(performance.now() - start < 300);
 });
+
+test('a failed native step is not relabelled cancelled by a subsequent session disconnect', async () => {
+  const s = await setup();
+  const append = s.ports.append;
+  s.hand.execute = async (action, options = {}) => {
+    s.calls.push({ action, id: options.id! });
+    const r = receipt(options.id!);
+    r.status = 'failed'; r.reason = { code: 'window_unfocused' };
+    return r;
+  };
+  s.ports.append = async (...args) => {
+    await append(...args);
+    if (args[0] === 'execution_receipt') await s.play.cancel('input_disconnected');
+  };
+  const result = await s.play.run(plan(move(), move('must-not-run')));
+  assert.equal(result.status, 'failed');
+  assert.equal(result.steps[0]!.status, 'failed');
+  assert.equal(result.reason, 'window_unfocused');
+  assert.equal(s.calls.length, 1);
+  assert.equal(result.steps[0]!.receipt!.effect.status, 'unknown');
+});
+
+test('cancellation while persisting step-start still closes that step with a zero-input result', async () => {
+  const s = await setup(); const append = s.ports.append;
+  let entered!: () => void; let finish!: () => void;
+  const began = new Promise<void>((resolve) => { entered = resolve; });
+  const blocked = new Promise<void>((resolve) => { finish = resolve; });
+  s.ports.append = async (...args) => {
+    await append(...args);
+    if (args[0] === 'event' && (args[1] as { code?: string }).code === 'play.step_started') { entered(); await blocked; }
+  };
+  const running = s.play.run(plan(move())); await began;
+  const cancelling = s.play.cancel('manual_cancel'); finish(); await cancelling;
+  const result = await running;
+  assert.equal(result.status, 'cancelled'); assert.equal(result.steps.length, 1);
+  assert.equal(result.steps[0]!.status, 'cancelled'); assert.equal(result.steps[0]!.action_id, null);
+  assert.equal(s.calls.length, 0);
+  const codes = s.rows.filter((r) => r.kind === 'event').map((r) => (r.data as { code: string }).code);
+  assert.deepEqual(codes, ['play.plan_started', 'play.step_started', 'play.step_result', 'play.plan_finished']);
+});
