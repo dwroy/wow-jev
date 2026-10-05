@@ -41,6 +41,8 @@ Windows候选枚举增加严格的PlayFixture进程名+自己的标题前缀；W
 
 `retail-3/prepare`先按当前CV关闭背包；正式`retail-3/run`完成五轮25真实动作、127/127原生事件，所有终端回执完整且released，10次游戏背包开/闭confirmed、15次运动效果unknown。50次真实截图/观察对应前后证据；最后背包关闭、关闭释放confirmed，负责人另起CLI严格回放exit0且completed/dispatch_timing_verified=true。运行约15.6秒，不调用模型，不自动重试或接管战斗。
 
+独立agent直接复核最终50/50源图：十次背包转换均目视一致，中心拖曳点及角色无遮挡；五轮转向有固定地形水平变换，移动可见迈步，跳跃后续样本有腾空及恢复姿态。人物位于岩石边，不能量化位移、转角或断言无地形阻挡；目视审查不替代自动效果算法，15项运动仍unknown。
+
 新校准仅限当前3840×2160布局与B同时开闭全部背包。单独打开某个小包、任意鼠标悬停、其它布局和自动弹窗检测未据此验收；移动等程序效果标签仍保守保持unknown。
 
 ## 实际失败与修复
@@ -56,3 +58,5 @@ Windows候选枚举增加严格的PlayFixture进程名+自己的标题前缀；W
 证据在主checkout `out/acceptance/stage-3`：原生记录窗口状态、采样/图像、校准、CLI输出、冻结manifest、动作意图、计数和回放。当前meta保存对应实际版本及源码/原生二进制SHA，失败和补测分开。凭据未读取，模型未调用。
 
 使用入口见[play-runtime.md](../play-runtime.md)。代码play已可模拟和当前4K正式服体验，新校准已保留在主checkout的out中。所有真实输入仍通过原有Windows独立释放看门狗；整WSL重启、自动弹窗检测、移动等自动效果确认尚未验收。
+
+以7074f90本地合入codex/agent-system；主checkout重新编译四个Windows模块，typecheck及main-demo一轮5步模拟/独立回放均通过。实际测试二进制在build-archive，单元日志unit-tests-final.log、最终main-typecheck.log与main-demo均留存。本轮四个工作树正常清理，分支及历史失败保留。

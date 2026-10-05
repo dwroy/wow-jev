@@ -45,7 +45,7 @@ Seed与本地Qwen已按相同3张图/五字段题面各重复3轮，串行交替
 
 ## 环境与体验
 
-主checkout为 `/home/dai/Projects/wow-jev`，分支 `codex/agent-system`；第2阶段已在独立工作树验收并本地合并，必要产物在主checkout的out归档，阶段工作树随后清理。用户已授权负责人组织并行agent、研发测试、验收和本地合并；不推送远端。
+主checkout为 `/home/dai/Projects/wow-jev`，分支 `codex/agent-system`；第3阶段在独立工作树实施、负责人验收后，以7074f90本地合入。主checkout四个Windows模块已重建，typecheck及一轮5步纯模拟/独立回放通过；必要测试二进制、106项回归日志和全部实际证据保存在out/acceptance/stage-3，本轮四个工作树已正常清理，分支与失败记录保留。用户已授权负责人组织并行agent、研发测试、验收和本地合并；不推送远端。
 
 WSL运行TypeScript编排和Python低频视觉，Windows运行C#5/.NET4截图、CV、键鼠和释放看门狗。不能将WSL调度器中断测试外推为整个发行版重启恢复。
 
