@@ -28,6 +28,7 @@ import { compileSkill, DEFAULT_SKILL_BINDINGS, parseBindings } from '../reflex/s
 import { buildCandidates, candidatesHash } from '../reflex/candidates.js';
 import type { RuntimeVersion } from './types.js';
 import { replaySystemRun } from './replay.js';
+import { freezeNativeBuildEvidence, type FrozenExecution } from './launch.js';
 
 type Options = Record<string, unknown>;
 const text = (o: Options, key: string): string | undefined => typeof o[key] === 'string' ? o[key] as string : undefined;
@@ -46,8 +47,8 @@ async function objectFile(file: string): Promise<Record<string, unknown>> {
 }
 
 /** Real eye, finite CodePlay/Jev and the existing execution gate. No simulation fallbacks. */
-export async function runLiveSystem(values: Options, repo: string, observeOnly = false): Promise<number> {
-  if (values.registry || values['runtime-version-file'] || values['executing-source-sha256'] || values.scenario) throw new Error('system_live_snapshot_override');
+export async function runLiveSystem(values: Options, repo: string, observeOnly = false, frozen: FrozenExecution | null = null): Promise<number> {
+  if (values.registry || values.scenario || !frozen && (values['runtime-version-file'] || values['executing-source-sha256']) || frozen && values['native-root']) throw new Error('system_live_snapshot_override');
   if (!observeOnly && (!values.live || !values['role-scene-confirmed'] || !text(values, 'goal'))) throw new Error('system_live_explicit_scene_goal_required');
   if (observeOnly && (values.live || values['role-scene-confirmed'])) throw new Error('system_observe_input_options');
   if (values.seed && !values['allow-game-image-upload'] || values['allow-game-image-upload'] && !values.seed) throw new Error('system_live_seed_upload_pair_required');
@@ -69,7 +70,8 @@ export async function runLiveSystem(values: Options, repo: string, observeOnly =
   if (!observeOnly && ['approach_npc', 'interact_npc'].includes(goal.kind) && (!text(values, 'combat-calibration') || !text(values, 'npc-calibration') || !text(values, 'bindings'))) throw new Error('system_live_npc_calibration_bindings_required');
   if (!observeOnly && goal.kind === 'panel_cycle' && !text(values, 'calibration')) throw new Error('system_live_panel_calibration_required');
   const bindings = parseBindings(text(values, 'bindings') ? await objectFile(text(values, 'bindings')!) : DEFAULT_SKILL_BINDINGS);
-  const nativeRoot = resolve(text(values, 'native-root') ?? repo);
+  const nativeRoot = frozen ? frozen.native_root : resolve(text(values, 'native-root') ?? repo);
+  if (!nativeRoot) throw new Error('system_frozen_native_root_required');
   const listed = await runCommand(join(nativeRoot, 'native/windows/bin/WinInput.exe'), ['list'], { cwd: repo, timeoutMs: 3000 });
   if (listed.status !== 'ok') throw new Error('system_live_list_failed');
   const windows = listed.stdout.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as { hwnd: string; pid: number; proc: string });
@@ -77,17 +79,18 @@ export async function runLiveSystem(values: Options, repo: string, observeOnly =
   // Reuse the tested read-only process probe; supplied labels cannot turn a
   // different installed client into the selected version.
   const probeCode = 'import json,sys; from pathlib import Path; from tools.retail_soak import probe_client; print(json.dumps(probe_client(Path(sys.argv[1]),json.loads(sys.argv[2]),sys.argv[3],int(sys.argv[4])),ensure_ascii=False))';
-  const clientProbe = await runCommand(text(values, 'python') ?? '/usr/bin/python3', ['-B', '-c', probeCode, repo, JSON.stringify(version), window, String(pid)],
+  const clientProbe = await runCommand(text(values, 'python') ?? '/usr/bin/python3', ['-B', '-c', probeCode, nativeRoot, JSON.stringify(version), window, String(pid)],
     { cwd: repo, timeoutMs: 20000, maxOutputBytes: 65536 });
   if (clientProbe.status !== 'ok') throw new Error('system_live_client_version_probe_failed');
   const clientInstance = strictJson(clientProbe.stdout);
   if (!clientInstance || typeof clientInstance !== 'object' || Array.isArray(clientInstance)) throw new Error('system_live_client_version_probe_failed');
   const snapshot = text(values, 'knowledge-file') ? await loadKnowledgeSnapshot(resolve(text(values, 'knowledge-file')!), text(values, 'knowledge-sha256') ?? await hashFile(resolve(text(values, 'knowledge-file')!))) : createKnowledgeSnapshot([], [], new Date().toISOString());
-  const knowledgeHash = knowledgeSha256(snapshot), prompt = resolve(text(values, 'prompt-file') ?? join(repo, 'perception/prompts/brain-retail-v1.txt'));
-  const promptHash = await hashFile(prompt), jevPrompt = join(repo, 'perception/prompts/jev-retail-v1.txt'), jevHash = await hashFile(jevPrompt);
-  const rev = await runCommand('git', ['rev-parse', 'HEAD'], { cwd: repo });
-  const runtimeVersion: RuntimeVersion = { schema_version: 1, id: 'system-live-local', parent_id: null, created_at: new Date().toISOString(), code_commit: rev.stdout.trim(),
+  const knowledgeHash = knowledgeSha256(snapshot), prompt = resolve(frozen?.prompt_files['brain-retail-v1'] ?? text(values, 'prompt-file') ?? join(repo, 'perception/prompts/brain-retail-v1.txt'));
+  const promptHash = await hashFile(prompt), jevPrompt = frozen?.prompt_files['jev-retail-v1'] ?? join(repo, 'perception/prompts/jev-retail-v1.txt'), jevHash = await hashFile(jevPrompt);
+  const rev = frozen ? null : await runCommand('git', ['rev-parse', 'HEAD'], { cwd: repo });
+  const runtimeVersion: RuntimeVersion = frozen ? structuredClone(frozen.snapshot.version) : { schema_version: 1, id: 'system-live-local', parent_id: null, created_at: new Date().toISOString(), code_commit: rev!.stdout.trim(),
     knowledge: { id: snapshot.id, sha256: knowledgeHash, file: 'knowledge.json' }, prompts: [{ id: 'brain-retail-v1', sha256: promptHash, file: 'prompts/brain-retail-v1.txt' }] };
+  if (frozen && (runtimeVersion.knowledge.sha256 !== knowledgeHash || runtimeVersion.prompts.find((p) => p.id === 'brain-retail-v1')?.sha256 !== promptHash || runtimeVersion.prompts.find((p) => p.id === 'jev-retail-v1')?.sha256 !== jevHash)) throw new Error('system_frozen_live_runtime_refs');
   const maxRunMs = integer(values, 'max-run-ms', 60000, 120000), maxDecisions = integer(values, 'decisions', 12, 50);
   const inner = { max_decisions: 1, max_run_ms: 10000, choice_timeout_ms: 15000, max_observation_age_ms: 750, cv_max_age_ms: 750, wait_ms: 250, effect_wait_ms: 1500 };
   const runId = `brain-${randomUUID()}`, sessionId = randomUUID();
@@ -105,10 +108,16 @@ export async function runLiveSystem(values: Options, repo: string, observeOnly =
       frozen_knowledge_file: 'knowledge.json', frozen_runtime_version_file: 'runtime-version.json', inner_jev_options: inner,
       max_run_ms: maxRunMs, max_decisions: maxDecisions, planner_timeout_ms: 15000, max_observation_age_ms: 750, cv_max_age_ms: 750, wait_ms: 250,
       native_dispatch_logged: true, live_input_enabled: !observeOnly, model_enabled: values.seed === true, seed_enabled: values.seed === true,
-      allow_game_image_upload: values['allow-game-image-upload'] === true, role_scene_confirmed: values['role-scene-confirmed'] === true, window, expected_pid: pid } });
+      allow_game_image_upload: values['allow-game-image-upload'] === true, role_scene_confirmed: values['role-scene-confirmed'] === true, window, expected_pid: pid,
+      executing_source_sha256: frozen?.code_source_sha256 ?? null,
+      dependency_lock_sha256: frozen?.dependency_lock_sha256 ?? null, runtime_registry_root: frozen?.registry_root ?? null,
+      native_build: frozen?.native_build ?? null, frozen_native_build_file: frozen ? 'native-build.json' : null,
+      native_build_sha256: frozen?.native_build ? hashBuffer(canonicalJson(frozen.native_build)) : null,
+      native_build_cache_proof_sha256: frozen?.native_cache_proof ? hashBuffer(frozen.native_cache_proof) : null } });
   await writeFile(join(dir, 'knowledge.json'), canonicalJson(snapshot), { flag: 'wx', mode: 0o400 });
   await writeFile(join(dir, 'runtime-version.json'), canonicalJson(runtimeVersion), { flag: 'wx', mode: 0o400 });
   await writeFile(join(dir, 'client-profile.json'), profileBytes, { flag: 'wx', mode: 0o400 });
+  if (frozen) await freezeNativeBuildEvidence(dir, frozen);
   const origin = performance.now(), now = () => Math.floor(performance.now() - origin);
   let eye: NativeEyeClient | null = null, eyes: EyeRuntime | null = null, hand: NativeInputClient | null = null;
   let brain: ExecutionBrain | null = null, planner: BrainPlanner | null = null, chooser: JevChooser | null = null;

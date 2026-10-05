@@ -3,9 +3,11 @@ import { replayBrainRun } from '../brain/execution/replay.js';
 import { replayJevJournal } from '../jev/replay.js';
 import { buildCandidates, candidatesHash, canonicalJson, parseJevGoal } from '../reflex/candidates.js';
 import { validateModelReply } from '../jev/choice.js';
+import { verifyFrozenRunEvidence } from './launch.js';
 
 /** Audit each nested Jev task using the parent's approved goal and its frozen limits. */
 export async function replaySystemRun(directory: string) {
+  await verifyFrozenRunEvidence(directory);
   return replayBrainRun(directory, { verifyJev: async (context) => {
     const original = context.journal.manifest;
     const inner = original.config.inner_jev_options;
