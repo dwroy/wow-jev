@@ -36,6 +36,8 @@ task-boundary-1实际启动冻结代码副本：基线任务运行期间切换�
 
 ## 记录与后续
 
+最终集成219项TypeScript测试（0失败/跳过）、68项Python模型worker回归、typecheck均通过；源码未修改Windows模块，因此本轮没有重做Windows真实输入验收。命令为 `npm --prefix agent test`、`npm --prefix agent run typecheck`、项目.venv的 `pytest tests/test_brain_worker.py tests/test_seed_worker.py tests/test_jev_worker.py -q`；原始结果在integration-1。签名候选评估另实际执行整套tracked回归，结果/输出hash保留在iteration-1。
+
 原始证据位于主checkout `out/acceptance/stages-5-7`；模型probe所有失败与模拟失败均保留。工程入口见[system-runtime.md](../system-runtime.md)，详细接口见[brain-runtime.md](../brain-runtime.md)、[learning-runtime.md](../learning-runtime.md)、[iteration-runtime.md](../iteration-runtime.md)。
 
 正式服还需要第4阶段当前4K战斗校准，以及目标名字、交互距离、NPC对话的可靠感知。当前缺失字段时等待/升级；没有开展实际NPC走近、交互、任务或新prompt游戏收益验收。整WSL重启恢复仍待独立测试。
