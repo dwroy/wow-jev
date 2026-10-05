@@ -4,6 +4,8 @@
 
 ## 最新决定与下一阶段
 
+**最新用户目标与小闭环（19:41）**：用户明确以已知攻略扫任务、自主打怪/拾取快速升级；先体验 NPC 互动小闭环。已通过 Battle.net 正常入口启动12.1.0.69933并进入角色，辅助选中/靠近森德拉克斯并取得真实对话图。`out/acceptance/npc-loop-1/automatic-local-1` 是0模型调用的实际程序运行：6949ms、名字/关闭对话证据unknown、等待后停止、0输入/0效果/释放confirmed，严格回放通过，未证明自动互动。相同捕获/冻结校准对照确认原Bitmap字形555与对应JPEG90字形456，在线unknown、JPEG离线known；不能把JPEG模板自匹配当直播准确率。v2对话头像ROI改进已冻结但名字仍为JPEG，下一轮必须取真实NPC无损源图。无损WinEye存档在`.worktrees/lossless-eye`由agent实施、负责人待验收合并。用户已自行离开NPC打怪；此时停止输入，补录30秒只读27观察/26图/0动作并离线复核新死亡事件。已异步请求用户方便时回NPC旁准备约30秒，不依赖无回复继续输入。详见`docs/acceptance/npc-loop.md`，旧“不存在WoW窗口”是上一阶段状态，不覆盖本轮。
+
 **当前交付（18:40后）**：本轮增补已由负责人以bbd76b9本地合入codex/agent-system，f4a4937的版本probe修复也已接入；最终docs补充d16cef8。主目录四个Windows原生模块重建、typecheck和main-demo-1纯模拟/严格回放通过；集成260项TS全量通过，109项Python/真实Windows感知与数据库、27项录制/长跑回归、34组Windows重启机制模拟及Host helper13项边界分别通过。冻结启动独立审查关闭已发现P1，真实259源码只读两轮各21条/2观察/0输入，首编译→缓存复用、四exe同SHA；最终f4窗口补测因旧HWND/PID消失拒绝，不能冒充通过。没有推送，没有执行实际WSL重启。
 
 多版本SQLite实际在out/runtime/game-data.sqlite（11条reference_only/1安装profile）。十分钟只读录制7段492ok/491不同图/0输入完整结束；快速轮换复测将唯一缺口缩到1520ms；Seed实际只读规划也通过。全部原始证据主out/acceptance/retail-closure，独立审查out/acceptance/runtime-closure，当前状态和体验见docs/acceptance/retail-closure.md、docs/system-runtime.md、docs/game-database.md。
