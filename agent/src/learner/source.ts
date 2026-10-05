@@ -135,12 +135,24 @@ export async function verifyKnowledgeEvidence(snapshot: KnowledgeSnapshot, sourc
       const run = runs.get(ref.source_id)!; assertEvidenceBound(run, ref); const row = run.records[ref.record_seq]!;
       const event = row.kind === 'event' && object(row.data) ? row.data : null;
       const result = object(event?.result) ? event.result : null;
+      if (fact.kind !== 'monster_statistic' && row.kind !== 'execution_receipt' && (event?.code !== 'play.step_result' || !result)) fail('experience_record_kind');
       const receipt = row.kind === 'execution_receipt' ? row.data as ExecutionReceipt : object(result?.receipt) ? result.receipt as unknown as ExecutionReceipt : null;
       const sampleIdentity = receipt ? `receipt:${receipt.id}` : row.kind === 'observation' && fact.kind === 'monster_statistic' ?
         `target-ui:${targetSampleIdentity(row.data as Observation)}` : `seq:${row.seq}`;
       const key = `${ref.source_id}:${sampleIdentity}`; if (samples.has(key)) fail('duplicate_sample_event'); samples.add(key);
       if (fact.kind === 'game_fact' && (!receipt || receipt.mode !== 'live' || receipt.effect.status !== 'confirmed' ||
         receipt.effect.evidence_observation_ids.some((id) => !ref.observation_ids.includes(id)))) fail('game_fact_not_confirmed');
+      if (fact.kind !== 'monster_statistic') {
+        const skill = result ? String(result.skill) : receipt?.effect.status === 'confirmed' ? 'inventory_toggle' : 'native_input';
+        if (fact.scope.skill !== skill) fail('experience_skill_binding');
+        const link = receipt ? run.records.find((item) => item.kind === 'action_link' && (item.data as { receipt_id?: string }).receipt_id === receipt.id)?.data as { before_observation_id?: string; after_observation_id?: string } | undefined : undefined;
+        const beforeId = result?.before_observation_id ?? link?.before_observation_id;
+        const afterId = result?.after_observation_id ?? link?.after_observation_id;
+        const before = typeof beforeId === 'string' ? run.observations.get(beforeId) : undefined;
+        const after = typeof afterId === 'string' ? run.observations.get(afterId) : undefined;
+        const window = (before ?? after)?.window;
+        if (fact.scope.layout !== (window ? `${window.client_width}x${window.client_height}` : null)) fail('experience_layout_binding');
+      }
       if (fact.kind === 'monster_statistic') {
         if (row.kind !== 'observation') fail('monster_record_kind');
         const observation = row.data as Observation; const name = observation.fields['target.name']; const present = observation.fields['target.present'];

@@ -175,3 +175,16 @@ test('dedicated input test window does not become game facts or default game kno
     assert.equal(queryKnowledge(snapshot, { scope: { ...scope, test_target: true } }).length, 1);
   } finally { await run.cleanup(); }
 });
+test('manifest with empty references is not a learning sample and cannot fabricate a skill', async () => {
+  const run = await learningFixture();
+  try {
+    const { snapshot } = await learnRuns([run.dir]);
+    for (const mutation of ['manifest', 'skill']) {
+      const facts = structuredClone(snapshot.facts);
+      if (mutation === 'manifest') facts[0]!.evidence[0] = { source_id: snapshot.sources[0]!.id, record_seq: 0, observation_ids: [], artifact_ids: [] };
+      else facts[0]!.scope.skill = 'open_panel';
+      const forged = createKnowledgeSnapshot(snapshot.sources, facts, snapshot.created_at);
+      await assert.rejects(verifyKnowledgeEvidence(forged, { [snapshot.sources[0]!.id]: run.dir }), /experience_record_kind|experience_skill_binding/);
+    }
+  } finally { await run.cleanup(); }
+});
