@@ -51,6 +51,7 @@ test('one Jev boundary choice runs three casts locally and duplicate IDs never e
   assert.equal(selection.status, 'selected'); const r = new BehaviorRuntime(s); const behavior = selection.candidate!.behavior;
   const [a, b] = await Promise.all([r.run(behavior, ctx()), r.run(behavior, ctx())]);
   assert.equal(a, b); assert.equal(a.status, 'completed'); assert.equal(a.actions, 3); assert.equal(a.real_inputs, 0); assert.equal(a.input_count_scope, 'known'); assert.equal(choices, 1); assert.equal(selection.chooser_calls, 1);
+  assert.equal(a.game_effect, 'unverified'); assert.equal(a.scenario_effect, 'confirmed');
   assert.match(a.reason, /contribution_unproven/); assert.equal(s.actions.length, 3);
   const conflict = await r.run({ ...behavior, max_actions: 1 }, ctx()); assert.equal(conflict.reason, 'behavior_id_conflict');
   assert.equal((await j.select(candidates(kill()), ctx(), { id: 'boundary' })).status, 'selected'); assert.equal(choices, 1);
@@ -169,6 +170,7 @@ test('kill_count consumes fresh quest count and repeated corpse does not count p
     const s = battle(); s.values['quest.q.count'] = 0; s.onAction = (a, self) => { if (a.kind === 'cast') { self.values['target.dead'] = true; if (shouldProgress) self.values['quest.q.count'] = 1; } };
     const runtime = new TaskRuntime(s, new BehaviorRuntime(s)); const t = task('kill_count', [kill()], { quest_id: 'q', count: 1 });
     const r = await runtime.run(t, ctx()); assert.equal(r.status, shouldProgress ? 'completed' : 'blocked'); assert.equal(r.checkpoint.source_count, shouldProgress ? 1 : 0); assert.equal(r.behaviors.length, 1);
+    assert.equal(r.game_effect, 'unverified'); assert.equal(r.scenario_effect, shouldProgress ? 'confirmed' : 'unverified');
     if (!shouldProgress) assert.equal(r.reason, 'task_count_no_progress');
     const again = await runtime.run(t, ctx()); assert.equal(again, r); assert.equal(s.actions.length, 1);
   }
@@ -244,4 +246,13 @@ test('death after only waiting/dodging cannot be attached to this behavior casti
   const s = battle(); s.values['combat.ability.attack.ready'] = false;
   s.onAction = (_, self) => { self.values['target.dead'] = true; };
   const r = await new BehaviorRuntime(s).run(kill(), ctx()); assert.equal(r.status, 'blocked'); assert.equal(r.game_effect, 'unverified'); assert.equal(r.reason, 'target_already_dead');
+});
+
+test('terminal simulation logs keep game_effect unverified and place proof in scenario_effect', async () => {
+  const s = battle(); s.onAction = (_, self) => { self.values['target.dead'] = true; };
+  const result = await new TaskRuntime(s, new BehaviorRuntime(s)).run(task('sequence', [kill()]), ctx());
+  assert.equal(result.status, 'completed'); assert.equal(result.game_effect, 'unverified'); assert.equal(result.scenario_effect, 'confirmed');
+  for (const entry of s.logs.filter(l => l.kind === 'behavior_result' || l.kind === 'task_result')) {
+    const r = entry.data as { game_effect: string; scenario_effect: string }; assert.equal(r.game_effect, 'unverified'); assert.equal(r.scenario_effect, 'confirmed');
+  }
 });

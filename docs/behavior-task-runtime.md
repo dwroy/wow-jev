@@ -27,13 +27,13 @@ await task.run(taskSpec, taskContext, { isCurrent });
 
 `ExecutionContext` 包含 command/task ID、task revision、run epoch、live/simulated、进入条件与 AbortSignal。只读模式由外层入口执行观察/选择而不调用执行端口；行为和任务执行严格只接收 shared `live | simulated`，不能在 live 入口将原观察改名为 simulated。`isCurrent()` 在每次动作前后检查，也在异步端口等待期间每 25ms 检查；此数字是本地取消轮询配置，不是实测 CV 或游戏控制频率。
 
-`BehaviorRuntime.run(spec, context, {isCurrent?})` 返回共享行为结果并补充 `input_count_scope: known | lower_bound`。同 task/revision/epoch/mode/行为 ID 的重复请求复用同一 Promise，不重复动作；同 ID 不同参数/条件返回 conflict。同一 Runtime 同时只运行一个行为，另一个不同 ID 的并发请求 busy 且不释放原 owner；任务 Runtime 同样串行。取消不会复活，恢复应由任务编排创建新的控制身份。
+`BehaviorRuntime.run(spec, context, {isCurrent?})` 返回共享行为结果并补充 `input_count_scope: known | lower_bound` 与 `scenario_effect: confirmed | unverified`。只有 live 可以将 game_effect 标为 confirmed；simulated 无论状态机成功与否，game_effect 一律 unverified，模拟完成证据单独写 scenario_effect，日志/回放也采用这份终态。同 task/revision/epoch/mode/行为 ID 的重复请求复用同一 Promise，不重复动作；同 ID 不同参数/条件返回 conflict。同一 Runtime 同时只运行一个行为，另一个不同 ID 的并发请求 busy 且不释放原 owner；任务 Runtime 同样串行。取消不会复活，恢复应由任务编排创建新的控制身份。
 
 `BehaviorJev.select(candidates, context, {id,timeoutMs?,isCurrent?})` 返回 status、reason、chooser_calls、request、selection、candidate 与重验证观察。唯一有效候选由本地直接选择；多个有效候选需要注入 `BehaviorChooser`，未配置时 blocked。整个边界选择，包括选前观察、异步日志、模型等待与重新观察，共用默认 5 秒、最多 15 秒租约。request 包含任务 revision/epoch、原观察 ID、候选 SHA256 和 deadline；只接受同 request ID 的已列 candidate ID。模型不能修改参数或生成键鼠动作。
 
 `StructuredBehaviorChooser(transport)` 接收 `(prompt, AbortSignal) => Promise<unknown>` 的结构化文字模型适配。它拒绝额外字段、重复 JSON 属性（含转义重复属性）、错误 request ID 和未知 candidate ID。`behavior-choice-v1` 与固定 prompt SHA256 进入边界日志。此首版不内置 Seed 凭据读取或 HTTP worker；集成层可注入既有环境读取模块提供的文字 transport，未配置不伪造模型调用成功。长行为内部没有 chooser 循环。
 
-`TaskRuntime.run(task, TaskContext, {isCurrent?,checkpoint?,verifyCheckpoint?})` 返回行为结果列表、chooser_calls、输入计数与范围、释放/效果状态、checkpoint。checkpoint 包含任务内容 SHA256、身份、模式、下一行为、已完成行为、任务源计数、证据 ID、已用时间和已尝试行为数。外部 checkpoint 必须匹配同 revision/epoch/mode/内容，且 `verifyCheckpoint(checkpoint,freshObservation)` 明确验证日志来源与当前可恢复状态；否则 blocked/failed，不直接按 JSON 跳过任务。剩余时间与行为预算继承 checkpoint，已取消的当前实例仍由幂等缓存拒绝重发。
+`TaskRuntime.run(task, TaskContext, {isCurrent?,checkpoint?,verifyCheckpoint?})` 返回行为结果列表、chooser_calls、输入计数与范围、释放/效果状态、checkpoint。任务同样仅在 live 允许 game_effect=confirmed；simulated 的完成效果写 scenario_effect，并始终保留 game_effect=unverified。checkpoint 包含任务内容 SHA256、身份、模式、下一行为、已完成行为、任务源计数、证据 ID、已用时间和已尝试行为数。外部 checkpoint 必须匹配同 revision/epoch/mode/内容，且 `verifyCheckpoint(checkpoint,freshObservation)` 明确验证日志来源与当前可恢复状态；否则 blocked/failed，不直接按 JSON 跳过任务。剩余时间与行为预算继承 checkpoint，已取消的当前实例仍由幂等缓存拒绝重发。
 
 ## 参数与有限状态机
 

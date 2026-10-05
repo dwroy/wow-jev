@@ -3,7 +3,7 @@ import type { BehaviorPorts, BehaviorResult, BehaviorSpec, BodyAction, Execution
 import { RunLease, cleanupBound } from './lease.js';
 import { bindingError, conditionError, validateConditions, hash, observationError, readKnown, validateBehavior, value, type FieldPolicy } from './validation.js';
 
-export interface BehaviorExecutionResult extends BehaviorResult { input_count_scope: 'known' | 'lower_bound'; }
+export interface BehaviorExecutionResult extends BehaviorResult { input_count_scope: 'known' | 'lower_bound'; scenario_effect: 'confirmed' | 'unverified'; }
 export interface BehaviorOptions { maxFieldAgeMs?: number; maxObservationAgeMs?: number; trustedSources?: ReadonlyArray<string>; }
 export interface BehaviorRunOptions { isCurrent?: () => boolean; }
 type Decision = { action: BodyAction; conditions: ActionCondition[]; state: string } | { status: BehaviorResult['status']; reason: string; effect?: boolean };
@@ -30,7 +30,7 @@ export class BehaviorRuntime {
     const promise = this.execute(frozen, ctx, options).finally(() => { this.active = false; }); this.runs.set(key, { hash: signature, promise }); return promise;
   }
   private empty(spec: BehaviorSpec, status: BehaviorResult['status'], reason: string): BehaviorExecutionResult {
-    return { id: spec.id, kind: spec.kind, status, reason, input_count_scope: 'known', actions: 0, real_inputs: 0, game_effect: 'unverified', release: 'unconfirmed', evidence_observation_ids: [] };
+    return { id: spec.id, kind: spec.kind, status, reason, input_count_scope: 'known', actions: 0, real_inputs: 0, game_effect: 'unverified', scenario_effect: 'unverified', release: 'unconfirmed', evidence_observation_ids: [] };
   }
   policy(context: Pick<ExecutionContext, 'mode'>): FieldPolicy {
     return { mode: context.mode, now: this.ports.now(), maxAgeMs: this.options.maxFieldAgeMs ?? 1000, ...(this.options.trustedSources ? { trustedSources: this.options.trustedSources } : {}) };
@@ -109,8 +109,9 @@ export class BehaviorRuntime {
       try { const released = await cleanupBound(this.ports.release(result.reason)); result.release = released === 'confirmed' && !outcomeUnconfirmed ? 'confirmed' : 'unconfirmed'; }
       catch { result.release = 'unconfirmed'; }
       if (result.release !== 'confirmed' && result.status === 'completed') { result.status = 'blocked'; result.reason = 'behavior_release_unconfirmed'; result.game_effect = 'unverified'; }
+      if (context.mode === 'simulated') { result.scenario_effect = result.game_effect; result.game_effect = 'unverified'; }
       try { await cleanupBound(this.ports.append('behavior_result', { ...result, task_id: context.task_id, task_revision: context.task_revision, run_epoch: context.run_epoch, mode: context.mode })); }
-      catch { result.status = 'failed'; result.reason = 'behavior_result_log_failed'; result.game_effect = 'unverified'; }
+      catch { result.status = 'failed'; result.reason = 'behavior_result_log_failed'; result.game_effect = 'unverified'; result.scenario_effect = 'unverified'; }
       lease.close();
     }
     return result;

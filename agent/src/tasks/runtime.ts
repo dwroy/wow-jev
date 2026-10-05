@@ -8,7 +8,7 @@ export type TaskContext = Omit<ExecutionContext, 'command_id'>;
 export interface TaskCheckpoint { task_id: string; task_revision: number; run_epoch: number; mode: ExecutionContext['mode']; task_sha256: string; elapsed_ms: number; attempted_behaviors: number; next_behavior: number; completed_behaviors: string[]; source_count: number | null; evidence_observation_ids: string[]; }
 export interface TaskResult {
   id: string; revision: number; run_epoch: number; mode: ExecutionContext['mode']; status: BehaviorResult['status']; reason: string;
-  behaviors: BehaviorExecutionResult[]; input_count_scope: 'known' | 'lower_bound'; chooser_calls: number; real_inputs: number; release: BehaviorResult['release']; game_effect: BehaviorResult['game_effect']; checkpoint: TaskCheckpoint;
+  behaviors: BehaviorExecutionResult[]; input_count_scope: 'known' | 'lower_bound'; chooser_calls: number; real_inputs: number; release: BehaviorResult['release']; game_effect: BehaviorResult['game_effect']; scenario_effect: BehaviorResult['game_effect']; checkpoint: TaskCheckpoint;
 }
 export interface TaskRunOptions { isCurrent?: () => boolean; checkpoint?: TaskCheckpoint; verifyCheckpoint?: (checkpoint: TaskCheckpoint, freshObservation: Observation) => Promise<boolean>; }
 /** L4 composes L3; count comes from the associated quest objective, never dead-frame increments. */
@@ -26,7 +26,7 @@ export class TaskRuntime {
     const promise = this.execute(frozen, ctx, options).finally(() => { this.active = false; }); this.runs.set(key, { hash: h, promise }); return promise;
   }
   private empty(task: LayerTaskSpec, context: TaskContext): TaskResult {
-    return { id: task.id, revision: task.revision, run_epoch: context.run_epoch, mode: context.mode, input_count_scope: 'known', status: 'failed', reason: 'task_exception', behaviors: [], chooser_calls: 0, real_inputs: 0, release: 'unconfirmed', game_effect: 'unverified', checkpoint: { task_id: task.id, task_revision: task.revision, run_epoch: context.run_epoch, mode: context.mode, task_sha256: hash(task), elapsed_ms: 0, attempted_behaviors: 0, next_behavior: 0, completed_behaviors: [], source_count: null, evidence_observation_ids: [] } };
+    return { id: task.id, revision: task.revision, run_epoch: context.run_epoch, mode: context.mode, input_count_scope: 'known', status: 'failed', reason: 'task_exception', behaviors: [], chooser_calls: 0, real_inputs: 0, release: 'unconfirmed', game_effect: 'unverified', scenario_effect: 'unverified', checkpoint: { task_id: task.id, task_revision: task.revision, run_epoch: context.run_epoch, mode: context.mode, task_sha256: hash(task), elapsed_ms: 0, attempted_behaviors: 0, next_behavior: 0, completed_behaviors: [], source_count: null, evidence_observation_ids: [] } };
   }
   private async execute(task: LayerTaskSpec, context: TaskContext, options: TaskRunOptions): Promise<TaskResult> {
     const result = this.empty(task, context); const started = this.ports.now(); let runId: string | undefined; let previous: Observation | undefined;
@@ -68,7 +68,7 @@ export class TaskRuntime {
             const q = String(task.params.quest_id); const p = this.behaviors.policy(context);
             if (value(latest, `quest.${q}.turned_in`, p, true) !== true || value(latest, `quest.${q}.reward_received`, p, true) !== true || task.params.reward_policy === 'explicit' && value(latest, `quest.${q}.received_reward_id`, p, true) !== task.params.reward_id) { result.status = 'blocked'; result.reason = 'task_delivery_evidence_unknown'; break; }
           }
-          result.status = 'completed'; result.reason = task.kind === 'deliver_quest' ? 'quest_delivery_confirmed' : 'sequence_completed'; result.game_effect = result.behaviors.every(b => b.game_effect === 'confirmed') ? 'confirmed' : 'unverified'; break;
+          result.status = 'completed'; result.reason = task.kind === 'deliver_quest' ? 'quest_delivery_confirmed' : 'sequence_completed'; result.game_effect = result.behaviors.every(b => context.mode === 'simulated' ? b.scenario_effect === 'confirmed' : b.game_effect === 'confirmed') ? 'confirmed' : 'unverified'; break;
         }
         if (result.checkpoint.attempted_behaviors >= task.max_behaviors) { result.status = 'blocked'; result.reason = 'task_behavior_budget'; break; }
         const index = result.checkpoint.attempted_behaviors;
@@ -104,7 +104,8 @@ export class TaskRuntime {
       try { result.release = await cleanupBound(this.ports.release(result.reason)); } catch { result.release = 'unconfirmed'; }
       if (result.behaviors.some(b => b.release !== 'confirmed')) result.release = 'unconfirmed';
       if (result.release !== 'confirmed' && result.status === 'completed') { result.status = 'blocked'; result.reason = 'task_release_unconfirmed'; result.game_effect = 'unverified'; }
-      try { await cleanupBound(this.ports.append('task_result', result)); } catch { result.status = 'failed'; result.reason = 'task_result_log_failed'; result.game_effect = 'unverified'; }
+      if (context.mode === 'simulated') { result.scenario_effect = result.game_effect; result.game_effect = 'unverified'; }
+      try { await cleanupBound(this.ports.append('task_result', result)); } catch { result.status = 'failed'; result.reason = 'task_result_log_failed'; result.game_effect = 'unverified'; result.scenario_effect = 'unverified'; }
       lease.close();
     }
     return result;
