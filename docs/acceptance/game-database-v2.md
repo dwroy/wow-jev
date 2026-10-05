@@ -17,7 +17,7 @@
 
 ## 里程碑状态
 
-一已完成离线验收；二开始实施；三、四待实施。运行库固定修补后的SQLite；世界包与v1接口分开，尚无v2发布或当前客户端已核实覆盖。
+一、二已完成离线验收；三集成中；四待实施。运行库固定修补后的SQLite；世界包与v1接口分开，尚无v2发布或当前客户端已核实覆盖。
 
 ## 步骤1a：世界包与兼容迁移
 
@@ -51,3 +51,16 @@
 ## 步骤2a：双语参考文本
 
 实源接入前修正同entity的en_US/zh_CN文本冲突归类。name/alias/description按locale选择，未知语言只保留候选、不采纳；数值参考允许保留来自不同source locale的来源，精确六维接口不变。84Python/14TS及typecheck通过，0skip。初次新TS测试数组未标tuple被noUncheckedIndexedAccess正确拒绝，改为显式const tuple后typecheck通过，未放宽编译设置。原世界包schema字节及v1断言SHA不变；旧包继续固定SHA读取。
+
+## 步骤2b：固定来源与苏醒海岸种子
+
+原件ATT commit/TDB tag、下载资产/解压父文件及作者规则SHA固定于 `game-data/source-locks/dragon-isles-v2.json`；本机实际归档下载SHA为fc551333…c5a3f5。每次导入验证固定完整父字节，SQL原tuple/CREATE schema原字节按offset复核并保存在标明derived的base64小容器；容器SHA不冒称原SQL SHA。未执行来源Lua/SQL。
+
+- 106项Python：22来源/CLI关联+84基础库，通过无skip；源码diff检查通过。
+- 实源CLI完整构建与实际TS桥查验通过。最终manifest SHA `5f762a251e9fb301ee3c8e50d9bbbc31fefc8bf2a67b686a60ef8360bb1c2774`，129实体/779断言，595known源字段、161unknown、23unsupported；全reference_only，current69933 coverage=0，distribution=local_only。原件小包1944426字节，导入需校验大父源约37秒，查询只读小包，不读大dump。
+- 每任务名称24known、faction8known/16unknown、原始条件24但求值unknown、作者provider24；确认starter/finisher均0。目标原行及逐项count23known/1unknown；规范目标动作23unsupported/1unknown。UI作者点24，楼层/位面/精度/变换、实际spawn和适用性未核实。raw SQL覆盖不能替代规范动作支持。
+- 真实70124参考名称练手材料、objective429858/count12；giver unknown、exact69933 not_found，uint64种族掩码保留字符串6130900294268439629。
+
+独立审查复现symlink父目录越界写、cache中断半文件、首行build代表混合数组、coverage漏unsupported；已补原子no-replace/写前拒绝、同内容幂等、混合build及normalized/raw覆盖反例，复核无剩余P1/P2。unsupported不作source withdrawal，名称delta按locale/condition区分。原候选39d6…、raw失败和审查过程保留，最终使用reviewed包。
+
+实施树证据 `out/acceptance/game-database-v2/milestone-2/{cli-result-reviewed.json,reviewed-summary.json,bridge-validation.json}`；主checkoutff-only集成后重新生成本机验收。尚无真实游戏任务、导航、模型或输入效果验证。

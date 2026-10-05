@@ -63,3 +63,18 @@ const data = await world.lookup(version, [
 ```
 
 `game_database/schema-v2.json` 是批量跨语言请求/响应的结构契约。子进程只读固定包，5秒默认超时，支持AbortSignal；请求64KiB、响应4MiB，严格验证包/版本/规则/总状态/实体/字段和采纳断言绑定；原assertion/source canonical字节分别核SHA，再核JSON值与外层一致，保留Python浮点与Unicode原字节。TS拒绝不可精确保留的int64 ID；其它字段不得据JSON数字舍入合并身份。原v1入口和读取格式不变。
+
+
+## 固定来源种子
+
+里程碑二入口（从项目根使用自己的venv）：
+
+```bash
+.venv/bin/python -B -m game_database.v2.source_cli --source-root .worktrees/backups/source-audit --output-root out/runtime/world/retail/dragon-isles/source-v2 --report-dir out/acceptance/game-database-v2/milestone-2
+```
+
+源锁 `game-data/source-locks/dragon-isles-v2.json` 给出固定下载URL、文件名、版本、完整SHA和分项许可；目标选择在 `game-data/seeds/dragon-isles-v2-selection.json`。源根需持有匹配原件，跨机器按锁下载并校验；源码/锁/合成fixture随Git，原件/摘取/SQLite/out不随Git。缓存及报告原子、同内容幂等、不同内容拒绝覆盖；默认导入不联网。
+
+24任务与依赖、1978→2022/2023/2024/2025地图作者层次生成129实体/779参考断言。逐字段/逐任务报告记录raw覆盖、normalized unsupported、冲突及缺失。ATT的provider仅作类型明确的作者线索，不代替已核starter或finisher；条件threshold/父继承/历史移除保留。TDB的credit/event、ID/order/storage/flags和count分开，隐藏/可选项不总计。宽位掩码为十进制字符串并带原SQL类型，避免JS舍入。
+
+SQL小证据内含原字节及parent dump/archive SHA、offset/line/tuple locator；导入完整校验父源，读取只校验小包。每条raw记录保留其VerifiedBuild，混合聚合build为unknown。当前国服69933已核实覆盖为0，精确query仍not_found；全部local_only，参考覆盖不授权自动任务或输入。可接、楼层、位面和可通行路线在后续查询中继续unknown/unsupported。

@@ -1,0 +1,156 @@
+{
+  "schema_version": 2,
+  "parser_version": "dragon-isles-static-v2.1",
+  "retrieved_at": "2026-10-05T16:07:18.246168+00:00",
+  "files": {
+    "att_quests": {
+      "path": "att-quests.lua",
+      "sha256": "c3075b48dc63f0f07d2717af322287052213e2793cebce874d4497bbf96945d0",
+      "bytes": 62739,
+      "url": "https://raw.githubusercontent.com/ATTWoWAddon/AllTheThings/1d34d9051ac597b150636314467e3cc6a5946f25/.contrib/.db/standard/02%20-%20Outdoor%20Zones/14%20Dragon%20Isles/The%20Waking%20Shores/Quests.lua",
+      "locator": ".contrib/.db/standard/02%20-%20Outdoor%20Zones/14%20Dragon%20Isles/The%20Waking%20Shores/Quests.lua"
+    },
+    "att_maps": {
+      "path": "att-map-constants.lua",
+      "sha256": "b862b3a4d68a9fb5d3cee1b9fcbafe4e8375952ad08a5d637dd048e9c28d8abf",
+      "bytes": 18575,
+      "url": "https://raw.githubusercontent.com/ATTWoWAddon/AllTheThings/1d34d9051ac597b150636314467e3cc6a5946f25/.contrib/.db/shared/lib/Constants/Maps.lua",
+      "locator": ".contrib/.db/shared/lib/Constants/Maps.lua"
+    },
+    "att_timeline": {
+      "path": "att-timeline-constants.lua",
+      "sha256": "e0a68004a80db0e480cdae9375aadcf99de98e8e2a1e54c30c55652130c55a0b",
+      "bytes": 67832,
+      "url": "https://raw.githubusercontent.com/ATTWoWAddon/AllTheThings/1d34d9051ac597b150636314467e3cc6a5946f25/.contrib/.db/shared/lib/Constants/Timelines.lua",
+      "locator": ".contrib/.db/shared/lib/Constants/Timelines.lua"
+    },
+    "att_races": {
+      "path": "att-raceIDs.lua",
+      "sha256": "003e1b0933aabf6f0646b63b7ac96f2dabf3e5fc87489aeae40587308e8ef4f3",
+      "bytes": 7655,
+      "url": "https://raw.githubusercontent.com/ATTWoWAddon/AllTheThings/1d34d9051ac597b150636314467e3cc6a5946f25/.contrib/.db/shared/constants/raceIDs.lua",
+      "locator": ".contrib/.db/shared/constants/raceIDs.lua"
+    },
+    "att_metadata_root": {
+      "path": "att-metadata-dragon-isles.lua",
+      "sha256": "573438d63f2eb844848ba35d8df0a730b37e30bc8bb22f6d034d1ef9f5053391",
+      "bytes": 1682,
+      "url": "https://raw.githubusercontent.com/ATTWoWAddon/AllTheThings/1d34d9051ac597b150636314467e3cc6a5946f25/.contrib/.db/standard/02%20-%20Outdoor%20Zones/14%20Dragon%20Isles/0%20-%20Metadata.lua",
+      "locator": ".contrib/.db/standard/02%20-%20Outdoor%20Zones/14%20Dragon%20Isles/0%20-%20Metadata.lua"
+    },
+    "att_rules": {
+      "path": "att-runtime-quests.lua",
+      "sha256": "86749356ea9ec0ca10269c566422ea8f919e8a501bba6920d14dab8f87fc800e",
+      "bytes": 106946,
+      "url": "https://raw.githubusercontent.com/ATTWoWAddon/AllTheThings/1d34d9051ac597b150636314467e3cc6a5946f25/src/Classes/Quests.lua",
+      "locator": "src/Classes/Quests.lua"
+    },
+    "att_compiler": {
+      "path": "att-framework-processing.cs",
+      "sha256": "49585266c861e07ca927d4df312cdf422406cd1714fde823ac2cf95ba7901d67",
+      "bytes": 275102,
+      "url": "https://raw.githubusercontent.com/ATTWoWAddon/AllTheThings/1d34d9051ac597b150636314467e3cc6a5946f25/.contrib/Source%20Code/Parser/Framework/Framework.Processing.cs",
+      "locator": ".contrib/Source%20Code/Parser/Framework/Framework.Processing.cs"
+    },
+    "att_shortcuts": {
+      "path": "att-shortcuts.lua",
+      "sha256": "c1bb7dcef30d7db22bd2d69256af3b691cdfdef7ff84ccfb89f39bfc30e64e09",
+      "bytes": 140820,
+      "url": "https://raw.githubusercontent.com/ATTWoWAddon/AllTheThings/1d34d9051ac597b150636314467e3cc6a5946f25/.contrib/.db/shared/functions/Shortcuts.lua",
+      "locator": ".contrib/.db/shared/functions/Shortcuts.lua"
+    },
+    "att_license": {
+      "path": "att-license",
+      "sha256": "955281b9174e0f66b08c8e83d31e0f38b2fcaa247ca3af92d1723d81a13cddfb",
+      "bytes": 1079,
+      "url": "https://raw.githubusercontent.com/ATTWoWAddon/AllTheThings/1d34d9051ac597b150636314467e3cc6a5946f25/LICENSE",
+      "locator": "LICENSE"
+    },
+    "att_retail_config": {
+      "path": "att-retail.config",
+      "sha256": "5ac414e028f0d73fdea69f096edbc8a3c74637323ecbdfe21eca68c7630600ed",
+      "bytes": 7758,
+      "url": "https://raw.githubusercontent.com/ATTWoWAddon/AllTheThings/1d34d9051ac597b150636314467e3cc6a5946f25/.contrib/.db/standard/.config/retail/retail.config",
+      "locator": ".contrib/.db/standard/.config/retail/retail.config"
+    },
+    "tdb_license": {
+      "path": "tdb-license",
+      "sha256": "f03129dfc402b411948913f8bd3739c1e86a89602c395429990971ffa606cbb6",
+      "bytes": 18746,
+      "url": "https://raw.githubusercontent.com/TrinityCore/TrinityCore/TDB1210.26091/COPYING",
+      "locator": "COPYING"
+    },
+    "tdb_archive": {
+      "path": "TDB_full_1210.26091_2026_09_09.7z",
+      "sha256": "fc5513334d7534a19f533124a95910193c8150379e5ed8d0db3e547ac2c5a3f5",
+      "bytes": 156449334,
+      "url": "https://github.com/TrinityCore/TrinityCore/releases/download/TDB1210.26091/TDB_full_1210.26091_2026_09_09.7z",
+      "locator": "release asset TDB_full_1210.26091_2026_09_09.7z"
+    },
+    "tdb_hotfix": {
+      "path": "TDB_full_hotfixes_1210.26091_2026_09_09.sql",
+      "sha256": "89796c4d6e35e06a0d93bc63964a78b9c15f368290b1b7224fe4879d8a9927dc",
+      "bytes": 349773790,
+      "url": "https://github.com/TrinityCore/TrinityCore/releases/download/TDB1210.26091/TDB_full_1210.26091_2026_09_09.7z",
+      "locator": "TDB_full_1210.26091_2026_09_09.7z!/TDB_full_hotfixes_1210.26091_2026_09_09.sql"
+    },
+    "tdb_world": {
+      "path": "TDB_full_world_1210.26091_2026_09_09.sql",
+      "sha256": "608534d1dc97535c92d756914a02fe36264e484b519f6e54f6d10cf56c6f4d96",
+      "bytes": 620616140,
+      "url": "https://github.com/TrinityCore/TrinityCore/releases/download/TDB1210.26091/TDB_full_1210.26091_2026_09_09.7z",
+      "locator": "TDB_full_1210.26091_2026_09_09.7z!/TDB_full_world_1210.26091_2026_09_09.sql"
+    }
+  },
+  "att": {
+    "provider": "ATT author structure",
+    "revision": "1d34d9051ac597b150636314467e3cc6a5946f25",
+    "url": "https://github.com/ATTWoWAddon/AllTheThings/tree/1d34d9051ac597b150636314467e3cc6a5946f25",
+    "source_context": {
+      "branch": "retail",
+      "expansion": "midnight",
+      "patch": "12.1.0",
+      "build": 69933,
+      "region": null,
+      "locale": null
+    },
+    "license": {
+      "code": "MIT",
+      "data": "MIT author-maintained software structure; game assets separately unverified",
+      "images": null,
+      "distribution": "local_only"
+    },
+    "third_party": [
+      {
+        "provider": "Blizzard/Wago input data",
+        "license": "unknown",
+        "note": "No game text, image or extracted client asset redistribution permission inferred from repository MIT."
+      }
+    ]
+  },
+  "tdb": {
+    "provider": "TrinityCore TDB",
+    "revision": "TDB1210.26091@272ab63e6a8775f3e2f64a4748a737228b7ce492",
+    "url": "https://github.com/TrinityCore/TrinityCore/releases/tag/TDB1210.26091",
+    "license": {
+      "code": "GPL-2.0-or-later (audited core headers); root COPYING GPL-2.0",
+      "data": null,
+      "images": null,
+      "distribution": "local_only"
+    },
+    "third_party": [
+      {
+        "provider": "Blizzard game data",
+        "license": "unknown",
+        "note": "Downloaded archive contains only two SQL dumps and no separate data LICENSE/COPYING/README."
+      }
+    ]
+  },
+  "rules": {
+    "att_source_quests": "src/Classes/Quests.lua:missingReqs threshold and character/breadcrumb/active/locked/altcollected exclusions; not a flat OR",
+    "att_inheritance": "Shortcuts.lua:bubbleDown; child fields win; Retail InheritingFields timeline/requireSkill",
+    "tdb_integer_encoding": "Masks and integers outside JS safe range are decimal strings with source SQL types",
+    "tdb_type0": "creature credit/event; no combat/kill inference",
+    "source_removal": "source withdrawal is not game nonexistence"
+  }
+}

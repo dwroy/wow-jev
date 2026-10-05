@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 里程碑二完成：固定ATT/TDB苏醒海岸参考种子。** `.worktrees/game-db-foundation` 集成静态Lua/SQL适配、固定源锁、24任务选择、四主区UI地图层次、小原始字节摘取链、逐任务覆盖/冲突/缺失及增量语义；不执行来源Lua/SQL。固定实际原件首尾完整SHA验证，97POI/181点等保留来源build，mixed row build不以首行代表全数组。独立审查的symlink越界缓存、非原子缓存和raw覆盖冒充规范目标支持均关闭并有反例。
+
+106项Python数据库/来源回归通过，14TS及typecheck已在步骤2a通过；实际CLI生成129实体/779断言，全reference_only/local_only，证据1944426字节。最终包SHA `5f762a251e9fb301ee3c8e50d9bbbc31fefc8bf2a67b686a60ef8360bb1c2774`，实际TS桥读练手材料/数量及uint64字符串正确，当前69933 exact not_found。24名称/作者provider/UI点，faction已知8/未知16；23任务raw目标/逐项count、1缺失；规范动作目标23unsupported/1unknown，starter/finisher和当前客户端已核实均0。计数不累加隐藏/可选项，Type0不推kill。
+
+入口 `python -m game_database.v2.source_cli --source-root .worktrees/backups/source-audit --output-root out/runtime/world/retail/dragon-isles/source-v2 --report-dir out/acceptance/game-database-v2/milestone-2`（使用项目venv）。跟Git仅源码、固定源锁/选择与合成测试，原件和包留本地out/backup。旧候选包39d6…及原失败保留，引用旧包不被新包删除。M3独立模块48测试已冻结，下一步集成三值条件、角色进度、中文短词、楼层/位面/路线及代表性合成成就/副本查询；不声称当前游戏可接或可通行。
+
 **2026-10-06 里程碑二，步骤2a完成：参考文本的语言隔离。** 双语ATT/TDB源准备发现按ID references会把同一实体中英文name误判为同字段冲突。已按source locale筛选name/alias/description，未知locale保留原候选但不采纳为请求语言，数值字段参考与六维精确query不变；Python与TS字段采纳校验同步。84Python/14TS及typecheck通过，无skip；尚未发布M2实源种子。
 
 source适配器在 `.worktrees/game-db-seeds` 实施，固定原件每次正式导入重新核完整父SHA，SQL原tuple摘取逐byte-range比对，不执行Lua/SQL。并行独立 `.worktrees/game-db-queries` 准备M3三值条件、角色/账号、中文短词与空间候选，集成验收仍按二→三顺序。源provider不推为已核starter/finisher，uint64位掩码保留十进制字符串；TDBcredit不推为杀怪，unsupported不冒称作者withdrawn或游戏不存在。

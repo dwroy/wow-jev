@@ -1,0 +1,66 @@
+{
+  "schema_version": 2,
+  "scope": "retail/dragon-isles/waking-shores-prologue-chapter-one",
+  "locale": "zh_CN",
+  "quest_ids": [
+    70122,
+    65452,
+    70124,
+    65451,
+    70123,
+    65453,
+    70125,
+    69910,
+    69911,
+    69912,
+    69914,
+    65760,
+    65990,
+    65989,
+    65991,
+    65992,
+    65993,
+    65995,
+    65996,
+    65997,
+    65998,
+    66000,
+    65999,
+    66001
+  ],
+  "dependency_quest_ids": [
+    67700,
+    65444,
+    70197,
+    70198,
+    66596,
+    65439
+  ],
+  "ui_maps": [
+    {
+      "constant": "DRAGON_ISLES",
+      "native_id": 1978,
+      "parent_id": null
+    },
+    {
+      "constant": "THE_WAKING_SHORES",
+      "native_id": 2022,
+      "parent_id": 1978
+    },
+    {
+      "constant": "OHNAHRAN_PLAINS",
+      "native_id": 2023,
+      "parent_id": 1978
+    },
+    {
+      "constant": "THE_AZURE_SPAN",
+      "native_id": 2024,
+      "parent_id": 1978
+    },
+    {
+      "constant": "THALDRASZUS",
+      "native_id": 2025,
+      "parent_id": 1978
+    }
+  ]
+}
