@@ -40,4 +40,6 @@ task-boundary-1实际启动冻结代码副本：基线任务运行期间切换�
 
 原始证据位于主checkout `out/acceptance/stages-5-7`；模型probe所有失败与模拟失败均保留。工程入口见[system-runtime.md](../system-runtime.md)，详细接口见[brain-runtime.md](../brain-runtime.md)、[learning-runtime.md](../learning-runtime.md)、[iteration-runtime.md](../iteration-runtime.md)。
 
+主目录以8e71665本地合入后，main-demo-1及独立回放通过，冻结代码Git dirty=false；main-frozen-v3-1实际从版本包复制源码启动，source SHA已验证、模拟panel流程通过。包内无.git，因此该运行Git commit/dirty为null，不冒充主目录代码。四个实施与三个候选工作树已正常移除，分支、包、必要日志及原未发布候选diff/Git快照均保留，未丢弃其它历史工作树。
+
 正式服还需要第4阶段当前4K战斗校准，以及目标名字、交互距离、NPC对话的可靠感知。当前缺失字段时等待/升级；没有开展实际NPC走近、交互、任务或新prompt游戏收益验收。整WSL重启恢复仍待独立测试。
