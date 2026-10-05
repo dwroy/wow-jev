@@ -9,7 +9,7 @@ export interface EvidenceRef {
 export interface KnowledgeSource {
   id: string;
   run_id: string;
-  kind: 'eye' | 'code_play' | 'jev';
+  kind: 'eye' | 'code_play' | 'jev' | 'brain';
   mode: 'live' | 'simulated';
   manifest_sha256: string;
   events_sha256: string;
