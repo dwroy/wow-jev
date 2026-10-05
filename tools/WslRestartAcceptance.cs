@@ -9,12 +9,22 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Runtime.InteropServices;
 using System.Web.Script.Serialization;
 using WowJev.Input;
 
 static partial class WslRestartAcceptance
 {
     sealed class Failure : Exception { public readonly string Code; public Failure(string code) { Code = code; } }
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool IsProcessInJob(IntPtr process, IntPtr job, out bool result);
+    static Dictionary<string, object> HostJob()
+    {
+        bool inside;
+        bool known = IsProcessInJob(Process.GetCurrentProcess().Handle, IntPtr.Zero, out inside);
+        return Obj("known", known, "in_job", known ? (object)inside : null, "win32_error", known ? 0 : Marshal.GetLastWin32Error(),
+            "pid", Process.GetCurrentProcess().Id, "start_ticks", Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks.ToString(),
+            "launch_path", Process.GetCurrentProcess().MainModule.FileName, "breakaway_evidence", "not_provided", "survival", "requires_actual_before_after_observation");
+    }
     static bool ActualRunBegan, SelfTesting;
     static long RunDeadlineMs;
     static int BoundedTimeout(int milliseconds)
@@ -138,7 +148,7 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
         FreezeClientSource(frozen, binaries);
         long started = Qpc(); object snapshot = WslSnapshot(wsl); long finished = Qpc();
         Save(Path.Combine(outDir, "preflight.json"), Obj("schema_version", 1, "type", "wsl_restart_preflight", "distro", "Ubuntu", "host_pid", Process.GetCurrentProcess().Id,
-            "host_start_ticks", Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks.ToString(), "clock", "windows-qpc", "snapshot_started_ms", started, "snapshot_finished_ms", finished,
+            "host_start_ticks", Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks.ToString(), "host_job", HostJob(), "clock", "windows-qpc", "snapshot_started_ms", started, "snapshot_finished_ms", finished,
             "snapshot", snapshot, "binaries", binaries, "repo_wsl", RepoWsl, "production_native_root", ProductionNativeRoot, "primary_root", outDir, "primary_domain", "windows_local", "export_root", ExportRoot, "export_domain", ExportRoot == null ? null : "wsl_unc", "wsl_exe_sha256", Hash(wsl), "tool_sha256", Hash(Process.GetCurrentProcess().MainModule.FileName), "shared_impact_review_required", true,
             "confirm_flag_present", confirmed, "restart_executed", false, "input_events", 0, "recorder_opened", false));
         Save(Path.Combine(outDir, "ready-plan.json"), Obj("schema_version", 1, "status", confirmed ? "prepared_needs_shared_impact_review" : "preflight_only", "distro", "Ubuntu",
@@ -159,6 +169,7 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
         foreach (object row in List(after, "processes"))
         { var process = Map(row); Require(Integer(process, "pid") != oldPid || Ticks(process, "start_ticks") != oldStart, "old_controller_still_alive"); }
         var hostBefore = Map(Need(facts, "host_before")); var hostAfter = Map(Need(facts, "host_after"));
+        Require(Boolean(hostBefore, "known") && Boolean(hostAfter, "known") && !Boolean(hostBefore, "in_job") && !Boolean(hostAfter, "in_job"), "host_job_independence_unconfirmed");
         Require(Integer(hostBefore, "pid") == Integer(hostAfter, "pid") && Ticks(hostBefore, "start_ticks") == Ticks(hostAfter, "start_ticks"), "windows_observer_did_not_survive");
         var termination = Map(Need(facts, "termination")); object[] arguments = List(termination, "arguments");
         Require(Text(termination, "executable") == "wsl.exe" && arguments.Length == 2 && Object.Equals(arguments[0], "--terminate") && Object.Equals(arguments[1], "Ubuntu") && Integer(termination, "exit_code") == 0, "actual_distro_termination_required");
@@ -253,7 +264,7 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
         string old = "11111111-1111-4111-8111-111111111111", fresh = "22222222-2222-4222-8222-222222222222", boot = "33333333-3333-4333-8333-333333333333";
         return Obj("host_fallback_release_used", false, "native_actors_after_terminate", Obj("watchdog_alive", true), "schema_version", 1, "scope", "actual_ubuntu_distro_restart", "distro", "Ubuntu", "before", Obj("boot_id", boot, "init_start_ticks", "100", "controller_pid", 77, "controller_start_ticks", "101", "controller_token", old),
             "after", Obj("boot_id", boot, "init_start_ticks", "200", "process_inventory_complete", true, "processes", new object[] { Obj("pid", 77, "start_ticks", "201") }),
-            "host_before", Obj("pid", 80, "start_ticks", "12345"), "host_after", Obj("pid", 80, "start_ticks", "12345"),
+            "host_before", Obj("pid", 80, "start_ticks", "12345", "known", true, "in_job", false), "host_after", Obj("pid", 80, "start_ticks", "12345", "known", true, "in_job", false),
             "termination", Obj("executable", "wsl.exe", "arguments", new object[] { "--terminate", "Ubuntu" }, "exit_code", 0, "started_windows_qpc_ms", 1500, "finished_windows_qpc_ms", 1700),
             "owned_before", Obj("session_id", old, "held_keys_mask", 4194304, "held_mouse_mask", 0, "watchdog_ready", true, "observed_windows_qpc_ms", 1400, "lease_deadline_windows_qpc_ms", 6000),
             "released_after", Obj("session_id", old, "held_keys_mask", 0, "held_mouse_mask", 0, "stop_requested", true, "stop_reason", "controller_heartbeat_expired", "observed_windows_qpc_ms", 2500),
@@ -269,7 +280,7 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
     {
         SelfTesting = true;
         VerifyFacts(MockFacts()); int checkedCases = 1;
-        foreach (string failure in new[] { "same-instance", "old-controller", "no-held", "late-release", "still-held", "old-session", "stale-input", "wrong-distro", "different-observer", "incomplete-inventory", "fresh-partial", "fresh-not-released", "wrong-stop-cause", "guardian-killed", "host-fallback" })
+        foreach (string failure in new[] { "same-instance", "old-controller", "no-held", "late-release", "still-held", "old-session", "stale-input", "wrong-distro", "different-observer", "incomplete-inventory", "fresh-partial", "fresh-not-released", "wrong-stop-cause", "guardian-killed", "host-fallback", "host-in-job", "host-job-unknown" })
         {
             var facts = MockFacts();
             if (failure == "same-instance") Map(facts["after"])["init_start_ticks"] = "100";
@@ -287,6 +298,8 @@ print(json.dumps({'boot_id':(root/'sys/kernel/random/boot_id').read_text().strip
             if (failure == "wrong-stop-cause") Map(facts["released_after"])["stop_reason"] = "shutdown_requested";
             if (failure == "guardian-killed") Map(facts["native_actors_after_terminate"])["watchdog_alive"] = false;
             if (failure == "host-fallback") facts["host_fallback_release_used"] = true;
+            if (failure == "host-in-job") Map(facts["host_before"])["in_job"] = true;
+            if (failure == "host-job-unknown") Map(facts["host_before"])["known"] = false;
             bool rejected = false; try { VerifyFacts(facts); } catch (Failure) { rejected = true; }
             Require(rejected, "self_test_expected_rejection_missing"); checkedCases++;
         }

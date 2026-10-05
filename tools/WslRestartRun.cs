@@ -144,12 +144,14 @@ static partial class WslRestartAcceptance
     static int RunRestart(string root, string nativeRoot)
     {
         // Running off UNC would make the observer depend on the distro being terminated.
-        Local(Process.GetCurrentProcess().MainModule.FileName); Native.MakeDpiAware();
+        Local(Process.GetCurrentProcess().MainModule.FileName);
+        var initialJob = HostJob(); Require(Boolean(initialJob, "known") && !Boolean(initialJob, "in_job"), "host_job_independence_unconfirmed_no_restart");
+        Native.MakeDpiAware();
         Preflight(root, nativeRoot, true);
         Directory.CreateDirectory(Path.Combine(ExportRoot, "controller"));
         string wsl = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wsl.exe");
         string oldSession = Guid.NewGuid().ToString("D"), freshSession = Guid.NewGuid().ToString("D"), oldToken = Guid.NewGuid().ToString("D"), freshToken = Guid.NewGuid().ToString("D");
-        var host = Obj("pid", Process.GetCurrentProcess().Id, "start_ticks", Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks.ToString());
+        var host = initialJob;
         var facts = Obj("schema_version", 1, "scope", "actual_ubuntu_distro_restart", "distro", "Ubuntu", "host_before", host);
         OwnedChild recorder = null, oldController = null, freshController = null, leaseGate = null; ReadonlyLease lease = null; LeaseObserver observer = null;
         bool restartDispatched = false, accepted = false, fallbackUsed = false; string failure = null; long begin = Qpc(); RunDeadlineMs = begin + 90000; ActualRunBegan = true;
@@ -222,7 +224,7 @@ static partial class WslRestartAcceptance
             Require(Text(receipt, "status") == "completed" && Integer(Map(Need(receipt, "input")), "events_requested") == 2 && Integer(Map(Need(receipt, "input")), "events_inserted") == 2 && Boolean(Map(Need(receipt, "input")), "released"), "fresh_input_not_completed_and_released");
             facts["fresh_receipt"] = receipt;
             int up = 0; WaitUntil(delegate() { up = AllUp(Physical()) ? up + 1 : 0; return up >= 3; }, 2000, "fresh_physical_release_unconfirmed"); Thread.Sleep(150);
-            facts["host_after"] = Obj("pid", Process.GetCurrentProcess().Id, "start_ticks", Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks.ToString());
+            facts["host_after"] = HostJob();
             recorder.Send(Obj("type", "recorder_control", "op", "close", "id", "acceptance-close"));
             Require(recorder.Process.WaitForExit(BoundedTimeout(3000)), "dedicated_recorder_close_timeout"); recorder.Join();
             facts["recorder"] = Obj("pid", recorder.Process.Id, "hwnd", window, "start_ticks", recorder.StartTicks.ToString(), "file", "recorder.jsonl", "sha256", Hash(Path.Combine(root, "recorder.jsonl")));

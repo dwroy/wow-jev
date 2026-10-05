@@ -25,10 +25,10 @@ WslRestartAcceptance.exe --distro Ubuntu
 
 ## 审查后的实际运行
 
-Windows Host 必须从 Windows 本地副本启动，不能从 Ubuntu UNC 路径直接运行长期观察器。preflight 已把主程序、controller、有限 lease gate、原生二进制与 schema 打包到 primary 的 `native` 目录。实际 run 使用全新的 primary/export 目录和原生产 native 路径；在 Windows PowerShell 里启动，避免协调器跟着 WSL 退出：
+Windows Host 必须从 Windows 本地副本启动，不能从 Ubuntu UNC 路径直接运行长期观察器。准备记录通过 `IsProcessInJob` 只读保存 known/in_job、PID/启动 ticks 和启动路径；实际 run 要求该查询已知且不在 job，否则在打开窗口、发送输入、重启之前拒绝。`Start-Process`/`UseShellExecute` 不能单独证明没有继承 WSL job；本工具没有 `CREATE_BREAKAWAY_FROM_JOB` 或桌面 broker 的允许证据，也不改生产 controller/执行器/guardian 的 detach。即使当前不在 job，Host 真正存活也必须由实际终止前后相同 PID/启动 ticks 再验收。preflight 已把主程序、controller、有限 lease gate、原生二进制与 schema 打包到 primary 的 `native` 目录。实际 run 使用全新的 primary/export 目录和原生产 native 路径；在 Windows PowerShell 里启动，避免协调器跟着 WSL 退出：
 
 ```powershell
-$taskTool = 'C:\Users\dai\AppData\Local\WowJevAcceptance\restart-preflight-c019a03f852542a68d2484a67f6e9316\native\WslRestartAcceptance.exe'
+$taskTool = 'C:\Users\dai\AppData\Local\WowJevAcceptance\restart-preflight-03d73d5fc2e44ea7aabc0ea2a5ee6994\native\WslRestartAcceptance.exe'
 $taskRun = 'C:\Users\dai\AppData\Local\WowJevAcceptance\restart-run-20261005-01'
 Start-Process -FilePath $taskTool -ArgumentList @(
   '--run', '--confirm-distro-restart', 'Ubuntu',
@@ -55,6 +55,8 @@ Host 观察到 lease 清零、停止原因和至少三次真实 UP 后，才恢�
 
 Root 可以从 Windows 本地 `--verify <primary-directory>` 独立校验 raw recorder、lease、fresh-native 与 facts。校验 synthetic 结果只在 `--self-test` 输出 `scope=synthetic_mock_trace`，不会标成实测。
 
-本模块目前完成：Windows 编译、24 组机制/原始日志模拟边界（含错误发行版、旧 init、旧 controller 仍在、守护被杀、Host 兜底、实际键未 UP、源 hash 改写、新会话部分输入）、3 项 durable token/跨模式重放测试，以及 TypeScript typecheck。真实只读 preflight+长度/SHA export 已通过；真实 restart run 尚未执行。
+本模块目前完成：Windows 编译、26 组机制/原始日志模拟边界（含错误发行版、旧 init、旧 controller 仍在、守护被杀、Host 兜底、实际键未 UP、源 hash 改写、新会话部分输入）、3 项 durable token/跨模式重放测试，以及 TypeScript typecheck。真实只读 preflight+长度/SHA export 已通过；真实 restart run 尚未执行。
 
-本次最终准备包 Windows primary：`C:\Users\dai\AppData\Local\WowJevAcceptance\restart-preflight-c019a03f852542a68d2484a67f6e9316`；可回读 export：`/home/dai/Projects/wow-jev/out/acceptance/retail-closure/restart-preflight-c019a03f852542a68d2484a67f6e9316`。`export-ack-preflight.json` 已核验每项长度/SHA；本记录只证明只读预检与导出链路，重启未执行。
+本次最终准备包 Windows primary：`C:\Users\dai\AppData\Local\WowJevAcceptance\restart-preflight-03d73d5fc2e44ea7aabc0ea2a5ee6994`；可回读 export：`/home/dai/Projects/wow-jev/out/acceptance/retail-closure/restart-preflight-03d73d5fc2e44ea7aabc0ea2a5ee6994`。`export-ack-preflight.json` 已核验每项长度/SHA；本记录只证明只读预检与导出链路，重启未执行。
+
+追加实际只读 Host job 预检：`known=true, in_job=true`，启动路径记录在该准备包 `preflight.json` 的 `host_job`。这只是当前进程状态，不是重启后的存活证明。
