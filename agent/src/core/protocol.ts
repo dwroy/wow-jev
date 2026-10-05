@@ -62,6 +62,7 @@ export interface Observation extends Envelope {
 interface ActionIntentBase extends Envelope {
   type: 'action_intent';
   actor: 'code' | 'jev' | 'brain';
+  decision_id?: string;
   plan: { id: string; revision: number };
   based_on_observation_id: string;
   deadline_ms: number;
@@ -130,6 +131,8 @@ export function semanticErrors(message: AgentMessage): string[] {
     }
   } else if (message.type === 'action_intent') {
     if (message.deadline_ms < message.at_ms) errors.push('/deadline_ms: 不得早于动作消息 at_ms。');
+    if (message.actor === 'jev' && !message.decision_id) errors.push('/decision_id: Jev 输入必须关联候选选择决策。');
+    if (message.actor !== 'jev' && message.decision_id !== undefined) errors.push('/decision_id: 仅 Jev 输入使用此决策关联。');
   } else {
     const { started_at_ms: start, finished_at_ms: finish } = message.timing;
     if (start !== null && start > message.at_ms) errors.push('/timing/started_at_ms: 不得晚于回执 at_ms。');
