@@ -1,0 +1,295 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:wow-combat-log:protocol:v1",
+  "title": "只读Windows战斗日志流v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "received_qpc_ms",
+        "from",
+        "poll_ms",
+        "input_enabled"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-combat-log"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "ready"
+        },
+        "session_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "received_qpc_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "from": {
+          "enum": [
+            "start",
+            "end"
+          ]
+        },
+        "poll_ms": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 5000
+        },
+        "input_enabled": {
+          "const": false
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "received_qpc_ms",
+        "path",
+        "file_id",
+        "generation",
+        "offset",
+        "header"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-combat-log"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "file"
+        },
+        "session_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "received_qpc_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "file_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "header": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 65536
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "received_qpc_ms",
+        "path",
+        "file_id",
+        "generation",
+        "offset",
+        "byte_length",
+        "raw",
+        "sha256"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-combat-log"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "line"
+        },
+        "session_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "received_qpc_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "file_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65537
+        },
+        "raw": {
+          "type": "string",
+          "maxLength": 65536
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "received_qpc_ms",
+        "code",
+        "generation",
+        "offset"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-combat-log"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "error"
+        },
+        "session_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "received_qpc_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "code": {
+          "enum": [
+            "line_too_large",
+            "invalid_utf8"
+          ]
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "received_qpc_ms",
+        "lines",
+        "reason",
+        "pending_bytes"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "wow-combat-log"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "stopped"
+        },
+        "session_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "received_qpc_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "lines": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "reason": {
+          "enum": [
+            "stdin_eof",
+            "line_limit",
+            "duration"
+          ]
+        },
+        "pending_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65536
+        }
+      }
+    }
+  ]
+}

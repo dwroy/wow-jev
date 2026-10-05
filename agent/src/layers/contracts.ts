@@ -37,6 +37,8 @@ export interface BodyOutcome {
   game_effect: 'confirmed' | 'unverified';
   evidence_observation_ids: string[];
   real_inputs: number;
+  /** Count of confirmed real commands; missing terminal receipts leave only a lower bound. */
+  input_count_scope?: 'known' | 'lower_bound';
 }
 
 export type BehaviorKind = 'kill_target' | 'loot_target' | 'talk_to' | 'accept_quest' | 'turn_in_quest'
@@ -55,6 +57,7 @@ export interface BehaviorResult {
   reason: string;
   actions: number;
   real_inputs: number;
+  input_count_scope?: 'known' | 'lower_bound';
   game_effect: 'confirmed' | 'unverified';
   release: 'confirmed' | 'unconfirmed';
   evidence_observation_ids: string[];
