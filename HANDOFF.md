@@ -6,7 +6,9 @@
 
 **2026-10-05 四层实施（当前轮）**：用户已确认L1基础输入、L2人物动作、L3高级行为、L4任务，并明确要求记录设计和实施代码；此前“不要新增架构规划文件”的临时限制已被本次授权替代。设计在 `docs/four-layer-agent-design.md`。负责人工作树 `.worktrees/four-layer-foundation`；独立实施工作树 actions-v2、behaviors-tasks、regional-eye，由负责人审查后本地集成，不推送。
 
-当前已集成59de593设计/共同契约、29538b7只读战斗日志旁路、de6e1b7有期限的原生同步timeline/人物动作。动作模块48项测试、四原生编译和2有效/9无效Windows参数校验通过；日志旁路5项TS及6项真实Windows文件读写条件通过。行为/任务、区域CV/OCR仍在独立验收，负责人接四层demo/live/replay入口。此段为过程记录，不能作为整链或正式服完成证明。战斗日志始终historical；未知定位/运动模式/技能状态不猜，实际游戏校准、实体关联、输入释放与导航/飞行效果仍须现场证据。
+本轮已在负责人分支完成L1/L2、区域CV/OCR框架、九个L3行为、三类L4任务及四层demo/live/replay/cancel入口的审查集成。最终335项TS全通过、无skip，typecheck和四个Windows原生程序构建通过；2有效/9无效时间线原生参数校验、6项真实Windows日志文件条件、6组无损codec/配额、真实离屏区域Bitmap与PNG、真实PNG→JPEG裁切映射及6项拒绝反例分别通过。模拟六行为小闭环完成，实际输入0、chooser0、scenario_effect=confirmed、game_effect=unverified；模拟回放通过。旧Node timer早醒导致wait回放失败已复现并修复，不放宽回放条件；原失败保留。
+
+体验：`npm --prefix agent run layers -- demo`，其输出给运行目录；`npm --prefix agent run layers -- replay --run-dir /绝对路径`。真实开发入口需匹配客户端/profile/区域校准和角色场景，未知定位/运动模式/技能状态会阻塞；详见 `docs/layers-runtime.md`、`docs/acceptance/four-layer-runtime.md`。本轮未检测到可用WoW窗口，未进行新时间线的物理输入/释放、正式服布局、真实OCR权重效果、区域Seed token成本、导航/飞行与自主升级验收。战斗日志仍只回填历史；四层任务到既有执行大脑及学习迭代入口的直接接入也待后续。没有读取凭据、调用云API、推送或重启WSL。
 
 **最新用户目标与小闭环**：用户明确以已知攻略扫任务、自主打怪/拾取快速升级；先体验 NPC 互动小闭环。已通过 Battle.net 正常入口启动12.1.0.69933并进入角色，辅助选中/靠近森德拉克斯并取得真实对话图。`out/acceptance/npc-loop-1/automatic-local-1` 是0模型调用的实际程序运行：6949ms、名字/关闭对话证据unknown、等待后停止、0输入/0效果/释放confirmed，严格回放通过，未证明自动互动。相同捕获/冻结校准对照确认原Bitmap字形555与对应JPEG90字形456，在线unknown、JPEG离线known；不能把JPEG模板自匹配当直播准确率。v2对话头像ROI改进已冻结但名字仍为JPEG，下一轮必须取真实NPC无损源图。用户随后手动打怪；此时停止输入，补录30秒只读27观察/26图/0动作，独立复核取得1个新的4K死亡目标选择事件（非新击杀），全部相邻帧只计1事件。target.dead仅真值已知20图评分：known正确15/错误0/CVunknown5，另6图视觉unknown不计准确率；旧错误汇总与纠正summary-v2均保留。
 
