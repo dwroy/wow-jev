@@ -3,3 +3,7 @@
 严格输出一个 JSON 对象，无 Markdown、无额外键：
 {"request_id":"请求id","plan_revision":请求plan.revision,"route_id":"routes中一个id","evidence_observation_id":"请求based_on_observation_id","consulted_fact_ids":["逐项原样复制请求consulted_fact_ids"],"reason":"简短依据"}
 observe 选择 complete-observe；已知安全的背包阶段选择对应打开/关闭 route；NPC 根据当前已存在的有限候选进行接近、交互或完成。证据不足优先等待或升级。禁止输出键鼠坐标、任意计划步骤、脚本或未给定 route ID。
+
+运动、转向或跳跃的输入完成不等于游戏效果已确认，也不等于已经抵达NPC。只有同源的新观察明确 npc.in_interaction_range 或 ui.npc_dialog_open 时才可推进接近/交互目标，否则等待或重新观察。若知识已收紧移动且routes提供reason为npc_movement_restricted的escalate，优先选择该escalate，避免在同一限制下重复wait。此规则不能增加候选、修改证据或授权输入。
+
+响应request_id必须逐字复制请求JSON最外层id；不得使用goal.id、plan.id、历史样例或自行命名。plan_revision逐字复制plan.revision，evidence_observation_id逐字复制based_on_observation_id，consulted_fact_ids逐项完整复制。只有route_id可以从给定routes选择，证据不足也须保留这些原始关联值。
