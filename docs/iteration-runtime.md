@@ -36,7 +36,7 @@ await runtime.registry.rollback('baseline');
 
 `changes`只接受`kind/path/expected_sha256/content`。新文件必须给`null`，已有文件必须给原字节 SHA256。只允许`agent/src/**/*.ts`和`perception/prompts/*.txt`，拒绝绝对路径、`..`、反斜线、隐藏文件、符号链接、重复路径和未声明改动。手、system启动、eval、iteration、底层进程执行、技能输入和actions/凭据路径属于保护模块。提案不能传可执行命令。代理写入的代码仍需要负责人审查；固定回归在WSL用户进程中运行，不是针对恶意代码的操作系统隔离沙箱。
 
-两个评估profile都运行固定的TypeScript类型检查、候选提交中未被修改的既有TS回归测试，以及数据形式的提示断言。代码修改必须使用`code-regression`。依赖来自主项目既有node_modules；提案不能变更依赖、测试或评估实现。命令直接spawn，不使用shell，不读取stdin，环境不继承凭据，HOME为不可用路径。超时或输出超限会杀死POSIX进程组，原始stdout/stderr不写入报告，只保存状态、退出码、输出长度和SHA256。
+两个评估profile都运行固定的TypeScript类型检查、候选提交中未被修改的既有TS回归测试，以及数据形式的提示断言。代码修改必须使用`code-regression`。依赖来自主项目既有node_modules；提案不能变更依赖、测试或评估实现。命令直接spawn，不使用shell，不读取stdin，环境不继承凭据，HOME为不可用路径；固定GIT_CONFIG_GLOBAL只指向OS用户全局Git身份配置，让临时仓库测试继续使用全局身份，避免仓库级user.*。超时或输出超限会杀死POSIX进程组，原始stdout/stderr不写入报告，只保存状态、退出码、输出长度和SHA256。
 
 评估工具自己写HMAC签名收据，绑定清单和全部源码字节。传入`passed:true`无法替代工具评估。评估后再次检查候选，发布前又核对清单、来源、知识、完整源码和签名；失败或被修改的候选不能激活。候选之外的签名密钥仅本地保存在运行目录，不放入候选、发布包或日志。评估通过以后，`approvedBy`记录已获授权的负责人具体验收。
 
@@ -79,3 +79,5 @@ npm --prefix agent test
 专门测试包含真实临时Git仓库/工作树的prompt与code发布；不安全路径、SHA冲突、新文件null SHA、symlink、未声明变更、失败评估和伪造passed、评估后变更、多版本/重复ID、旧task冻结和rollback、源码篡改、固定命令、环境清理、输出上限和超时。它们与正式服实测分别报告。
 
 2026-10-05 本模块离线工程验证：`npm --prefix agent run typecheck`退出0；`npm --prefix agent test`退出0，166项通过/0失败/0跳过（其中11项iteration测试）。prompt/code行为测试使用临时Git仓库和真实worktree、固定编译器和实际测试进程。尚未在本模块运行正式服动作或模型请求，也未据此声称游戏收益；负责人仍需将真实learned事实、独立模型对照和任务代码启动验收加入阶段记录。
+
+补充验证：将测试父进程HOME设为`/nonexistent`实际复现全局Git身份丢失；修复后同条件11项iteration测试全部通过，typecheck退出0。固定测试环境保留全局Git配置的绝对路径，仍不继承API凭据。

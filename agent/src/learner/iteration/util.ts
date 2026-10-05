@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { lstat, readFile, readdir, realpath, mkdir, writeFile, rename } from 'node:fs/promises';
 import path from 'node:path';
+import { userInfo } from 'node:os';
 
 export const sha256 = (value: string | Buffer): string => createHash('sha256').update(value).digest('hex');
 export const json = (value: unknown): string => JSON.stringify(value, null, 2) + '\n';
@@ -66,7 +67,7 @@ export async function runFixed(executable: string, args: string[], cwd: string, 
     let settled = false;
     let timer: NodeJS.Timeout;
     const child = spawn(executable, args, { cwd, shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
-      PATH: '/usr/local/bin:/usr/bin:/bin', LANG: 'C.UTF-8', HOME: gitIdentity ? (process.env.HOME ?? '/nonexistent') : '/nonexistent', TMPDIR: '/tmp', NODE_ENV: 'test',
+      PATH: '/usr/local/bin:/usr/bin:/bin', LANG: 'C.UTF-8', GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL ?? path.join(userInfo().homedir, '.gitconfig'), HOME: gitIdentity ? (process.env.HOME ?? '/nonexistent') : '/nonexistent', TMPDIR: '/tmp', NODE_ENV: 'test',
     } });
     const finish = (status: ProcessResult['status'], exitCode: number | null): void => {
       if (settled) return;
