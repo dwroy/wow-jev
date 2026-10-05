@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "profile_id": "retail-cn-installed-12.1.0.69933",
+  "version": {
+    "branch": "retail",
+    "expansion": "midnight",
+    "patch": "12.1.0",
+    "build": 69933,
+    "region": "cn",
+    "locale": "zh_CN"
+  },
+  "verification": "installed_client",
+  "observed_at": "2026-10-05T08:10:15.553487+00:00",
+  "evidence": [
+    {
+      "path": "game-data/provenance/client-version-1.json",
+      "sha256": "94951e43c2aafd41281a33cfe132727528632fb26cbb659088836d9b6fa7ca6d"
+    }
+  ],
+  "note": "由实际Wow.exe FileVersion、.build.info的product=wow Active=1和配置选定非认证字段证明安装版本；不证明角色已登录、server或网页实体事实。zhCN→zh_CN显式规范化；midnight关联依据官方24250385文章12.1段。"
+}

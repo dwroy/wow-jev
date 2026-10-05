@@ -1,0 +1,327 @@
+{
+  "schema_version": 1,
+  "assertions": [
+    {
+      "kind": "quest",
+      "entity_id": 70122,
+      "name": "探险者遇险",
+      "facts": {
+        "objectives": [
+          {
+            "type": "rescue",
+            "count": 3
+          }
+        ],
+        "content_expansion": "dragonflight"
+      },
+      "source": {
+        "provider": "wowhead",
+        "url": "https://www.wowhead.com/cn/quest=70122/探险者遇险",
+        "retrieved_at": "2026-10-05T08:02:52Z",
+        "evidence_kind": "external_reference",
+        "source_version": {
+          "branch": "retail",
+          "expansion": null,
+          "patch": null,
+          "build": null,
+          "region": null,
+          "locale": "zh_CN"
+        },
+        "artifact_sha256": null,
+        "locator": "页面主任务目标（不是评论）",
+        "note": "通过web工具实际阅读的正式服页面；没有页面对应client build/地区证据，不能认作当前69933服事实。未保存原始HTML，artifact_sha256为null；断言本身由库计算canonical SHA。"
+      },
+      "applicability": []
+    },
+    {
+      "kind": "quest",
+      "entity_id": 70123,
+      "name": "原始龙害",
+      "facts": {
+        "objectives": [
+          {
+            "type": "kill",
+            "count": 8,
+            "target_name": "原始始祖幼龙"
+          }
+        ],
+        "content_expansion": "dragonflight"
+      },
+      "source": {
+        "provider": "wowhead",
+        "url": "https://www.wowhead.com/cn/quest=70123/原始龙害",
+        "retrieved_at": "2026-10-05T08:02:52Z",
+        "evidence_kind": "external_reference",
+        "source_version": {
+          "branch": "retail",
+          "expansion": null,
+          "patch": null,
+          "build": null,
+          "region": null,
+          "locale": "zh_CN"
+        },
+        "artifact_sha256": null,
+        "locator": "页面主任务目标（不是评论）",
+        "note": "通过web工具实际阅读的正式服页面；没有页面对应client build/地区证据，不能认作当前69933服事实。未保存原始HTML，artifact_sha256为null；断言本身由库计算canonical SHA。"
+      },
+      "applicability": []
+    },
+    {
+      "kind": "quest",
+      "entity_id": 70124,
+      "name": "练手材料",
+      "facts": {
+        "objectives": [
+          {
+            "type": "collect",
+            "count": 12,
+            "item_id": 198398
+          }
+        ],
+        "content_expansion": "dragonflight"
+      },
+      "source": {
+        "provider": "wowhead",
+        "url": "https://www.wowhead.com/cn/quest=70124/练手材料",
+        "retrieved_at": "2026-10-05T08:02:52Z",
+        "evidence_kind": "external_reference",
+        "source_version": {
+          "branch": "retail",
+          "expansion": null,
+          "patch": null,
+          "build": null,
+          "region": null,
+          "locale": "zh_CN"
+        },
+        "artifact_sha256": null,
+        "locator": "页面主任务目标（不是评论）",
+        "note": "通过web工具实际阅读的正式服页面；没有页面对应client build/地区证据，不能认作当前69933服事实。未保存原始HTML，artifact_sha256为null；断言本身由库计算canonical SHA。"
+      },
+      "applicability": []
+    },
+    {
+      "kind": "quest",
+      "entity_id": 65451,
+      "name": "练手材料",
+      "facts": {
+        "faction": "horde",
+        "objectives": [
+          {
+            "type": "collect",
+            "count": 20,
+            "item_id": 198398
+          }
+        ],
+        "introduced_patch": "10.0.2",
+        "content_expansion": "dragonflight"
+      },
+      "source": {
+        "provider": "wowhead",
+        "url": "https://www.wowhead.com/cn/quest=65451/练手材料",
+        "retrieved_at": "2026-10-05T08:02:52Z",
+        "evidence_kind": "external_reference",
+        "source_version": {
+          "branch": "retail",
+          "expansion": null,
+          "patch": null,
+          "build": null,
+          "region": null,
+          "locale": "zh_CN"
+        },
+        "artifact_sha256": null,
+        "locator": "页面主任务目标和小知识栏",
+        "note": "通过web工具实际阅读的正式服页面；没有页面对应client build/地区证据，不能认作当前69933服事实。未保存原始HTML，artifact_sha256为null；断言本身由库计算canonical SHA。 同名部落任务不同ID，不能与70124合并。"
+      },
+      "applicability": []
+    },
+    {
+      "kind": "quest",
+      "entity_id": 70123,
+      "name": "原始龙害",
+      "facts": {
+        "objectives": [
+          {
+            "type": "kill",
+            "count": 10,
+            "target_name": "原始始祖幼龙"
+          }
+        ],
+        "content_expansion": "dragonflight"
+      },
+      "source": {
+        "provider": "wowhead",
+        "url": "https://www.wowhead.com/cn/quest=70123/原始龙害#comments",
+        "retrieved_at": "2026-10-05T08:02:52Z",
+        "evidence_kind": "external_comment",
+        "source_version": {
+          "branch": "retail",
+          "expansion": null,
+          "patch": null,
+          "build": null,
+          "region": null,
+          "locale": "zh_CN"
+        },
+        "artifact_sha256": null,
+        "locator": "评论作者Mypciscraze：PART 2，9b；评论文字引用2022-11-29发布",
+        "note": "历史玩家评论，未验证的2022年代线索；与页面当前8只断言冲突，不覆盖页面、不标明适用patch/build。"
+      },
+      "applicability": []
+    },
+    {
+      "kind": "quest",
+      "entity_id": 70124,
+      "name": "练手材料",
+      "facts": {
+        "objectives": [
+          {
+            "type": "collect",
+            "count": 15,
+            "item_id": 198398
+          }
+        ],
+        "content_expansion": "dragonflight"
+      },
+      "source": {
+        "provider": "wowhead",
+        "url": "https://www.wowhead.com/cn/quest=70124/练手材料#comments",
+        "retrieved_at": "2026-10-05T08:02:52Z",
+        "evidence_kind": "external_comment",
+        "source_version": {
+          "branch": "retail",
+          "expansion": null,
+          "patch": null,
+          "build": null,
+          "region": null,
+          "locale": "zh_CN"
+        },
+        "artifact_sha256": null,
+        "locator": "评论作者Mypciscraze：PART 2，9c；评论文字引用2022-11-29发布",
+        "note": "历史玩家评论，未验证的2022年代线索；与页面当前12片断言冲突，不覆盖页面、不标明适用patch/build。"
+      },
+      "applicability": []
+    },
+    {
+      "kind": "creature",
+      "entity_id": 195597,
+      "name": "原始始祖雏龙",
+      "facts": {
+        "location_name": "觉醒海岸",
+        "content_expansion": "dragonflight"
+      },
+      "source": {
+        "provider": "wowhead",
+        "url": "https://www.wowhead.com/cn/npc=195597/原始始祖雏龙",
+        "retrieved_at": "2026-10-05T08:02:52Z",
+        "evidence_kind": "external_reference",
+        "source_version": {
+          "branch": "retail",
+          "expansion": null,
+          "patch": null,
+          "build": null,
+          "region": null,
+          "locale": "zh_CN"
+        },
+        "artifact_sha256": null,
+        "locator": "NPC页面标题和地区",
+        "note": "通过web工具实际阅读的正式服页面；没有页面对应client build/地区证据，不能认作当前69933服事实。未保存原始HTML，artifact_sha256为null；断言本身由库计算canonical SHA。"
+      },
+      "applicability": []
+    },
+    {
+      "kind": "creature",
+      "entity_id": 193806,
+      "name": "原始始祖幼龙",
+      "facts": {},
+      "source": {
+        "provider": "wowhead",
+        "url": "https://www.wowhead.com/cn/quest=70123/原始龙害",
+        "retrieved_at": "2026-10-05T08:02:52Z",
+        "evidence_kind": "external_reference",
+        "source_version": {
+          "branch": "retail",
+          "expansion": null,
+          "patch": null,
+          "build": null,
+          "region": null,
+          "locale": "zh_CN"
+        },
+        "artifact_sha256": null,
+        "locator": "主任务目标链接：原始始祖幼龙，href npc=193806",
+        "note": "通过web工具实际阅读的正式服页面；没有页面对应client build/地区证据，不能认作当前69933服事实。未保存原始HTML，artifact_sha256为null；断言本身由库计算canonical SHA。 子NPC详情页未成功访问，仅父任务链接证明名称和ID，不含生命、等级、坐标或掉率。"
+      },
+      "applicability": []
+    },
+    {
+      "kind": "creature",
+      "entity_id": 193816,
+      "name": "原始始祖幼龙",
+      "facts": {},
+      "source": {
+        "provider": "wowhead",
+        "url": "https://www.wowhead.com/cn/quest=70123/原始龙害",
+        "retrieved_at": "2026-10-05T08:02:52Z",
+        "evidence_kind": "external_reference",
+        "source_version": {
+          "branch": "retail",
+          "expansion": null,
+          "patch": null,
+          "build": null,
+          "region": null,
+          "locale": "zh_CN"
+        },
+        "artifact_sha256": null,
+        "locator": "主任务目标链接：原始始祖幼龙，href npc=193816",
+        "note": "通过web工具实际阅读的正式服页面；没有页面对应client build/地区证据，不能认作当前69933服事实。未保存原始HTML，artifact_sha256为null；断言本身由库计算canonical SHA。 子NPC详情页未成功访问，仅父任务链接证明名称和ID。"
+      },
+      "applicability": []
+    },
+    {
+      "kind": "creature",
+      "entity_id": 193811,
+      "name": "原始始祖幼龙",
+      "facts": {},
+      "source": {
+        "provider": "wowhead",
+        "url": "https://www.wowhead.com/cn/quest=70123/原始龙害",
+        "retrieved_at": "2026-10-05T08:02:52Z",
+        "evidence_kind": "external_reference",
+        "source_version": {
+          "branch": "retail",
+          "expansion": null,
+          "patch": null,
+          "build": null,
+          "region": null,
+          "locale": "zh_CN"
+        },
+        "artifact_sha256": null,
+        "locator": "主任务目标链接：原始始祖幼龙，href npc=193811",
+        "note": "通过web工具实际阅读的正式服页面；没有页面对应client build/地区证据，不能认作当前69933服事实。未保存原始HTML，artifact_sha256为null；断言本身由库计算canonical SHA。 子NPC详情页未成功访问，仅父任务链接证明名称和ID。"
+      },
+      "applicability": []
+    },
+    {
+      "kind": "item",
+      "entity_id": 198398,
+      "name": "原始始祖雏龙之鳞",
+      "facts": {},
+      "source": {
+        "provider": "wowhead",
+        "url": "https://www.wowhead.com/cn/quest=70124/练手材料",
+        "retrieved_at": "2026-10-05T08:02:52Z",
+        "evidence_kind": "external_reference",
+        "source_version": {
+          "branch": "retail",
+          "expansion": null,
+          "patch": null,
+          "build": null,
+          "region": null,
+          "locale": "zh_CN"
+        },
+        "artifact_sha256": null,
+        "locator": "主任务目标物品链接：原始始祖雏龙之鳞，href item=198398",
+        "note": "通过web工具实际阅读的正式服页面；没有页面对应client build/地区证据，不能认作当前69933服事实。未保存原始HTML，artifact_sha256为null；断言本身由库计算canonical SHA。 物品详情页未成功访问，仅父任务链接证明名称和ID，不含掉率。"
+      },
+      "applicability": []
+    }
+  ]
+}
