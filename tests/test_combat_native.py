@@ -90,3 +90,35 @@ def test_native_strict_bundle_rejects(native_bundle, change):
     path.write_text(json.dumps(bundle))
     code, result = classify(pos, path)
     assert code == 2 and result['type'] == 'error'
+
+
+def test_death_glyph_requires_independent_alive_evidence(native_bundle, tmp_path):
+    alive, _, _, original = native_bundle
+    dead = tmp_path / 'dead.png'
+    with Image.open(alive) as image:
+        image.paste((20, 20, 20), (15, 4, 23, 12)); image.paste((240, 180, 0), (15, 4, 17, 7)); image.save(dead)
+    target_roi = {'x': 2, 'y': 3, 'width': 10, 'height': 11}
+    dead_roi = {'x': 15, 'y': 4, 'width': 8, 'height': 8}
+    spec = {'version': 1, 'id': 'glyph-test', 'detectors': {
+        'target_present': {'roi': target_roi, 'positive': [str(alive)], 'negative': [str(native_bundle[1])]},
+        'target_dead': {'roi': dead_roi, 'positive': [str(dead)], 'negative': [str(alive)], 'pixel_mode': 'yellow-glyph-v1',
+                        'negative_evidence': {'roi': dead_roi, 'mask': 'green-mask-v1', 'min_pixels': 16}, 'max_distance': .02, 'min_margin': .04}}}
+    generate(spec, tmp_path / 'glyph-bundle'); path = tmp_path / 'glyph-bundle/calibration.json'
+    _, result = classify(dead, path); assert result['detectors']['target_dead']['value'] is True
+    _, result = classify(alive, path); assert result['detectors']['target_dead']['value'] is False
+    empty = tmp_path / 'empty.png'
+    with Image.open(alive) as image:
+        image.paste((20, 20, 20), (15, 4, 23, 12)); image.save(empty)
+    _, result = classify(empty, path)
+    assert result['detectors']['target_dead']['status'] == 'unknown'
+    assert result['detectors']['target_dead']['reason']['code'] == 'alive_evidence_insufficient'
+    original = json.loads(path.read_text())
+    for change in ['bool-threshold', 'roi-outside', 'missing-pair', 'wrong-mask', 'wrong-detector']:
+        config = json.loads(json.dumps(original)); detector = config['detectors']['target_dead']
+        if change == 'bool-threshold': detector['negative_evidence']['min_pixels'] = True
+        elif change == 'roi-outside': detector['negative_evidence']['roi']['x'] = 400
+        elif change == 'missing-pair': del detector['negative_evidence']
+        elif change == 'wrong-mask': detector['negative_evidence']['mask'] = 'fake'
+        elif change == 'wrong-detector': config['detectors']['target_present'].update(pixel_mode=detector['pixel_mode'], negative_evidence=detector['negative_evidence'])
+        path.write_text(json.dumps(config))
+        code, result = classify(alive, path); assert code == 2 and result['type'] == 'error', change

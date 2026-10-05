@@ -64,3 +64,15 @@ python -m tools.combat_calibrate --spec /absolute/spec.json --out-dir /absolute/
 v2 没有观察到错误 known/原 unknown 标签被提升为 known，但死亡覆盖率不足。不能将42/42的条件准确率写成46/46总体通过，不能据此声称达到此前95%完整门槛。未知边界需要补录，现有材料不能代表所有布局、悬停或面板遮挡。
 
 完整证据在主 checkout `out/acceptance/stage-4/cv-1`。三张第3阶段真实4K图的离线兼容复核中，背包保持 known，所有战斗字段因尺寸不符返回 unknown 且保留校准 ID；没有把2048校准外推到当前4K。当前模块的验收范围为编译、协议/融合/校准边界测试、真实 Windows 离线分类和旧日志严格回放，未进行4K战斗在线验收。
+
+## 独立死亡字形实验
+
+`death-glyph-v3` 保留相同训练/留出分组，只在20张训练组图中设计死亡规则。可选扩展仅限 `target_dead`，需同时配置 `pixel_mode:"yellow-glyph-v1"` 和 `negative_evidence:{roi,mask:"green-mask-v1",min_pixels}`；旧 RGB bundle 完全保留。正负模板仍保存原图 RGB PNG，加载与分类时转换字形 mask，模板 SHA 和源图 SHA 不改变含义。
+
+黄色字形像素规则为 R≥140、G≥100、R≥0.85G、B≤0.65min(R,G)，防止亮绿生命条被当黄字。死亡 true 必须匹配训练死亡字形正模板。false 需要匹配训练存活负模板，并在独立生命条 ROI 中具有可见绿色像素（G≥80、R≤0.70G、B≤0.70G）；没有死亡字且缺少存活证据返回 unknown。
+
+实验死亡 ROI 为(1570,1075,76,19)，独立生命条 ROI 为(1512,1077,188,17)，绿色门槛64像素，max_distance=0.02/min_margin=0.04。训练图近零血量 unknown 的绿色像素为17/0，已知存活图均超过1000；训练死亡图有97黄色字形像素，训练存活图为0。这些观察仅用于选训练规则，没有按留出结果调整参数。
+
+训练20图中，死亡11个 known 标签全部正确，9个 unknown 标签全部保持 unknown。参数、源清单、代码和原生二进制 SHA 在 `chosen-before-heldout.json` 预先冻结，然后运行一次最终26图留出评估。v3 全46图死亡18 known正确、28 unknown；21个已知标签召回85.7%。留出26图死亡7 known正确、19 unknown；10个已知标签召回70%，16个 unknown 标签均没有提升为 known。目标存在及战斗检测未变。
+
+相比 v2 的留出2/10，独立字形与绿色证据减少了生命条 RGB 变化导致的弃判，但仍未满足95%完整门槛，也不能把相同旧素材上的留出结果当作新4K实测。全部旧失败、训练和最终结果保留在 `out/acceptance/stage-4/cv-1/death-glyph-v3`。模板过远、模糊字形、无可靠绿条或目标框弃判仍返回 unknown；新场景、面板遮挡和其它颜色模式需要独立补录。

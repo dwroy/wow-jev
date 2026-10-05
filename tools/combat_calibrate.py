@@ -9,6 +9,7 @@ import shutil
 import sys
 
 from tools.eye_calibrate import CalibrationError, ID, load_source, rgb_distance, threshold
+from PIL import Image
 
 KEYS = {"target_present", "target_dead", "player_in_combat"}
 
@@ -26,6 +27,20 @@ def region(value, size):
     return (x, y, x + width, y + height)
 
 
+def feature(image, mode):
+    if mode == "rgb":
+        return image
+    if mode != "yellow-glyph-v1":
+        raise CalibrationError("不支持的pixel_mode")
+    rgb = image.tobytes()
+    mask = bytearray(len(rgb))
+    for index in range(0, len(rgb), 3):
+        r, g, b = rgb[index:index + 3]
+        if r >= 140 and g >= 100 and r >= g * .85 and b <= min(r, g) * .65:
+            mask[index:index + 3] = b"\xff\xff\xff"
+    return Image.frombytes("RGB", image.size, bytes(mask))
+
+
 def generate(spec, out_dir):
     exact(spec, {"version", "id", "detectors"}, {"signature"})
     if type(spec["version"]) is not int or spec["version"] != 1 or type(spec["id"]) is not str or not ID.fullmatch(spec["id"]):
@@ -39,7 +54,11 @@ def generate(spec, out_dir):
     templates = []
     result = {}
     for key, definition in detectors.items():
-        exact(definition, {"roi", "positive", "negative"}, {"max_distance", "min_margin"})
+        exact(definition, {"roi", "positive", "negative"}, {"max_distance", "min_margin", "pixel_mode", "negative_evidence"})
+        mode = definition.get("pixel_mode", "rgb")
+        if "pixel_mode" in definition or "negative_evidence" in definition:
+            if key != "target_dead" or mode != "yellow-glyph-v1" or "negative_evidence" not in definition or "pixel_mode" not in definition:
+                raise CalibrationError("字形+存活证据只支持target_dead且须成对配置")
         max_distance = threshold(definition.get("max_distance", 0.12), "max_distance")
         min_margin = threshold(definition.get("min_margin", 0.04), "min_margin")
         classes = {}
@@ -60,9 +79,16 @@ def generate(spec, out_dir):
                 classes[label].append({"file": filename, "source_sha256": source_hash})
                 crops[label].append(crop)
                 templates.append((filename, crop, classes[label][-1]))
-        if any(rgb_distance(a, b) < min_margin for a in crops["positive"] for b in crops["negative"]):
+        if any(rgb_distance(feature(a, mode), feature(b, mode)) < min_margin for a in crops["positive"] for b in crops["negative"]):
             raise CalibrationError("两类模板不可分：ROI类间距离小于min_margin")
         result[key] = {"roi": dict(definition["roi"]), "thresholds": {"max_distance": max_distance, "min_margin": min_margin}, "templates": classes}
+        if mode != "rgb":
+            evidence = definition["negative_evidence"]
+            exact(evidence, {"roi", "mask", "min_pixels"})
+            box = region(evidence["roi"], size)
+            if evidence["mask"] != "green-mask-v1" or type(evidence["min_pixels"]) is not int or not 8 <= evidence["min_pixels"] <= (box[2]-box[0])*(box[3]-box[1]):
+                raise CalibrationError("独立存活证据ROI或像素门槛不合法")
+            result[key].update(pixel_mode=mode, negative_evidence=evidence)
     bundle = {"version": 1, "kind": "combat-ui", "id": spec["id"], "client_width": size[0], "client_height": size[1], "detectors": result}
     if "signature" in spec:
         signature = spec["signature"]

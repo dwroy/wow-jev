@@ -4,7 +4,7 @@ import json
 from PIL import Image
 import pytest
 
-from tools.combat_calibrate import generate, unique_pairs
+from tools.combat_calibrate import generate, unique_pairs, feature
 from tools.eye_calibrate import CalibrationError
 
 
@@ -51,3 +51,11 @@ def test_existing_output_and_duplicate_json_preserved(spec, tmp_path):
     with pytest.raises(FileExistsError): generate(spec, out)
     assert (out / 'keep').read_text() == 'kept'
     with pytest.raises(CalibrationError): json.loads('{"version":1,"version":1}', object_pairs_hook=unique_pairs)
+
+
+def test_yellow_glyph_excludes_bright_green_and_wrong_channel_contract(spec, tmp_path):
+    image = Image.new('RGB', (2, 1)); image.putdata([(240, 180, 0), (140, 240, 20)])
+    assert feature(image, 'yellow-glyph-v1').tobytes() == bytes([255, 255, 255, 0, 0, 0])
+    spec['detectors']['target_present']['pixel_mode'] = 'yellow-glyph-v1'
+    spec['detectors']['target_present']['negative_evidence'] = {'roi': {'x': 0, 'y': 0, 'width': 8, 'height': 8}, 'mask': 'green-mask-v1', 'min_pixels': 8}
+    with pytest.raises(CalibrationError): generate(spec, tmp_path / 'bundle')

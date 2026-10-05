@@ -116,6 +116,16 @@ namespace WowJev.Eye
             long total = 0; for (int i = 0; i < first.Length; i++) total += Math.Abs(first[i] - second[i]);
             return total / (double)first.Length / 255;
         }
+        public static byte[] Feature(byte[] rgb, string mode)
+        {
+            if (mode == "rgb") return rgb;
+            if (mode != "yellow-glyph-v1") throw new EyeFailure("unsupported_pixel_mode");
+            byte[] result = new byte[rgb.Length];
+            for (int i = 0; i < rgb.Length; i += 3)
+                if (rgb[i] >= 140 && rgb[i + 1] >= 100 && rgb[i] >= rgb[i + 1] * 0.85 && rgb[i + 2] <= Math.Min(rgb[i], rgb[i + 1]) * 0.65)
+                    result[i] = result[i + 1] = result[i + 2] = 255;
+            return result;
+        }
     }
     // Fixed-layout UI templates. Unknown is an expected result, not a negative classification.
     public sealed class CombatCalibration
@@ -142,7 +152,7 @@ namespace WowJev.Eye
                 Dictionary<string, object> definitions = EyeJson.Map(EyeJson.Need(config, "detectors")); EyeJson.Exact(definitions, Keys);
                 if (definitions.Count == 0) throw new EyeFailure("empty_combat_detectors");
                 string directory = Path.GetDirectoryName(Path.GetFullPath(path));
-                foreach (KeyValuePair<string, object> item in definitions) detectors.Add(item.Key, new BinaryDetector(directory, EyeJson.Map(item.Value), width, height));
+                foreach (KeyValuePair<string, object> item in definitions) detectors.Add(item.Key, new BinaryDetector(directory, EyeJson.Map(item.Value), width, height, item.Key));
                 if (detectors.ContainsKey("target_dead") && !detectors.ContainsKey("target_present")) throw new EyeFailure("missing_target_present_dependency");
                 if (config.ContainsKey("signature"))
                 {
@@ -198,9 +208,22 @@ namespace WowJev.Eye
             readonly Rectangle region;
             readonly double maximumDistance, minimumMargin;
             readonly List<byte[]> positive, negative;
-            public BinaryDetector(string directory, Dictionary<string, object> config, int width, int height)
+            readonly string pixelMode;
+            readonly bool aliveEvidence;
+            readonly Rectangle aliveRegion;
+            readonly int minimumGreen;
+            public BinaryDetector(string directory, Dictionary<string, object> config, int width, int height, string key)
             {
-                EyeJson.Exact(config, "roi", "thresholds", "templates"); region = Region(EyeJson.Map(EyeJson.Need(config, "roi")), width, height);
+                EyeJson.Exact(config, "roi", "thresholds", "templates", "pixel_mode", "negative_evidence"); region = Region(EyeJson.Map(EyeJson.Need(config, "roi")), width, height);
+                pixelMode = "rgb";
+                if (config.ContainsKey("pixel_mode") || config.ContainsKey("negative_evidence"))
+                {
+                    if (key != "target_dead" || !config.ContainsKey("pixel_mode") || !config.ContainsKey("negative_evidence") || EyeJson.Text(config, "pixel_mode") != "yellow-glyph-v1") throw new EyeFailure("unsupported_pixel_mode");
+                    pixelMode = "yellow-glyph-v1";
+                    Dictionary<string, object> evidence = EyeJson.Map(config["negative_evidence"]); EyeJson.Exact(evidence, "roi", "mask", "min_pixels");
+                    if (EyeJson.Text(evidence, "mask") != "green-mask-v1") throw new EyeFailure("unsupported_alive_mask");
+                    aliveRegion = Region(EyeJson.Map(EyeJson.Need(evidence, "roi")), width, height); minimumGreen = EyeJson.Int(evidence, "min_pixels", 8, aliveRegion.Width * aliveRegion.Height); aliveEvidence = true;
+                }
                 Dictionary<string, object> thresholds = EyeJson.Map(EyeJson.Need(config, "thresholds")); EyeJson.Exact(thresholds, "max_distance", "min_margin");
                 maximumDistance = EyeJson.Number(thresholds, "max_distance"); minimumMargin = EyeJson.Number(thresholds, "min_margin");
                 if (maximumDistance <= 0 || maximumDistance > 1 || minimumMargin <= 0 || minimumMargin > 1) throw new EyeFailure("invalid_thresholds");
@@ -224,7 +247,7 @@ namespace WowJev.Eye
                     using (Bitmap image = new Bitmap(path))
                     {
                         if (image.RawFormat.Guid != ImageFormat.Png.Guid || image.Width != region.Width || image.Height != region.Height) throw new EyeFailure("template_size_mismatch");
-                        result.Add(EyePixels.Read(image, new Rectangle(0, 0, image.Width, image.Height)));
+                        result.Add(EyePixels.Feature(EyePixels.Read(image, new Rectangle(0, 0, image.Width, image.Height)), pixelMode));
                     }
                 }
                 return result;
@@ -233,10 +256,17 @@ namespace WowJev.Eye
             { double result = 1; foreach (byte[] template in templates) result = Math.Min(result, EyePixels.Distance(pixels, template)); return result; }
             public object Detect(Bitmap image, string id)
             {
-                byte[] pixels = EyePixels.Read(image, region); double p = Best(pixels, positive), n = Best(pixels, negative), best = Math.Min(p, n), margin = Math.Abs(p - n);
+                byte[] pixels = EyePixels.Feature(EyePixels.Read(image, region), pixelMode); double p = Best(pixels, positive), n = Best(pixels, negative), best = Math.Min(p, n), margin = Math.Abs(p - n);
                 string detail = String.Format(CultureInfo.InvariantCulture, "positive_distance={0:F6};negative_distance={1:F6};margin={2:F6}", p, n, margin);
                 if (best > maximumDistance) return Result("unknown", null, 0, "template_distance_exceeded", id, detail);
                 if (margin < minimumMargin) return Result("unknown", null, 0, "template_margin_insufficient", id, detail);
+                if (p >= n && aliveEvidence)
+                {
+                    byte[] alive = EyePixels.Read(image, aliveRegion); int green = 0;
+                    for (int i = 0; i < alive.Length; i += 3) if (alive[i + 1] >= 80 && alive[i] <= alive[i + 1] * 0.70 && alive[i + 2] <= alive[i + 1] * 0.70) green++;
+                    if (green < minimumGreen) return Result("unknown", null, 0, "alive_evidence_insufficient", id,
+                        String.Format(CultureInfo.InvariantCulture, "visible_green={0};minimum={1}", green, minimumGreen));
+                }
                 return Result("known", p < n, 1 - best, "calibrated_match", id, detail);
             }
         }
