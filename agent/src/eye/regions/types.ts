@@ -56,5 +56,6 @@ export interface OcrResult {
   version: 1; kind: 'local-ocr-result'; id: string; frame_id: string; image_sha256: string; model_id: string; engine_version: string | null;
   status: 'ok' | 'unsupported' | 'failed'; reason: string;
   regions: { id: string; roi: Rect; content_sha256: string; status: 'known' | 'unknown' | 'unavailable';
+    cache_hit: boolean; parsed_source: { request_id: string; frame_id: string; source_observation_id: string; captured_at_ms: number };
     lines: { text: string; confidence: number; box: [number, number][] }[] }[];
 }

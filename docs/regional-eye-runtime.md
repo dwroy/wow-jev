@@ -33,7 +33,7 @@ presence区分present、absent、occluded、unknown、unsupported。只有独立
 
 每区hash是原RGB字节SHA；PNG母图SHA是编码文件SHA，两者用途不同。ROI移动、hash变化、scope变化、遮挡/隐藏会失效缓存。
 
-普通区域复用原解析结果，保留`source_frame_id/parsed_at_qpc_ms`。`pixels_verified_qpc_ms`是当前同像素验证时间。RegionState将源QPC关联到WSL请求/接收括号，不直接相减两种时钟；原`captured_at_ms/source_observation_id`不因缓存复用刷新。`region_evidence`另外保存验证观察和时间，原源TTL到期仍unknown。
+普通区域复用原解析结果，保留`source_frame_id/parsed_at_qpc_ms`。`pixels_verified_qpc_ms`是当前同像素验证时间。RegionState将源QPC关联到WSL请求/接收括号，不直接相减两种时钟；原`captured_at_ms/source_observation_id/artifact_ids`不因缓存复用刷新。`region_evidence`另外保存验证观察和时间，原源TTL到期仍unknown。
 
 动作关键区域禁用解析结果缓存，每帧实际重检测：player.movement_mode、input.mouse_mode、ui.layout_id、target.dead/alive/signature/hostile/attackable/lootable、combat.ability.*、dialog.*、navigation.*、hazard.*、loot.*、quest.*。裁切/hash仍共享。普通文字OCR继续保留原时间。
 
@@ -53,7 +53,7 @@ presence区分present、absent、occluded、unknown、unsupported。只有独立
 
 manifest字段：version=1、kind=local-ocr-model、id、engine=rapidocr、精确engine_version=3.9.x、architecture=PP-OCRv5或PP-OCRv6、models=[{role:det|rec|cls,path,sha256}]。det/rec必需、cls可选；文件位于manifest下且SHA匹配。worker禁止网络，模型配置不能触发自动下载。不读取账户凭据。
 
-`adoptOcr(result,request,original,current,fieldBindings,now,maxAgeMs)`只采纳白名单文字字段为local_ocr，保留原观察时间。换profile/layout、hash/ROI变动、遮挡、迟到拒绝。角色名字仍只是文字，不变成实体身份；模型文本不能产生ready/dead/位置等CV权威字段。
+`adoptOcr(result,request,original,current,fieldBindings,now,maxAgeMs)`只采纳白名单文字字段为local_ocr，保留原观察时间。换profile/layout、hash/ROI变动、遮挡、迟到拒绝。OCR缓存另回传cache_hit和原parsed_source（request/frame/观察/时间）；TS核对本客户端已发请求历史，TTL到期worker重新推理，采纳仍按原解析时间判断。角色名字仍只是文字，不变成实体身份；模型文本不能产生ready/dead/位置等CV权威字段。
 
 `RegionalSeedRouter.plan(profile,observation,source,ambiguities,now,prompt)`只生成批准可见ROI的crop请求规划、来源映射、次数/像素预算和内容去重；本轮没有读key或调用API。像素预算不是token估计。
 

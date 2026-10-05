@@ -266,6 +266,38 @@
                 },
                 "minItems": 0,
                 "maxItems": 256
+              },
+              "cache_hit": {
+                "type": "boolean"
+              },
+              "parsed_source": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "request_id",
+                  "frame_id",
+                  "source_observation_id",
+                  "captured_at_ms"
+                ],
+                "properties": {
+                  "request_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  "frame_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  "source_observation_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                  },
+                  "captured_at_ms": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                }
               }
             },
             "required": [
@@ -273,7 +305,9 @@
               "roi",
               "content_sha256",
               "status",
-              "lines"
+              "lines",
+              "cache_hit",
+              "parsed_source"
             ]
           },
           "minItems": 0,

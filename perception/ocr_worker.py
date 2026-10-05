@@ -169,7 +169,9 @@ class Worker:
                     if hashlib.sha256(crop.tobytes()).hexdigest() != region["content_sha256"]:
                         raise ValueError("ocr_roi_sha256")
                     key = (request["model_id"], region["content_sha256"], r["width"], r["height"])
-                    if key not in self.cache:
+                    prior = self.cache.get(key)
+                    cache_hit = prior is not None and 0 <= request["captured_at_ms"] - prior["parsed_source"]["captured_at_ms"] < 3000
+                    if not cache_hit:
                         # RapidOCR expects BGR arrays, while ROI hashes are canonical RGB bytes.
                         output = self.engine(np.asarray(crop)[:, :, ::-1].copy())
                         boxes, txts, scores = getattr(output, "boxes", None), getattr(output, "txts", None), getattr(output, "scores", None)
@@ -186,9 +188,10 @@ class Worker:
                                 lines.append({"text": text, "confidence": float(score), "box": points})
                         if len(self.cache) >= 256:
                             self.cache.pop(next(iter(self.cache)))
-                        self.cache[key] = lines
-                    lines = self.cache[key]
-                    result["regions"].append({**region, "status": "known" if lines else "unknown", "lines": lines})
+                        self.cache[key] = {"lines": lines, "parsed_source": {"request_id":request["id"], "frame_id":request["frame_id"], "source_observation_id":request["source_observation_id"], "captured_at_ms":request["captured_at_ms"]}}
+                    entry = self.cache[key]
+                    lines = entry["lines"]
+                    result["regions"].append({**region, "status": "known" if lines else "unknown", "lines": lines, "cache_hit":cache_hit, "parsed_source":entry["parsed_source"]})
             result.update(status="ok", reason="local_ocr_processed", engine_version=self.engine_version)
         except RuntimeError as error:
             result.update(status="unsupported", reason=str(error), regions=[])

@@ -37,8 +37,9 @@ test('real Windows raw Bitmap: same frame, fill, cache time, anchor/occlusion/ve
   assertRegionBatch(result.labeled);assert.equal(result.labeled!.regions[0]!.elements[0]!.value,'ground');
 });
 test('cache preserves parse source while new pixel verification uses a separate timestamp',()=>{
-  const state=new RegionState(), one=state.apply(first,bracket(1000),'observation-1'), two=state.apply(cached,bracket(1100),'observation-2');
+  const state=new RegionState(), one=state.apply(first,bracket(1000),'observation-1','artifact-original'), two=state.apply(cached,bracket(1100),'observation-2','artifact-verified');
   assert.equal(one.fields['target.health_ratio']!.status,'known');
+  assert.deepEqual(two.fields['target.health_ratio']!.artifact_ids,['artifact-original']);
   assert.equal(two.fields['target.health_ratio']!.captured_at_ms,1000);assert.equal(two.fields['target.health_ratio']!.source_observation_id,'observation-1');
   assert.equal(two.fields['target.health_ratio']!.region_evidence!.pixels_verified_at_ms,1100);
   const stale=structuredClone(cached);stale.frame_id='late-frame';stale.captured_at_qpc_ms=900;for(const r of stale.regions)r.pixels_verified_qpc_ms=900;
@@ -76,7 +77,7 @@ test('local OCR resident worker explicitly reports unsupported when no manifest 
 });
 test('OCR source/box bounds, stale results and field authority are enforced',()=>{
   const row=first.regions[0]!,request:OcrRequest={version:1,kind:'local-ocr-request',id:'ocr-2',frame_id:first.frame_id,source_observation_id:'observation-1',captured_at_ms:1000,image_path:'/tmp/image.png',image_sha256:'1'.repeat(64),width:128,height:96,model_id:'fixture-model',regions:[{id:row.id,roi:row.roi!,content_sha256:row.content_sha256!}]};
-  const reply:OcrResult={version:1,kind:'local-ocr-result',id:request.id,frame_id:request.frame_id,image_sha256:request.image_sha256,model_id:request.model_id,engine_version:'3.9.1',status:'ok',reason:'fixture',regions:[{...request.regions[0]!,status:'known',lines:[{text:'森德拉克斯',confidence:0.9,box:[[0,0],[20,0],[20,4],[0,4]]}]}]};
+  const reply:OcrResult={version:1,kind:'local-ocr-result',id:request.id,frame_id:request.frame_id,image_sha256:request.image_sha256,model_id:request.model_id,engine_version:'3.9.1',status:'ok',reason:'fixture',regions:[{...request.regions[0]!,status:'known',cache_hit:false,parsed_source:{request_id:request.id,frame_id:request.frame_id,source_observation_id:request.source_observation_id,captured_at_ms:request.captured_at_ms},lines:[{text:'森德拉克斯',confidence:0.9,box:[[0,0],[20,0],[20,4],[0,4]]}]}]};
   const state=new RegionState(),original=state.apply(first,bracket(1000),'observation-1'),current=state.apply(cached,bracket(1100),'observation-2');
   const adoption=adoptOcr(reply,request,original,current,{target:'target.name'},1200);assert.equal(adoption.fields['target.name']!.source,'local_ocr');assert.equal(adoption.fields['target.name']!.captured_at_ms,1000);
   assert.equal(adoptOcr(reply,request,original,current,{target:'target.dead'},1200).rejected.length,1);
@@ -102,7 +103,7 @@ test('resident fake OCR worker processes multiple requests without becoming CV',
   const image=await readFile(join(folder,'mother.png')),row=first.regions[0]!;
   const request:OcrRequest={version:1,kind:'local-ocr-request',id:'mock-1',frame_id:first.frame_id,source_observation_id:'observation-1',captured_at_ms:1000,image_path:join(folder,'mother.png'),image_sha256:hash(image),width:128,height:96,model_id:'fake-fixture',regions:[{id:row.id,roi:row.roi!,content_sha256:row.content_sha256!}]};
   const client=new LocalOcrClient({python:process.execPath,script:join(repo,'agent/tests/fixtures/mock-local-ocr.mjs'),projectRoot:repo,imageRoot:folder});
-  try{assert.equal((await client.recognize(request)).regions[0]!.lines[0]!.text,'测试中文');assert.equal((await client.recognize({...request,id:'mock-2'})).reason,'mock_fixture');await assert.rejects(client.recognize({...request,id:'mock-3',image_path:join(folder,'mother.jpg')}),/png/);}finally{client.close();}
+  try{assert.equal((await client.recognize(request)).regions[0]!.lines[0]!.text,'测试中文');const second=await client.recognize({...request,id:'mock-2',frame_id:'frame-2',source_observation_id:'observation-2',captured_at_ms:1100});assert.equal(second.reason,'mock_fixture');assert.equal(second.regions[0]!.cache_hit,true);assert.equal(second.regions[0]!.parsed_source.captured_at_ms,1000);assert.equal(second.regions[0]!.parsed_source.source_observation_id,'observation-1');await assert.rejects(client.recognize({...request,id:'mock-3',image_path:join(folder,'mother.jpg')}),/png/);}finally{client.close();}
 });
 test('dialog composition requires current CV role, geometry and enabled; OCR cannot authorize a click',async()=>{
   const {composeDialogueElements,buildObjectViews}=await import('../src/eye/regions/objects.js');
