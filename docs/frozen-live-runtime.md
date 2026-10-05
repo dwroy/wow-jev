@@ -31,3 +31,7 @@ Framework4 csc 同源码重复编译的 PE 字节实际不同，不能忽略二�
 ## 验证范围
 
 新增测试覆盖伪版本/hash/native override、依赖链接、未批准文件、固定代码/prompt，既有模拟和取消测试保留。原生持久证据用明确标为 synthetic 的签名 fixture 测试逐项篡改拒绝；这些 fixture 不是游戏或编译验收。真实 Windows 同源码两次构建已证明 PE hash 不同；当前正式服另执行冻结只读 observe，验证实际编译、缓存复用和严格回放。真实输入、版本收益与整个 WSL 重启仍需分别验收，不能由只读结果外推。
+
+本轮修复版 `259c0f6` 的实际证据在 `out/acceptance/retail-closure/frozen-live-agent-2`：两轮各 2 观察/21 记录，actual client 12.1.0.69933/CN/zh_CN，首次真实编译、第二次复用，4 个 exe 字节 SHA 相同；两次独立回放均通过，真实/模拟输入和 native_input 记录均为 0，game_effect 保持 unverified。专用 registry 不改变负责人正式版本指针。该提交分支全量 245 项 TS 和类型检查通过。
+
+随后最小版本 probe 修复 `f4a4937` 已通过公开 CLI/stub 回归：即使用户指定自选 Python wrapper，实际 metadata probe 仍用 `/usr/bin/python3`，wrapper marker 没有创建，未生成输入或运行日志。6 项该测试族和类型检查通过。对其再次尝试真实只读时，旧 HWND/PID 已不再被枚举，两个尝试均在 `system_live_only_bound_wow` 拒绝；原始记录在 `frozen-live-agent-3`，不能把这两次拒绝报成通过。前一原型的缺 profile 路径失败及后续只读记录保留在 `frozen-live-agent-1`。
