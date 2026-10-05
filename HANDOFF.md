@@ -18,6 +18,10 @@ Gateway/backend仅绑定回环18790/18791，默认关闭思考、ctx8192、单�
 
 Seed与本地Qwen已按相同3张图/五字段题面各重复3轮，串行交替先后，每家9次响应均有效，45个标注值均正确；中位端到端延迟Seed1.382秒、Qwen1.802秒，Seed本轮低23.3%。源图相同但预处理不同，本地缩到1280×960；只有3张独立截图，不能推为总体准确率或复杂场景能力。证据在 `out/acceptance/vision-service/seed-qwen-comparison-1`，可复用 `tools/vision_compare.py`。完整7字段与在线接入限制仍保留。
 
+用户要求先验证动态识别效果再考虑优化Qwen。实际只读录制191图：第一段128张配额退出，负责人恢复延迟造成缺口；第二段63张因window_unavailable退出，两个源片段合计约204秒，不能称完整十分钟。现封存complete=false；90秒轮换录制工具已补齐有限停止和封存反例，但未重录真实十分钟。用户最新选择“先完成战斗对照，稍后补任务”。
+
+从这批素材盲选46图/10事件组，两名Agent逐图看源图标注，负责人复核关键状态和错误（不是用户确认的人类金标准）。两家同prompt各95次单帧识别，基础五字段Qwen187/216=86.6%、Seed212/216=98.1%；目标存在39/46对45/46、无目标误报6对0、死亡8/21对20/21。双方JSON95/95有效；玩家战斗标记双方大量unknown，不能用于可靠执行条件。当前本地Qwen未通过效果门槛；没优化模型或预处理。任务仅负例、数值血量未显示、多帧视频未测。证据out/acceptance/vision-evaluation，详见docs/acceptance/vision-battle-evaluation.md；复用tools/vision_record.py、vision_corpus.py、vision_evaluate.py。需要先补真实任务对话；若继续本地路线，分辨率/固定UI裁切与模型能力的差异需另测，暂不转入速度优化。
+
 ## 已完成
 
 - 第0阶段工程基线、第1阶段真实键鼠执行已完成并合并。Windows独立释放看门狗与焦点检查已实测，原始记录在 `out/acceptance/stage-1`。

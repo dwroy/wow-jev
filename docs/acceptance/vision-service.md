@@ -63,3 +63,5 @@ Seed在本轮中位延迟低23.3%，两边在这些固定字段上均读对。�
 原始输出、每次用量、预处理、延迟及汇总在 `out/acceptance/vision-service/seed-qwen-comparison-1`。`executed-vision-compare.py`与summary中的代码SHA一致，保留实测版本；集成脚本随后补充失败停止整轮及源图哈希校验，不改写这轮证据，9个本地响应的源SHA已逐一离线核对。没有新增游戏输入或截图。
 
 再次比较的入口为 `tools/vision_compare.py --allow-game-image-upload --fixtures <manifest.json> --token-file <client-token> --out <全新目录> --repeats 3`，仅在既有WoW截图上传授权内使用；输出不含凭据和请求图片base64。
+
+随后对持续打怪素材做了更严格的同图对照：191张有效录制图（有缺口，非完整十分钟），冻结46图/10个事件组，两家各95次。基础五字段Qwen86.6%对Seed98.1%，无目标误报6对0；目标死亡38.1%对95.2%。两家战斗标记都大量unknown；任务文字和数字血量尚未验证。当前本地部署未通过效果门槛，不能用此前静态三图全对代表真实游戏能力。见[战斗素材验收](vision-battle-evaluation.md)。
