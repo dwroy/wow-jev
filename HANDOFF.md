@@ -16,6 +16,8 @@ Gateway/backend仅绑定回环18790/18791，默认关闭思考、ctx8192、单�
 
 使用见 `docs/xdwin2-vision-service.md`；验收见 `docs/acceptance/vision-service.md`、`tools/vision_service_probe.py --compact`。本地/远端同13项HTTP边界测试与本地46项视觉/客户端回归通过。实施分支codex/xdwin2-vision-service（0df5a2c、6ec8fd2）及负责人集成均已留存，必要忽略产物归档后清理本轮工作树。
 
+Seed与本地Qwen已按相同3张图/五字段题面各重复3轮，串行交替先后，每家9次响应均有效，45个标注值均正确；中位端到端延迟Seed1.382秒、Qwen1.802秒，Seed本轮低23.3%。源图相同但预处理不同，本地缩到1280×960；只有3张独立截图，不能推为总体准确率或复杂场景能力。证据在 `out/acceptance/vision-service/seed-qwen-comparison-1`，可复用 `tools/vision_compare.py`。完整7字段与在线接入限制仍保留。
+
 ## 已完成
 
 - 第0阶段工程基线、第1阶段真实键鼠执行已完成并合并。Windows独立释放看门狗与焦点检查已实测，原始记录在 `out/acceptance/stage-1`。
