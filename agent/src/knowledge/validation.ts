@@ -41,7 +41,7 @@ export function assertKnowledgeSnapshot(value: unknown): asserts value is Knowle
   const sources = new Map<string, KnowledgeSource>(); const runs = new Set<string>(); const eventHashes = new Set<string>();
   for (const source of value.sources) {
     if (!object(source) || !keys(source, ['id', 'run_id', 'kind', 'mode', 'manifest_sha256', 'events_sha256', 'complete']) ||
-      !identifier(source.id) || !identifier(source.run_id) || !['eye', 'code_play', 'jev'].includes(String(source.kind)) || !['live', 'simulated'].includes(String(source.mode)) ||
+      !identifier(source.id) || !identifier(source.run_id) || !['eye', 'code_play', 'jev', 'brain'].includes(String(source.kind)) || !['live', 'simulated'].includes(String(source.mode)) ||
       !hash(source.manifest_sha256) || !hash(source.events_sha256) || typeof source.complete !== 'boolean' || sources.has(source.id) || runs.has(source.run_id) || eventHashes.has(source.events_sha256) ||
       source.id !== `source-${source.events_sha256}`) fail('source_shape_or_duplicate');
     sources.set(source.id, source as unknown as KnowledgeSource); runs.add(source.run_id); eventHashes.add(source.events_sha256);

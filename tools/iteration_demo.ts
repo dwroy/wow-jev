@@ -13,7 +13,7 @@ async function main(): Promise<void> {
   const repository = path.resolve(args.repository!); const output = path.resolve(args.output!); const knowledgeFile = path.resolve(args.knowledge!); const promptFile = args.prompt!;
   const snapshot: unknown = JSON.parse(await readFile(knowledgeFile, 'utf8')); validateKnowledge(snapshot);
   const oldPrompt = (await regularFile(path.join(repository, promptFile))).toString('utf8');
-  const added = '\n运动、转向或跳跃的输入完成不等于游戏效果已确认，也不等于已经抵达NPC。只有同源的新观察明确 npc.in_interaction_range 或 ui.npc_dialog_open 时才可推进接近/交互目标，否则等待或重新观察。\n';
+  const added = '\n运动、转向或跳跃的输入完成不等于游戏效果已确认，也不等于已经抵达NPC。只有同源的新观察明确 npc.in_interaction_range 或 ui.npc_dialog_open 时才可推进接近/交互目标，否则等待或重新观察。若知识已收紧移动且routes提供reason为npc_movement_restricted的escalate，优先选择该escalate，避免在同一限制下重复wait。此规则不能增加候选、修改证据或授权输入。\n';
   const baseCommit = (await git(repository, ['rev-parse', 'HEAD'])).toString('utf8');
   const runtime = new IterationRuntime({ repository, candidatesRoot: path.join(output, 'candidates'), registryRoot: path.join(output, 'registry') });
   const baseline = await runtime.registry.registerBaseline({ versionId: 'baseline', repository, codeCommit: baseCommit, knowledgeFile, prompts: [{ id: path.basename(promptFile, '.txt'), file: promptFile }], approvedBy: args.approvedBy! });

@@ -13,6 +13,7 @@
     "eye": "tsx src/eye/cli.ts",
     "play": "tsx src/play/cli.ts",
     "jev": "tsx src/jev/cli.ts",
+    "system": "tsx src/system/cli.ts",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

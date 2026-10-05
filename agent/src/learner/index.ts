@@ -18,7 +18,7 @@ function status(run: VerifiedRun): string {
 }
 function slices(run: VerifiedRun): LearningSlice[] {
   const result: LearningSlice[] = []; const last = run.records.at(-1)!.seq;
-  const goal = object(run.manifest.config.jev_goal) ? run.manifest.config.jev_goal : null;
+  const goal = object(run.manifest.config.brain_goal) ? run.manifest.config.brain_goal : object(run.manifest.config.jev_goal) ? run.manifest.config.jev_goal : null;
   result.push({ id: `slice-${sha256(`${run.source.id}:task`)}`, source_id: run.source.id, kind: 'task', start_seq: 0, end_seq: last,
     journal_status: status(run), identity: { task_kind: 'recorded_run_goal', goal_id: typeof goal?.id === 'string' ? goal.id : null, in_game_quest_completed: null }, evidence: [] });
   let plan: LearningSlice | null = null; let encounter: LearningSlice | null = null;

@@ -63,11 +63,12 @@ export async function verifyLearningRun(directory: string): Promise<VerifiedRun>
   if ([...actors].some((actor) => !['code', 'jev'].includes(actor))) fail('unsupported_actor');
   const jev = object(frozen.config.jev_goal) || records.some((row) => row.kind === 'event' && String((row.data as { code?: unknown }).code).startsWith('jev.'));
   const play = object(frozen.config.play_plan) || records.some((row) => row.kind === 'event' && String((row.data as { code?: unknown }).code).startsWith('play.'));
-  if (jev && actors.has('code') || !jev && actors.has('jev')) fail('actor_source_kind');
-  const kind = jev ? 'jev' : play ? 'code_play' : 'eye';
+  const brain = frozen.config.actor === 'brain';
+  if (!brain && (jev && actors.has('code') || !jev && actors.has('jev'))) fail('actor_source_kind');
+  const kind = brain ? 'brain' : jev ? 'jev' : play ? 'code_play' : 'eye';
   const mode = kind === 'eye' && ['observe', 'record-action', 'live'].includes(String(frozen.config.mode)) ? 'live' : frozen.config.mode;
   if (kind === 'eye' && mode !== 'live' || kind !== 'eye' && !['live', 'simulated'].includes(String(mode))) fail('unsupported_source_mode');
-  const replay = kind === 'jev' ? await replayJevRun(dir, { parseJevGoal, buildCandidates, candidatesHash, validateModelReply }) :
+  const replay = kind === 'brain' ? await (await import('../system/replay.js')).replaySystemRun(dir) : kind === 'jev' ? await replayJevRun(dir, { parseJevGoal, buildCandidates, candidatesHash, validateModelReply }) :
     kind === 'code_play' ? await replayPlayRun(dir) : await replayRun(dir);
   // The immutable identity is calculated before and checked after independent replay.
   if (sha256(await readBoundedFile(join(dir, 'manifest.json'), 2 * 1024 * 1024)) !== sha256(manifestBytes) ||
