@@ -15,6 +15,8 @@ export interface RunManifest {
   config: Record<string, unknown>; config_sha256: string;
   prompts: { version: 'eye-retail-v1'; sha256: string | null };
   calibration: { id: string; files: Record<string, string> } | null;
+  combat_calibration?: { id: string; files: Record<string, string> };
+  extra_prompts?: Record<string, { version: string; sha256: string; file: string }>;
   schemas: Record<string, string>;
 }
 export function hashBuffer(bytes: Buffer | string): string { return createHash('sha256').update(bytes).digest('hex'); }
@@ -73,6 +75,7 @@ export class EyeRunStore {
   static async create(options: {
     dir: string; runId: string; repo: string; schemaPaths: Record<string, string>; config: Record<string, unknown>;
     promptSha256?: string | null; calibrationPath?: string; nativeRoot?: string;
+    combatCalibrationPath?: string; extraPrompts?: { version: string; path: string }[];
   }): Promise<EyeRunStore> {
     const dir = resolve(options.dir);
     await mkdir(dirname(dir), { recursive: true }); await mkdir(dir, { recursive: false, mode: 0o700 });
@@ -95,8 +98,56 @@ export class EyeRunStore {
       }
       calibration = { id: bundle.id, files };
     }
+    let combatCalibration: RunManifest['combat_calibration'];
+    if (options.combatCalibrationPath) {
+      const source = resolve(options.combatCalibrationPath);
+      const info = await lstat(source);
+      if (!info.isFile() || info.size < 1 || info.size > 128 * 1024) throw new Error('unsafe_combat_calibration');
+      const raw = await readFile(source);
+      const bundle = JSON.parse(raw.toString('utf8')) as { version: number; kind: string; id: string;
+        detectors: Record<string, { templates: { positive: { file: string; sha256: string }[]; negative: { file: string; sha256: string }[] } }> };
+      if (bundle.version !== 1 || bundle.kind !== 'combat-ui' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(bundle.id) ||
+          !bundle.detectors || typeof bundle.detectors !== 'object' || Array.isArray(bundle.detectors) || !Object.keys(bundle.detectors).length) throw new Error('invalid_combat_calibration');
+      await mkdir(join(dir, 'combat-calibration'));
+      const files: Record<string, string> = { 'calibration.json': hashBuffer(raw) };
+      await writeFile(join(dir, 'combat-calibration/calibration.json'), raw, { flag: 'wx', mode: 0o400 });
+      for (const [detector, value] of Object.entries(bundle.detectors)) {
+        if (!['target_present', 'target_dead', 'player_in_combat'].includes(detector)) throw new Error('invalid_combat_detector');
+        for (const label of ['positive', 'negative'] as const) {
+          const templates = value?.templates?.[label];
+          if (!Array.isArray(templates) || templates.length < 1 || templates.length > 16) throw new Error('invalid_combat_templates');
+          for (const template of templates) {
+            const name = template?.file;
+            if (typeof name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.png$/.test(name) || name in files ||
+                !/^[0-9a-f]{64}$/.test(template.sha256)) throw new Error('unsafe_combat_template');
+            const path = join(dirname(source), name); const templateInfo = await lstat(path);
+            if (!templateInfo.isFile() || templateInfo.size < 1 || templateInfo.size > 16 * 1024 * 1024) throw new Error('combat_template_not_regular');
+            const bytes = await readFile(path); const hash = hashBuffer(bytes);
+            if (hash !== template.sha256) throw new Error('combat_template_hash_mismatch');
+            files[name] = hash;
+            await writeFile(join(dir, 'combat-calibration', name), bytes, { flag: 'wx', mode: 0o400 });
+          }
+        }
+      }
+      combatCalibration = { id: bundle.id, files };
+    }
+    let extraPrompts: RunManifest['extra_prompts'];
+    if (options.extraPrompts) {
+      if (options.extraPrompts.length < 1 || options.extraPrompts.length > 8) throw new Error('extra_prompt_count');
+      extraPrompts = {};
+      await mkdir(join(dir, 'prompts'));
+      for (const prompt of options.extraPrompts) {
+        if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(prompt.version) || Object.hasOwn(extraPrompts, prompt.version)) throw new Error('invalid_or_duplicate_prompt_version');
+        const info = await lstat(prompt.path);
+        if (!info.isFile() || info.size < 1 || info.size > 256 * 1024) throw new Error('prompt_not_regular');
+        const bytes = await readFile(prompt.path); const file = `${prompt.version}.txt`;
+        extraPrompts[prompt.version] = { version: prompt.version, sha256: hashBuffer(bytes), file };
+        await writeFile(join(dir, 'prompts', file), bytes, { flag: 'wx', mode: 0o400 });
+      }
+    }
     const manifest: RunManifest = { protocol: 'wow-eye-run', version: 1, run_id: options.runId, created_at: new Date().toISOString(), code: await codeVersion(options.repo, options.nativeRoot),
-      config: options.config, config_sha256: hashBuffer(JSON.stringify(options.config)), prompts: { version: 'eye-retail-v1', sha256: options.promptSha256 ?? null }, calibration, schemas };
+      config: options.config, config_sha256: hashBuffer(JSON.stringify(options.config)), prompts: { version: 'eye-retail-v1', sha256: options.promptSha256 ?? null }, calibration, schemas,
+      ...(combatCalibration ? { combat_calibration: combatCalibration } : {}), ...(extraPrompts ? { extra_prompts: extraPrompts } : {}) };
     await writeFile(join(dir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx', mode: 0o400 });
     const schema = JSON.parse(await readFile(join(dir, 'schemas/eye-log-v1.schema.json'), 'utf8')) as object;
     const validator = new Ajv({ strict: true, allErrors: true }).compile<EyeLogRecord>(schema);
