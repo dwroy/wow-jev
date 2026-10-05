@@ -3,6 +3,7 @@ import { constants } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
 import { parse, resolve, sep } from 'node:path';
 import type { EvidenceRef, KnowledgeFact, KnowledgeSnapshot, KnowledgeSource } from '../system/types.js';
+import { validateClientVersion } from '../game-data/world-package.js';
 
 type Obj = Record<string, unknown>;
 export type Scalar = string | number | boolean | null;
@@ -27,23 +28,38 @@ export function snapshotId(snapshot: Omit<KnowledgeSnapshot, 'id'> | KnowledgeSn
   const { schema_version, created_at, sources, facts } = snapshot;
   return `knowledge-${sha256(canonicalJson({ schema_version, created_at, sources, facts }))}`;
 }
-export function createKnowledgeSnapshot(sources: KnowledgeSource[], facts: KnowledgeFact[], createdAt: string): KnowledgeSnapshot {
-  const body = { schema_version: 1 as const, created_at: createdAt, sources, facts };
+export function createKnowledgeSnapshot(sources: KnowledgeSource[], facts: KnowledgeFact[], createdAt: string, schemaVersion?: 1 | 2): KnowledgeSnapshot {
+  const body = { schema_version: schemaVersion ?? (sources.some(source => source.kind === 'layers') ? 2 : 1), created_at: createdAt, sources, facts };
   const snapshot = { ...body, id: snapshotId(body) }; assertKnowledgeSnapshot(snapshot); return snapshot;
 }
 function evidence(value: unknown): value is EvidenceRef {
   return object(value) && keys(value, ['source_id', 'record_seq', 'observation_ids', 'artifact_ids']) && identifier(value.source_id) && integer(value.record_seq) && strings(value.observation_ids) && strings(value.artifact_ids);
 }
 export function assertKnowledgeSnapshot(value: unknown): asserts value is KnowledgeSnapshot {
-  if (!object(value) || !keys(value, ['schema_version', 'id', 'created_at', 'sources', 'facts']) || value.schema_version !== 1 || !identifier(value.id) ||
+  if (!object(value) || !keys(value, ['schema_version', 'id', 'created_at', 'sources', 'facts']) || value.schema_version !== 1 && value.schema_version !== 2 || !identifier(value.id) ||
     typeof value.created_at !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value.created_at) || !Number.isFinite(Date.parse(value.created_at)) || new Date(value.created_at).toISOString() !== value.created_at ||
     !Array.isArray(value.sources) || value.sources.length > 10000 || !Array.isArray(value.facts) || value.facts.length > 50000) fail('snapshot_shape');
   const sources = new Map<string, KnowledgeSource>(); const runs = new Set<string>(); const eventHashes = new Set<string>();
   for (const source of value.sources) {
-    if (!object(source) || !keys(source, ['id', 'run_id', 'kind', 'mode', 'manifest_sha256', 'events_sha256', 'complete']) ||
-      !identifier(source.id) || !identifier(source.run_id) || !['eye', 'code_play', 'jev', 'brain'].includes(String(source.kind)) || !['live', 'simulated'].includes(String(source.mode)) ||
+    if (!object(source) ||
+      !identifier(source.id) || !identifier(source.run_id) || !['eye', 'code_play', 'jev', 'brain', 'layers'].includes(String(source.kind)) || !['live', 'simulated'].includes(String(source.mode)) ||
       !hash(source.manifest_sha256) || !hash(source.events_sha256) || typeof source.complete !== 'boolean' || sources.has(source.id) || runs.has(source.run_id) || eventHashes.has(source.events_sha256) ||
       source.id !== `source-${source.events_sha256}`) fail('source_shape_or_duplicate');
+    const common = ['id', 'run_id', 'kind', 'mode', 'manifest_sha256', 'events_sha256', 'complete'];
+    if (source.kind === 'layers') {
+      if (value.schema_version !== 2 || !keys(source, [...common, 'world', 'client_version', 'runtime', 'knowledge', 'code_sha256', 'prompts_sha256',
+        'body_profile_sha256', 'bindings_sha256', 'calibration_sha256', 'clock', 'supporting_eye', 'audit_version']) ||
+        !object(source.world) || !keys(source.world, ['manifest_sha256', 'sqlite_sha256']) || !hash(source.world.manifest_sha256) || !hash(source.world.sqlite_sha256) ||
+        !object(source.runtime) || !keys(source.runtime, ['id', 'sha256']) || !identifier(source.runtime.id) || !hash(source.runtime.sha256) ||
+        !object(source.knowledge) || !keys(source.knowledge, ['id', 'sha256']) || !identifier(source.knowledge.id) || !hash(source.knowledge.sha256) ||
+        !['code_sha256', 'prompts_sha256', 'body_profile_sha256', 'bindings_sha256'].every(key => hash(source[key])) ||
+        source.calibration_sha256 !== null && !hash(source.calibration_sha256) || source.audit_version !== 'layer-evidence-v2' ||
+        !object(source.clock) || !keys(source.clock, ['domain', 'id']) || !identifier(source.clock.id) ||
+        source.clock.domain !== (source.mode === 'simulated' ? 'simulation-monotonic' : 'coordinator-monotonic') ||
+        source.mode === 'simulated' && source.supporting_eye !== null || source.mode === 'live' && (!object(source.supporting_eye) ||
+          !keys(source.supporting_eye, ['manifest_sha256', 'events_sha256']) || !hash(source.supporting_eye.manifest_sha256) || !hash(source.supporting_eye.events_sha256))) fail('layers_source_shape');
+      try { validateClientVersion(source.client_version); } catch { fail('layers_client_version'); }
+    } else if (!keys(source, common)) fail('source_shape_or_duplicate');
     sources.set(source.id, source as unknown as KnowledgeSource); runs.add(source.run_id); eventHashes.add(source.events_sha256);
   }
   const ids = new Set<string>();

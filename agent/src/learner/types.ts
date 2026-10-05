@@ -1,6 +1,6 @@
 import type { EvidenceRef, KnowledgeSnapshot } from '../system/types.js';
 
-/** A task slice is a recorded run goal, never a declaration that an in-game quest was completed. */
+/** A task slice names the recorded goal/quest phase, never a declaration that an in-game quest was completed. */
 export interface LearningSlice {
   id: string;
   source_id: string;

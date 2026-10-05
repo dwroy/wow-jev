@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 里程碑四，步骤4a：执行/学习/固定版本实现通过模块验收。** `.worktrees/game-db-execution` 集成固定世界SHA的不可执行L4规划提示、显式目标断言/ordinal与每次L3/L2发送前身份/原帧时间校验、v2 RuntimeVersion世界/知识/客户端契约、逐run代码/prompt/世界/知识原件、严格三阶段layers回放及独立知识来源。原v1接口、RuntimeVersion/知识字节与旧Eye学习路径保留；带新schema标记但类型非法不能降级旧回放。
+
+185项Python、131项TS定向集成回归通过（两项新拒绝路径/统计字段的旧断言修正后18项重验全通过），typecheck/diff-check通过、0skip。独立审查关闭quest归因错、代码/prompt只标签、event冒kill_credit、schema类型宽松、middle objective漂移/旧帧、live原生因果及索引依赖保护缺口。RuntimeIndex严格回放后才写APSW单writer；原seq+1，原始JSONL/SHA不重写，派生dependency事件保护代码/prompt/计划/世界原件及Eye附件；外层事务完整回滚，正/反例分开，模拟真实样本=0。知识发布为offlinedata评估，父代码/prompt固定，不绕过旧代码提案的真实问题要求。
+
+实际M2包WorldTask默认及refs均blocked/currentnot_found/steps0；10项实际helper→Python→TS验证、8项版本/回退和10项严格学习验证通过。v2 live/observe在任何Windows构建/探针/输入前拒绝，旧v1入口保持；没有本机正式服动作或模型验收。默认 `npm --prefix agent run layers -- world-demo` 需固定已提交源码，接下来完成主checkout实际CLI四任务→回放→学习→agent.sqlite候选/评估/注册→新知识消费→换包旧run/回退闭环，再记录最终验收。不把模块通过当整体M4完成。
+
 **2026-10-06 里程碑三完成：角色条件与只读规划查询。** 独立模块集成三值AND/OR/NOT、精确世界/客户端的账号与角色进度、历史交付/目标完成区分、解锁/跳过、中文双字检索、RTree候选复核、楼层/位面/变换、路线及合成成就/副本样例。165项Python通过、0skip；新增59项规划/实际CLI测试。独立复核发现并关闭跨世界/客户端provider污染、未知候选掩盖已知冲突、独立路线/难度/楼层/位面误冲突，保留原来源而按关系身份和空间适用范围判断。
 
 入口 `python -m game_database.v2.query_cli --pack DIR --sha256 SHA --version game-data/profiles/retail-cn-12.1.0.69933.json --references search --text 练手 --namespace retail`；条件、区域/近点/路线及runtime只读进度入口见 `docs/game-database-v2.md`。真实M2包练手返回两个ID歧义，参考IDs不采纳、可接truth unknown；当前69933三类查询not_found。原包/schema和v1SHA未改。ID/中文/区域新建及复用连接p50/p95已测，OS缓存未清除，不宣称物理冷缓存或广域性能。合成副本数据不冒称真实机制。

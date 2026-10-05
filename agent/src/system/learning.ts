@@ -11,6 +11,8 @@ export async function reviewRuns(runDirectories: readonly string[], knowledgeDir
   await mkdir(report, { recursive: false });
   const knowledge = await writeKnowledgeSnapshot(resolve(knowledgeDirectory), learned.snapshot);
   const summary = { knowledge, sources: learned.snapshot.sources, fact_count: learned.snapshot.facts.length,
+    knowledge_schema_version: learned.snapshot.schema_version, layers_source_count: learned.snapshot.sources.filter(s => s.kind === 'layers').length,
+    layers_actual_game_sample_count: learned.snapshot.facts.filter(f => f.scope.evidence_kind === 'strict_layers').reduce((n, f) => n + Number(f.metrics.actual_game_sample_count ?? 0), 0),
     slice_count: learned.slices.length, review_count: learned.reviews.length, duplicate_sources: learned.duplicate_sources,
     observed_fact_count: learned.snapshot.facts.filter((fact) => fact.certainty === 'observed').length,
     inferred_fact_count: learned.snapshot.facts.filter((fact) => fact.certainty === 'inferred').length };

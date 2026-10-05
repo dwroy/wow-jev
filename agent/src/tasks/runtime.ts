@@ -3,14 +3,19 @@ import type { BehaviorCandidate, BehaviorPorts, BehaviorResult, BehaviorSpec, Ex
 import { BehaviorJev } from '../behavior/jev.js';
 import { RunLease, cleanupBound } from '../behavior/lease.js';
 import { BehaviorRuntime, type BehaviorExecutionResult } from '../behavior/runtime.js';
-import { conditionError, validateConditions, hash, observationError, readKnown, validateTask, value } from '../behavior/validation.js';
+import { canonical, conditionError, validateConditions, hash, observationError, readKnown, validateTask, value } from '../behavior/validation.js';
+import type { WorldObjectiveRef } from '../layers/contracts.js';
 export type TaskContext = Omit<ExecutionContext, 'command_id'>;
 export interface TaskCheckpoint { task_id: string; task_revision: number; run_epoch: number; mode: ExecutionContext['mode']; task_sha256: string; elapsed_ms: number; attempted_behaviors: number; next_behavior: number; completed_behaviors: string[]; source_count: number | null; evidence_observation_ids: string[]; }
 export interface TaskResult {
   id: string; revision: number; run_epoch: number; mode: ExecutionContext['mode']; status: BehaviorResult['status']; reason: string;
   behaviors: BehaviorExecutionResult[]; input_count_scope: 'known' | 'lower_bound'; chooser_calls: number; real_inputs: number; release: BehaviorResult['release']; game_effect: BehaviorResult['game_effect']; scenario_effect: BehaviorResult['game_effect']; checkpoint: TaskCheckpoint;
 }
-export interface TaskRunOptions { isCurrent?: () => boolean; checkpoint?: TaskCheckpoint; verifyCheckpoint?: (checkpoint: TaskCheckpoint, freshObservation: Observation) => Promise<boolean>; }
+export interface TaskRunOptions { worldPackSha256?: string; isCurrent?: () => boolean; checkpoint?: TaskCheckpoint; verifyCheckpoint?: (checkpoint: TaskCheckpoint, freshObservation: Observation) => Promise<boolean>; }
+export function objectiveCountField(task: LayerTaskSpec): string {
+  const ref = task.params.objective_ref as unknown as WorldObjectiveRef | undefined;
+  return ref ? `quest.${String(task.params.quest_id)}.objective.${ref.assertion_sha256}.${ref.ordinal}.count` : `quest.${String(task.params.quest_id)}.count`;
+}
 /** L4 composes L3; count comes from the associated quest objective, never dead-frame increments. */
 export class TaskRuntime {
   private active = false;
@@ -18,7 +23,7 @@ export class TaskRuntime {
   constructor(private ports: BehaviorPorts, private behaviors: BehaviorRuntime, private jev = new BehaviorJev(ports)) {}
   run(task: LayerTaskSpec, context: TaskContext, options: TaskRunOptions = {}): Promise<TaskResult> {
     const frozen = structuredClone(task); const ctx = { ...context, conditions: structuredClone(context.conditions) };
-    const key = hash([task.id, task.revision, context.run_epoch, context.mode]); const h = hash({ task: frozen, conditions: ctx.conditions, checkpoint: options.checkpoint ?? null });
+    const key = hash([task.id, task.revision, context.run_epoch, context.mode]); const h = hash({ task: frozen, conditions: ctx.conditions, checkpoint: options.checkpoint ?? null, ...(frozen.params.objective_ref ? { world: options.worldPackSha256 ?? null } : {}) });
     const prior = this.runs.get(key);
     if (prior) return prior.hash === h ? prior.promise : Promise.resolve({ ...this.empty(task, ctx), status: 'blocked', reason: 'task_id_conflict' });
     if (this.active) return Promise.resolve({ ...this.empty(task, ctx), status: 'blocked', reason: 'task_runtime_busy' });
@@ -30,6 +35,8 @@ export class TaskRuntime {
   }
   private async execute(task: LayerTaskSpec, context: TaskContext, options: TaskRunOptions): Promise<TaskResult> {
     const result = this.empty(task, context); const started = this.ports.now(); let runId: string | undefined; let previous: Observation | undefined;
+    const objectiveRef = task.params.objective_ref as unknown as WorldObjectiveRef | undefined;
+    const countField = objectiveCountField(task);
     const priorElapsed = options.checkpoint?.elapsed_ms ?? 0;
     const lease = new RunLease(context.signal, task.max_duration_ms - priorElapsed, () => this.ports.now(), options.isCurrent);
     context = { ...context, signal: lease.signal };
@@ -43,7 +50,13 @@ export class TaskRuntime {
     };
     try {
       validateTask(task);
+      if (objectiveRef && options.worldPackSha256 !== objectiveRef.world_pack_sha256) throw new Error('task_objective_world_unbound');
       validateConditions(context.conditions);
+      if (objectiveRef) {
+        context = { ...context, conditions: [...context.conditions, { field: `quest.${String(task.params.quest_id)}.objective_ref`, op: 'eq', value: objectiveRef as unknown as import('../core/protocol.js').JsonValue, max_age_ms: 750 }] };
+        if (task.params.objective_target) context.conditions.push({ field: 'target.entity_key', op: 'eq', value: task.params.objective_target, max_age_ms: 750 });
+        validateConditions(context.conditions);
+      }
       if (context.task_id !== task.id || context.task_revision !== task.revision || !Number.isSafeInteger(context.run_epoch) || context.run_epoch < 0) throw new Error('task_context_revision_mismatch');
       if (options.checkpoint) {
         const c = options.checkpoint;
@@ -55,7 +68,8 @@ export class TaskRuntime {
       if (options.checkpoint && (!options.verifyCheckpoint || !await lease.wait(() => options.verifyCheckpoint!(structuredClone(options.checkpoint!), latest)))) throw new Error('task_checkpoint_unverified');
       let baselineCount: number | null = null;
       if (task.kind === 'kill_count') {
-        const count = value(latest, `quest.${String(task.params.quest_id)}.count`, this.behaviors.policy(context), true);
+        if (objectiveRef && canonical(value(latest, `quest.${String(task.params.quest_id)}.objective_ref`, this.behaviors.policy(context), true)) !== canonical(objectiveRef)) throw new Error('task_objective_observation_unbound');
+        const count = value(latest, countField, this.behaviors.policy(context), true);
         if (!Number.isSafeInteger(count) || Number(count) < 0) throw new Error('task_count_unknown');
         baselineCount = Number(count); result.checkpoint.source_count = baselineCount;
       }
@@ -89,7 +103,9 @@ export class TaskRuntime {
         const behaviorFinishedAt = this.ports.now();
         latest = await observe();
         if (task.kind === 'kill_count') {
-          const field = readKnown(latest, `quest.${String(task.params.quest_id)}.count`, this.behaviors.policy(context), true, behaviorFinishedAt);
+          const p = this.behaviors.policy(context);
+          if (objectiveRef && canonical(value(latest, `quest.${String(task.params.quest_id)}.objective_ref`, p, true, behaviorFinishedAt)) !== canonical(objectiveRef)) { result.status = 'blocked'; result.reason = 'task_objective_observation_unbound'; break; }
+          const field = readKnown(latest, countField, p, true, behaviorFinishedAt);
           if (!field || !Number.isSafeInteger(field.value) || Number(field.value) < baselineCount!) { result.status = 'blocked'; result.reason = 'task_count_unknown_or_regressed'; break; }
           if (latest.id === b.evidence_observation_ids.at(-1)) { result.status = 'blocked'; result.reason = 'task_count_effect_not_new'; break; }
           const next = Number(field.value);

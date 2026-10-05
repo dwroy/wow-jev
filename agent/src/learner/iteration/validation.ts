@@ -1,6 +1,7 @@
 import type { EvidenceRef, KnowledgeSnapshot } from '../../system/types.js';
 import type { IterationProposal } from './types.js';
 import { assert, exact, hash, id, relativeFile } from './util.js';
+import { assertKnowledgeSnapshot } from '../../knowledge/validation.js';
 
 function strings(value: unknown, name: string, nonempty = false): asserts value is string[] {
   assert(Array.isArray(value) && value.every((item) => typeof item === 'string' && item.length > 0) && new Set(value).size === value.length && (!nonempty || value.length > 0), `${name}: unique strings required`);
@@ -17,6 +18,9 @@ function evidence(value: unknown): asserts value is EvidenceRef {
   assert(value.observation_ids.length + value.artifact_ids.length > 0, 'evidence requires observation or artifact');
 }
 export function validateKnowledge(value: unknown): asserts value is KnowledgeSnapshot {
+  if (value !== null && typeof value === 'object' && 'schema_version' in value && value.schema_version === 2) {
+    assertKnowledgeSnapshot(value); return;
+  }
   exact(value, ['schema_version', 'id', 'created_at', 'sources', 'facts'], 'knowledge');
   assert(value.schema_version === 1, 'unsupported knowledge schema'); id(value.id);
   assert(typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at)), 'invalid knowledge timestamp');

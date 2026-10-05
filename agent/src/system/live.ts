@@ -48,6 +48,7 @@ async function objectFile(file: string): Promise<Record<string, unknown>> {
 
 /** Real eye, finite CodePlay/Jev and the existing execution gate. No simulation fallbacks. */
 export async function runLiveSystem(values: Options, repo: string, observeOnly = false, frozen: FrozenExecution | null = null): Promise<number> {
+  if (frozen?.snapshot.version.schema_version === 2) throw new Error('system_v2_live_not_verified');
   if (values.registry || values.scenario || !frozen && (values['runtime-version-file'] || values['executing-source-sha256']) || frozen && values['native-root']) throw new Error('system_live_snapshot_override');
   if (!observeOnly && (!values.live || !values['role-scene-confirmed'] || !text(values, 'goal'))) throw new Error('system_live_explicit_scene_goal_required');
   if (observeOnly && (values.live || values['role-scene-confirmed'])) throw new Error('system_observe_input_options');

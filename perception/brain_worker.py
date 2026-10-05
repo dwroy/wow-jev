@@ -52,6 +52,9 @@ def matches(value, schema, root):
         props = schema.get('properties', {})
         if not set(schema.get('required', ())).issubset(value):
             return False
+        for key, required in schema.get('dependencies', {}).items():
+            if key in value and not set(required).issubset(value):
+                return False
         if schema.get('additionalProperties') is False and not set(value).issubset(props):
             return False
         if not all(matches(item, props[key], root) for key, item in value.items() if key in props):

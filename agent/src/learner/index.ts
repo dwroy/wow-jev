@@ -3,9 +3,11 @@ import type { EyeLogRecord } from '../eye/store.js';
 import type { SkillResult } from '../play/types.js';
 import type { EvidenceRef, KnowledgeFact, KnowledgeSource } from '../system/types.js';
 import { assertKnowledgeSnapshot, canonicalJson, createKnowledgeSnapshot, fail, object, sha256, type Scalar } from '../knowledge/validation.js';
-import { assertEvidenceBound, recordEvidence, targetSampleIdentity, verifyLearningRun, type VerifiedRun } from './source.js';
+import { assertEvidenceBound, recordEvidence, targetSampleIdentity, verifyAnyLearningRun, type VerifiedRun } from './source.js';
+import { layerRecordEvidence } from './layers-source.js';
+import { layerSample, layerSlices } from './layers.js';
 import type { LearnRunsOptions, LearningResult, LearningSlice, ReviewDraft } from './types.js';
-export { verifyKnowledgeEvidence, verifyLearningRun } from './source.js';
+export { verifyKnowledgeEvidence, verifyLearningRun, verifyAnyLearningRun } from './source.js';
 export type { LearnRunsOptions, LearningResult, LearningSlice, ReviewDraft } from './types.js';
 
 type Descriptor = Pick<KnowledgeFact, 'kind' | 'certainty' | 'statement' | 'scope'>;
@@ -70,14 +72,25 @@ export async function learnRuns(runDirectories: readonly string[], options: Lear
     }
   }
   for (const directory of runDirectories) {
-    const run = await verifyLearningRun(directory); const old = [...sources.values()].find((source) => source.run_id === run.source.run_id || source.events_sha256 === run.source.events_sha256);
+    const run = await verifyAnyLearningRun(directory); const old = [...sources.values()].find((source) => source.run_id === run.source.run_id || source.events_sha256 === run.source.events_sha256);
     if (old) {
-      if (old.manifest_sha256 !== run.source.manifest_sha256 || old.events_sha256 !== run.source.events_sha256 || old.mode !== run.source.mode || old.complete !== run.source.complete || old.kind !== run.source.kind) fail('conflicting_run_identity');
+      if (canonicalJson(old) !== canonicalJson(run.source)) fail('conflicting_run_identity');
       duplicates.push(old.id); continue;
     }
-    sources.set(run.source.id, run.source); created.push(run.manifest.created_at); resultSlices.push(...slices(run));
+    sources.set(run.source.id, run.source);
+    if (run.format === 'layers') {
+      created.push(new Date(run.manifest.started_at).toISOString()); resultSlices.push(...layerSlices(run));
+      for (const row of run.records) {
+        const derived = layerSample(run, row); if (!derived) continue;
+        sample(derived.descriptor, layerRecordEvidence(run, row), derived.counterexample, derived.metrics);
+      }
+      continue;
+    }
+    created.push(run.manifest.created_at); resultSlices.push(...slices(run));
+    const legacyRun: VerifiedRun = run;
     const consumedReceipts = new Set<string>();
     function outcome(row: EyeLogRecord, skill: string, receipt: ExecutionReceipt | null, beforeId: string | null, afterId: string | null, outcomeStatus: string): void {
+      const run = legacyRun;
       const before = beforeId ? run.observations.get(beforeId) : undefined; const after = afterId ? run.observations.get(afterId) : undefined;
       const ref = recordEvidence(run, row); assertEvidenceBound(run, ref);
       if (receipt) consumedReceipts.add(receipt.id);
@@ -139,7 +152,7 @@ export async function learnRuns(runDirectories: readonly string[], options: Lear
   }
   for (const fact of facts.values()) fact.evidence.sort((a, b) => a.source_id.localeCompare(b.source_id) || a.record_seq - b.record_seq);
   const snapshot = createKnowledgeSnapshot([...sources.values()].sort((a, b) => a.id.localeCompare(b.id)), [...facts.values()].sort((a, b) => a.id.localeCompare(b.id)),
-    options.createdAt ?? created.sort().at(-1) ?? '1970-01-01T00:00:00.000Z');
+    options.createdAt ?? created.sort().at(-1) ?? '1970-01-01T00:00:00.000Z', options.previous?.schema_version === 2 || [...sources.values()].some(s => s.kind === 'layers') ? 2 : 1);
   const reviews: ReviewDraft[] = snapshot.facts.filter((fact) => fact.certainty === 'observed' && (fact.counterexamples > 0 || fact.scope.mode === 'simulated')).map((fact) => {
     const simulated = fact.scope.mode === 'simulated'; const unknown = Number(fact.metrics.effect_unknown_count ?? 0) > 0;
     return { id: `review-${sha256(fact.id)}`, category: simulated ? 'simulated_only' : unknown ? 'unverified_effect' : 'counterexample', certainty: 'inferred',

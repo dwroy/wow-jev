@@ -1,6 +1,7 @@
 import type { Observation } from '../core/protocol.js';
 import type { BrainGoal, BrainPhase } from '../brain/execution/types.js';
 import type { KnowledgeFact, KnowledgeSnapshot } from '../system/types.js';
+import { layersFactApplicable } from '../knowledge/layers-scope.js';
 
 export function freezeCopy<T>(value: T): T {
   const copy = structuredClone(value);
@@ -11,7 +12,7 @@ export function freezeCopy<T>(value: T): T {
 }
 /** Snapshot must have been hash/schema/evidence validated by knowledge.loadKnowledgeSnapshot before entry. */
 export function consultKnowledge(snapshot: KnowledgeSnapshot, goal: BrainGoal, phase: BrainPhase, observation: Observation,
-  mode: 'live' | 'simulated', calibrationId: string | null = null): KnowledgeFact[] {
+  mode: 'live' | 'simulated', calibrationId: string | null = null, worldContext?: Record<string, string | number | boolean | null>): KnowledgeFact[] {
   const scene = observation.fields['scene.summary'];
   const scope: Record<string, string | number | boolean | null> = { goal_kind: goal.kind, calibration_id: calibrationId, test_target: false,
     skill: phase === 'open_panel' || phase === 'close_panel' ? phase : phase === 'approach' ? 'move_for' : phase,
@@ -27,7 +28,8 @@ export function consultKnowledge(snapshot: KnowledgeSnapshot, goal: BrainGoal, p
   // the evidence/result (for example inventory_open_after/name_source), not live preconditions.
   const applicableKeys = ['goal_kind', 'target_name', 'scene', 'layout', 'calibration_id', 'skill', 'panel', 'test_target'];
   return snapshot.facts.filter((fact) => fact.evidence.length > 0 &&
-    applicableKeys.every((key) => fact.scope[key] === undefined || fact.scope[key] === null || fact.scope[key] === scope[key]) &&
+    (fact.evidence.some(ref => sources.get(ref.source_id)?.kind === 'layers') ? layersFactApplicable(snapshot, fact, worldContext) :
+      applicableKeys.every((key) => fact.scope[key] === undefined || fact.scope[key] === null || fact.scope[key] === scope[key])) &&
     ['journal_complete', 'mode'].every((key) => fact.scope[key] === undefined || fact.scope[key] === null || fact.evidence.every((evidence) => {
       const source = sources.get(evidence.source_id);
       return key === 'journal_complete' ? source?.complete === fact.scope[key] : source?.mode === fact.scope[key];

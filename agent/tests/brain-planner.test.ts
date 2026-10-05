@@ -21,6 +21,15 @@ function request(): BrainRequest {
     based_on_observation_id: observation.id, window_token: null, at_ms: 100, deadline_ms: 15100, runtime_version_id: 'runtime', knowledge_sha256: 'a'.repeat(64),
     consulted_fact_ids: [], consulted_facts: [], routes_sha256: routesHash(routes), routes };
 }
+test('world planning metadata requires both a pinned world and complete client dimensions', () => {
+  const old = request();
+  const world = { manifest_sha256: 'b'.repeat(64), sqlite_sha256: 'c'.repeat(64), directory: 'world' as const };
+  const client_version = { branch: 'custom' as const, expansion: 'Synthetic', patch: '1.0.0', build: 1001, region: 'cn' as const, locale: 'zh_CN' };
+  assert.doesNotThrow(() => validateSelectionRequest(old));
+  assert.throws(() => validateSelectionRequest({ ...old, world }), /schema/);
+  assert.throws(() => validateSelectionRequest({ ...old, client_version }), /schema/);
+  assert.doesNotThrow(() => validateSelectionRequest({ ...old, world, client_version }));
+});
 test('strict TS planner reply accepts one finite route and rejects duplicate/escaped keys, wrong revision/evidence and arbitrary keys', () => {
   const req = request(), reply = { request_id: req.id, plan_revision: 1, route_id: 'complete-observe', evidence_observation_id: req.based_on_observation_id, consulted_fact_ids: [], reason: '观察完成' };
   assert.deepEqual(validateModelReply(JSON.stringify(reply), req), reply);
@@ -38,7 +47,7 @@ test('real serial Python brain client default is disabled and custom frozen prom
     for (const custom of [false, true]) {
       const prompt = join(base, 'brain-candidate.txt'), bytes = '只能选择请求中的有限route。'; await writeFile(prompt, bytes);
       const sha = createHash('sha256').update(bytes).digest('hex');
-      const client = new SeedBrainClient({ python: '/home/dai/Projects/wow-jev/.venv/bin/python', worker: join(repo, 'perception/brain_worker.py'), cwd: repo,
+      const client = new SeedBrainClient({ python: join(repo, '.venv/bin/python'), worker: join(repo, 'perception/brain_worker.py'), cwd: repo,
         envFile: '/missing/no-credential-read', now: () => 100, ...(custom ? { promptFile: prompt, promptSha256: sha } : {}) });
       try {
         const req = request(), first = client.plan(req, null); const busy = await client.plan({ ...req, id: 'second' }, null);

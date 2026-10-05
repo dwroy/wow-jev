@@ -64,5 +64,6 @@ export interface ResolvedRuntimeSnapshot {
   readonly prompts: Readonly<Record<string, string>>;
   readonly code_root: string;
   readonly code_source_sha256: string;
+  readonly world_root?: string;
 }
 export interface RuntimeOptions { repository: string; candidatesRoot: string; registryRoot: string }

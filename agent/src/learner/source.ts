@@ -1,4 +1,5 @@
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
+import { lstat } from 'node:fs/promises';
 import type { ActionIntent, Artifact, ExecutionReceipt, Observation } from '../core/protocol.js';
 import { replayRun } from '../eye/replay.js';
 import type { EyeLogRecord, RunManifest } from '../eye/store.js';
@@ -6,12 +7,14 @@ import { validateModelReply } from '../jev/choice.js';
 import { replayJevRun } from '../jev/replay.js';
 import { replayPlayRun } from '../play/replay.js';
 import { buildCandidates, candidatesHash, parseJevGoal } from '../reflex/candidates.js';
-import type { EvidenceRef, KnowledgeSnapshot, KnowledgeSource } from '../system/types.js';
+import type { EvidenceRef, KnowledgeSnapshot, LegacyKnowledgeSource } from '../system/types.js';
+import { assertLayerEvidenceBound, verifyLayerFactEvidence, type VerifiedLayerRun } from './layers-source.js';
 import { assertKnowledgeSnapshot, assertSafePath, canonicalJson, fail, hash, object, readBoundedFile, sha256 } from '../knowledge/validation.js';
 
 export interface VerifiedRun {
+  format: 'legacy';
   directory: string;
-  source: KnowledgeSource;
+  source: LegacyKnowledgeSource;
   manifest: RunManifest;
   records: EyeLogRecord[];
   observations: Map<string, Observation>;
@@ -19,7 +22,25 @@ export interface VerifiedRun {
 }
 const LOG_LIMIT = 128 * 1024 * 1024;
 /** Preflight refuses symlinks and bounds every file that the older strict replayers read. */
-export async function verifyLearningRun(directory: string): Promise<VerifiedRun> {
+export async function verifyLearningRun(directory: string): Promise<VerifiedRun> { return verifyLegacyLearningRun(directory); }
+export type VerifiedLearningRun = VerifiedRun | VerifiedLayerRun;
+export async function verifyAnyLearningRun(directory: string): Promise<VerifiedLearningRun> {
+  const root = await assertSafePath(directory, 'directory');
+  for (const candidate of [root, join(root, 'layer-journal')]) {
+    try { await lstat(join(candidate, 'layers.jsonl')); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue; throw error; }
+    const bytes = await readBoundedFile(join(candidate, 'layers.jsonl'), 64*1024*1024);
+    const { parseLayerJson } = await import('../layers/replay.js');
+    const first = parseLayerJson(bytes.toString('utf8').split('\n', 1)[0]!);
+    if (!object(first) || !object(first.data)) fail('layer_source_header');
+    if ('schema_version' in first.data || 'audit_version' in first.data)
+      return (await import('./layers-source.js')).verifyLayersLearningRun(candidate);
+  }
+  if (basename(root) === 'layer-journal') return verifyLegacyLearningRun(dirname(root));
+  return verifyLegacyLearningRun(root);
+}
+/** Supporting Eye journals are audited as original perception, never routed back into layers. */
+export async function verifyLegacyLearningRun(directory: string): Promise<VerifiedRun> {
   const dir = await assertSafePath(directory, 'directory');
   const manifestBytes = await readBoundedFile(join(dir, 'manifest.json'), 2 * 1024 * 1024);
   const manifest: unknown = JSON.parse(manifestBytes.toString('utf8'));
@@ -75,9 +96,9 @@ export async function verifyLearningRun(directory: string): Promise<VerifiedRun>
   if (sha256(await readBoundedFile(join(dir, 'manifest.json'), 2 * 1024 * 1024)) !== sha256(manifestBytes) ||
     sha256(await readBoundedFile(join(dir, 'events.jsonl'), LOG_LIMIT)) !== sha256(eventsBytes)) fail('source_changed_during_verification');
   const eventsHash = sha256(eventsBytes);
-  const source: KnowledgeSource = { id: `source-${eventsHash}`, run_id: frozen.run_id, kind, mode: mode as KnowledgeSource['mode'],
+  const source: LegacyKnowledgeSource = { id: `source-${eventsHash}`, run_id: frozen.run_id, kind, mode: mode as LegacyKnowledgeSource['mode'],
     manifest_sha256: sha256(manifestBytes), events_sha256: eventsHash, complete: replay.complete };
-  return { directory: dir, source, manifest: frozen, records, observations, artifacts };
+  return { format: 'legacy', directory: dir, source, manifest: frozen, records, observations, artifacts };
 }
 
 /** Derive the observation/artifact set that a cited record actually names, never arbitrary existing IDs. */
@@ -125,16 +146,30 @@ export function targetSampleIdentity(observation: Observation): string {
     dead?.source_observation_id ?? null, dead?.status ?? null, dead?.value ?? null]);
 }
 export async function verifyKnowledgeEvidence(snapshot: KnowledgeSnapshot, sourceDirectories: Record<string, string>): Promise<void> {
-  assertKnowledgeSnapshot(snapshot); const runs = new Map<string, VerifiedRun>();
+  assertKnowledgeSnapshot(snapshot); const runs = new Map<string, VerifiedLearningRun>();
   for (const source of snapshot.sources) {
     const directory = sourceDirectories[source.id]; if (!directory) fail('source_directory_missing');
-    const run = await verifyLearningRun(directory);
+    const run = await verifyAnyLearningRun(directory);
     if (canonicalJson(run.source) !== canonicalJson(source)) fail('source_identity_mismatch'); runs.set(source.id, run);
   }
   for (const fact of snapshot.facts) {
     const samples = new Set<string>();
+    const layerMetrics: Record<string, string | number | boolean | null> = {}; let layerCounterexamples = 0, layerSamples = 0;
     for (const ref of fact.evidence) {
-      const run = runs.get(ref.source_id)!; assertEvidenceBound(run, ref); const row = run.records[ref.record_seq]!;
+      const run = runs.get(ref.source_id)!;
+      if (run.format === 'layers') {
+        assertLayerEvidenceBound(run, ref); await verifyLayerFactEvidence(run, fact, ref);
+        const row = run.records[ref.record_seq]!, data = row.data as { id: string };
+        const key = `${ref.source_id}:${row.kind}:${data.id}`; if (samples.has(key)) fail('duplicate_sample_event'); samples.add(key);
+        const { layerSample } = await import('./layers.js'); const sample = layerSample(run, row)!; layerSamples++;
+        if (sample.counterexample) layerCounterexamples++;
+        for (const [name, value] of Object.entries(sample.metrics)) {
+          if (typeof value === 'number' && name.endsWith('_count')) layerMetrics[name] = Number(layerMetrics[name] ?? 0) + value;
+          else layerMetrics[name] = value;
+        }
+        continue;
+      }
+      assertEvidenceBound(run, ref); const row = run.records[ref.record_seq]!;
       const event = row.kind === 'event' && object(row.data) ? row.data : null;
       const result = object(event?.result) ? event.result : null;
       if (fact.kind !== 'monster_statistic' && row.kind !== 'execution_receipt' && (event?.code !== 'play.step_result' || !result)) fail('experience_record_kind');
@@ -161,5 +196,6 @@ export async function verifyKnowledgeEvidence(snapshot: KnowledgeSnapshot, sourc
         if (name?.status !== 'known' || name.value !== fact.scope.target_name || present?.status !== 'known' || present.value !== true) fail('monster_reported_name_binding');
       }
     }
+    if (layerSamples && (layerSamples !== fact.sample_count || layerCounterexamples !== fact.counterexamples || canonicalJson(layerMetrics) !== canonicalJson(fact.metrics))) fail('layers_metric_binding');
   }
 }

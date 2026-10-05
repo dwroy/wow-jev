@@ -1,5 +1,27 @@
 import type { ActionCondition, JsonValue, Observation } from '../core/protocol.js';
 import type { NativeReceipt } from '../hand/protocol.js';
+import type { GameVersion } from '../game-data/types.js';
+import type { WorldEntityKey } from '../game-data/world.js';
+import type { VersionRef, WorldPackRef } from '../system/types.js';
+import type { BodyProfile } from '../actions/profile.js';
+
+export interface WorldObjectiveRef {
+  world_pack_sha256: string; quest_key: WorldEntityKey;
+  assertion_sha256: string; ordinal: number; native_objective_id: number | null;
+}
+export interface LayerManifestV2 {
+  schema_version: 2; audit_version: 'layer-evidence-v2'; mode: LayerMode; started_at: string;
+  world: WorldPackRef; client_version: GameVersion; runtime: VersionRef; knowledge: VersionRef;
+  code_sha256: string; prompts_sha256: string; body_profile_sha256: string;
+  bindings_sha256: string; calibration_sha256: string | null; body_profile: BodyProfile;
+  clock: { domain: 'simulation-monotonic' | 'coordinator-monotonic'; id: string };
+  task: LayerTaskSpec; run_epoch: number;
+  quest_episode: { id: string; phase: 'accept' | 'objective' | 'deliver'; quest_key: WorldEntityKey; objective_ref: WorldObjectiveRef | null };
+  actor: { character_id: string; account_id: string; class: string | null; spec: string | null; level: number | null; capabilities: string[] };
+  route_revision: string | null; world_task_plan_sha256: string;
+  supporting_eye: { directory: string; manifest_sha256: string; events_sha256: string } | null;
+  automatic_action_eligible: false;
+}
 
 /** Shared L1/L2/L3/L4 contracts. JSON shapes are validated at module boundaries. */
 export type LayerMode = 'live' | 'simulated';

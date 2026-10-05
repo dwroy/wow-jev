@@ -1,0 +1,962 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:wow-jev:world-task-hints-v1",
+  "title": "只读世界包到L4计划线索；所有计划不可执行",
+  "$defs": {
+    "world": {
+      "type": "object",
+      "properties": {
+        "directory": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "manifest_sha256": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/sha256"
+        },
+        "sqlite_sha256": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/sha256"
+        }
+      },
+      "required": [
+        "directory",
+        "manifest_sha256",
+        "sqlite_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "quest_key": {
+      "allOf": [
+        {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/entity_key"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "quest"
+            }
+          }
+        }
+      ]
+    },
+    "runtime": {
+      "type": "object",
+      "properties": {
+        "database_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "character_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "account_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "as_of_clock": {
+          "type": "object",
+          "properties": {
+            "domain": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "clock_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "ticks": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "unit": {
+              "enum": [
+                "ns",
+                "us",
+                "ms",
+                "s",
+                "ticks"
+              ]
+            }
+          },
+          "required": [
+            "domain",
+            "clock_id",
+            "ticks",
+            "unit"
+          ],
+          "additionalProperties": false
+        },
+        "maximum_age": {
+          "type": "number",
+          "minimum": 0
+        },
+        "fact_bindings": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/json_value"
+        }
+      },
+      "required": [
+        "database_path",
+        "character_id",
+        "account_id",
+        "as_of_clock",
+        "maximum_age",
+        "fact_bindings"
+      ],
+      "additionalProperties": false
+    },
+    "request": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "world": {
+          "$ref": "#/$defs/world"
+        },
+        "client_version": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/version"
+        },
+        "quest_key": {
+          "$ref": "#/$defs/quest_key"
+        },
+        "include_references": {
+          "type": "boolean"
+        },
+        "context": {
+          "anyOf": [
+            {
+              "$ref": "urn:wow-jev:world-data-v2#/$defs/json_value"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "runtime": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/runtime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "world",
+        "client_version",
+        "quest_key",
+        "include_references",
+        "context",
+        "runtime"
+      ],
+      "additionalProperties": false
+    },
+    "condition_result": {
+      "type": "object",
+      "properties": {
+        "assertion_sha256": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/sha256"
+        },
+        "truth": {
+          "enum": [
+            "true",
+            "false",
+            "unknown"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:wow-jev:world-data-v2#/$defs/json_value"
+          },
+          "maxItems": 2048
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:wow-jev:world-data-v2#/$defs/json_value"
+          },
+          "maxItems": 2048
+        },
+        "rule_version": {
+          "const": "field-resolution-v2.1"
+        },
+        "condition_rule_version": {
+          "const": "conditions-v3.1"
+        },
+        "automatic_action_eligible": {
+          "const": false
+        }
+      },
+      "required": [
+        "assertion_sha256",
+        "truth",
+        "evidence",
+        "blockers",
+        "rule_version",
+        "condition_rule_version",
+        "automatic_action_eligible"
+      ],
+      "additionalProperties": false
+    },
+    "field": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "known",
+            "unknown",
+            "unsupported",
+            "not_present",
+            "conflict"
+          ]
+        },
+        "value": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/json_value"
+        },
+        "assertion_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:wow-jev:world-data-v2#/$defs/sha256"
+          },
+          "maxItems": 1024,
+          "uniqueItems": true
+        },
+        "assertions": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:wow-jev:world-data-v2#/$defs/assertion"
+          },
+          "maxItems": 1024
+        },
+        "conditions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/condition_result"
+          },
+          "maxItems": 1024
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:wow-jev:world-data-v2#/$defs/json_value"
+          },
+          "maxItems": 1024
+        }
+      },
+      "required": [
+        "status",
+        "value",
+        "assertion_ids",
+        "assertions",
+        "conditions",
+        "blockers"
+      ],
+      "additionalProperties": false
+    },
+    "field_map": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/field"
+        },
+        "quest.condition": {
+          "$ref": "#/$defs/field"
+        },
+        "quest.givers": {
+          "$ref": "#/$defs/field"
+        },
+        "quest.objectives": {
+          "$ref": "#/$defs/field"
+        }
+      },
+      "required": [
+        "name",
+        "quest.condition",
+        "quest.givers",
+        "quest.objectives"
+      ],
+      "additionalProperties": false
+    },
+    "snapshot": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "world": {
+          "$ref": "#/$defs/world"
+        },
+        "client_version": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/version"
+        },
+        "quest_key": {
+          "$ref": "#/$defs/quest_key"
+        },
+        "current_status": {
+          "enum": [
+            "found",
+            "not_found",
+            "version_unknown"
+          ]
+        },
+        "fields": {
+          "$ref": "#/$defs/field_map"
+        },
+        "reference_fields": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/field_map"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "availability": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/json_value"
+        },
+        "evidence_scope": {
+          "enum": [
+            "source_data",
+            "synthetic_fixture"
+          ]
+        },
+        "rule_version": {
+          "const": "field-resolution-v2.1"
+        },
+        "query_rule_version": {
+          "const": "planning-queries-v3.1"
+        },
+        "automatic_action_eligible": {
+          "const": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "world",
+        "client_version",
+        "quest_key",
+        "current_status",
+        "fields",
+        "reference_fields",
+        "availability",
+        "evidence_scope",
+        "rule_version",
+        "query_rule_version",
+        "automatic_action_eligible"
+      ],
+      "additionalProperties": false
+    },
+    "field_identity": {
+      "type": "object",
+      "properties": {
+        "world_pack_sha256": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/sha256"
+        },
+        "quest_key": {
+          "$ref": "#/$defs/quest_key"
+        },
+        "predicate": {
+          "enum": [
+            "name",
+            "quest.condition",
+            "quest.givers",
+            "quest.objectives"
+          ]
+        },
+        "assertion_sha256": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/sha256"
+        },
+        "ordinal": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "world_pack_sha256",
+        "quest_key",
+        "predicate",
+        "assertion_sha256",
+        "ordinal"
+      ],
+      "additionalProperties": false
+    },
+    "objective_identity": {
+      "type": "object",
+      "properties": {
+        "world_pack_sha256": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/sha256"
+        },
+        "quest_key": {
+          "$ref": "#/$defs/quest_key"
+        },
+        "assertion_sha256": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/sha256"
+        },
+        "ordinal": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "native_objective_id": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "world_pack_sha256",
+        "quest_key",
+        "assertion_sha256",
+        "ordinal",
+        "native_objective_id"
+      ],
+      "additionalProperties": false
+    },
+    "objective": {
+      "type": "object",
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/objective_identity"
+        },
+        "type": {
+          "enum": [
+            "kill_credit",
+            "collect",
+            "interact",
+            "reach",
+            "cast",
+            "event",
+            "unknown"
+          ]
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "urn:wow-jev:world-data-v2#/$defs/entity_key"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            "supported",
+            "unsupported",
+            "unknown"
+          ]
+        },
+        "l4_kind": {
+          "anyOf": [
+            {
+              "const": "kill_count"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "identity",
+        "type",
+        "target",
+        "required_count",
+        "status",
+        "l4_kind"
+      ],
+      "additionalProperties": false
+    },
+    "giver": {
+      "type": "object",
+      "properties": {
+        "role": {
+          "enum": [
+            "starter",
+            "finisher"
+          ]
+        },
+        "entity": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/entity_key"
+        },
+        "identity": {
+          "$ref": "#/$defs/field_identity"
+        },
+        "supported": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "role",
+        "entity",
+        "identity",
+        "supported"
+      ],
+      "additionalProperties": false
+    },
+    "blocker": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "field": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "detail": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/json_value"
+        }
+      },
+      "required": [
+        "code",
+        "field",
+        "detail"
+      ],
+      "additionalProperties": false
+    },
+    "step": {
+      "type": "object",
+      "properties": {
+        "step_id": {
+          "type": "string",
+          "pattern": "^world-step-[a-f0-9]{24}$"
+        },
+        "kind": {
+          "enum": [
+            "accept_quest",
+            "kill_count",
+            "deliver_quest"
+          ]
+        },
+        "l4_kind": {
+          "enum": [
+            "sequence",
+            "kill_count",
+            "deliver_quest"
+          ]
+        },
+        "objective_identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/objective_identity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:wow-jev:world-data-v2#/$defs/entity_key"
+          },
+          "maxItems": 256
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/field_identity"
+          },
+          "maxItems": 256
+        },
+        "required_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required_observations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "maxItems": 32
+        },
+        "executable": {
+          "const": false
+        }
+      },
+      "required": [
+        "step_id",
+        "kind",
+        "l4_kind",
+        "objective_identity",
+        "target_candidates",
+        "source_refs",
+        "required_count",
+        "required_observations",
+        "executable"
+      ],
+      "additionalProperties": false
+    },
+    "plan": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "world": {
+          "$ref": "#/$defs/world"
+        },
+        "client_version": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/version"
+        },
+        "quest_key": {
+          "$ref": "#/$defs/quest_key"
+        },
+        "current_status": {
+          "enum": [
+            "found",
+            "not_found",
+            "version_unknown"
+          ]
+        },
+        "status": {
+          "enum": [
+            "ready_hint",
+            "blocked"
+          ]
+        },
+        "evidence_scope": {
+          "enum": [
+            "source_data",
+            "synthetic_fixture"
+          ]
+        },
+        "availability": {
+          "type": "object",
+          "properties": {
+            "truth": {
+              "enum": [
+                "true",
+                "false",
+                "unknown"
+              ]
+            },
+            "assertion_ids": {
+              "type": "array",
+              "items": {
+                "$ref": "urn:wow-jev:world-data-v2#/$defs/sha256"
+              },
+              "maxItems": 1024
+            },
+            "query_evidence": {
+              "$ref": "urn:wow-jev:world-data-v2#/$defs/json_value"
+            }
+          },
+          "required": [
+            "truth",
+            "assertion_ids",
+            "query_evidence"
+          ],
+          "additionalProperties": false
+        },
+        "objectives": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/objective"
+          },
+          "maxItems": 256
+        },
+        "givers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/giver"
+          },
+          "maxItems": 256
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/step"
+          },
+          "maxItems": 258
+        },
+        "fields": {
+          "$ref": "#/$defs/field_map"
+        },
+        "reference_fields": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/field_map"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/blocker"
+          },
+          "maxItems": 1024
+        },
+        "rule_version": {
+          "const": "field-resolution-v2.1"
+        },
+        "query_rule_version": {
+          "const": "planning-queries-v3.1"
+        },
+        "adapter_rule_version": {
+          "const": "world-task-hints-v1.1"
+        },
+        "executable": {
+          "const": false
+        },
+        "automatic_action_eligible": {
+          "const": false
+        },
+        "planning_input": {
+          "type": "object",
+          "properties": {
+            "context": {
+              "anyOf": [
+                {
+                  "$ref": "urn:wow-jev:world-data-v2#/$defs/json_value"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "runtime": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/runtime"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "include_references": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "context",
+            "runtime",
+            "include_references"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "world",
+        "client_version",
+        "quest_key",
+        "current_status",
+        "status",
+        "evidence_scope",
+        "availability",
+        "objectives",
+        "givers",
+        "steps",
+        "fields",
+        "reference_fields",
+        "blockers",
+        "rule_version",
+        "query_rule_version",
+        "adapter_rule_version",
+        "executable",
+        "automatic_action_eligible",
+        "planning_input"
+      ],
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "ok": {
+          "const": false
+        },
+        "error": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "schema_version",
+        "ok",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "ok": {
+              "const": true
+            },
+            "result": {
+              "$ref": "#/$defs/snapshot"
+            }
+          },
+          "required": [
+            "schema_version",
+            "ok",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "schema_version",
+            "ok",
+            "error"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "build_result": {
+      "type": "object",
+      "properties": {
+        "world": {
+          "$ref": "#/$defs/world"
+        },
+        "client_version": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/version"
+        },
+        "quest_key": {
+          "$ref": "#/$defs/quest_key"
+        },
+        "evidence_scope": {
+          "const": "synthetic_fixture"
+        },
+        "automatic_action_eligible": {
+          "const": false
+        }
+      },
+      "required": [
+        "world",
+        "client_version",
+        "quest_key",
+        "evidence_scope",
+        "automatic_action_eligible"
+      ],
+      "additionalProperties": false
+    },
+    "build_response": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "ok": {
+              "const": true
+            },
+            "result": {
+              "$ref": "#/$defs/build_result"
+            }
+          },
+          "required": [
+            "schema_version",
+            "ok",
+            "result"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "const": 1
+            },
+            "ok": {
+              "const": false
+            },
+            "error": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8192
+            }
+          },
+          "required": [
+            "schema_version",
+            "ok",
+            "error"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

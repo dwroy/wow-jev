@@ -123,6 +123,12 @@ export class BodyRuntime {
         if (this.profile.abilities[action.ability]?.movement === 'stationary') criticalFields.add('player.moving');
       }
       const gate = () => {
+        for (const c of context.conditions) if (c.field === 'target.entity_key' || /^quest\.[^.]+\.objective_ref$/.test(c.field)) {
+          const f = before.observation.fields[c.field];
+          const captured = context.mode === 'simulated' ? before.observation.at_ms : before.bracket.started_at_ms;
+          if (f?.status !== 'known' || f.source_observation_id !== before.observation.id || f.captured_at_ms !== captured || f.source !== (context.mode === 'simulated' ? 'simulated' : 'cv'))
+            return { ok: false as const, reason: `world_identity_not_current:${c.field}` };
+        }
         if (context.mode === 'live') for (const path of criticalFields) {
           const field = before.observation.fields[path];
           if (field?.status !== 'known' || field.source !== 'cv' || field.source_observation_id !== before.observation.id || field.captured_at_ms !== before.bracket.started_at_ms)

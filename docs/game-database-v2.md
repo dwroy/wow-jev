@@ -90,3 +90,28 @@ python -m game_database.v2.query_cli --pack /本次世界包目录 --sha256 /输
 SHA参数填写输出的64位值。省略`--references`按六维精确查询。子命令还有availability/achievement/encounter（`--entity` typed-key JSON）、condition（`--ast`）、region/near（`--map` typed-key JSON与显式floor/coordinate-space/transform）、routes（`--from-entity`/`--to-entity`/重复`--movement-mode`/`--capabilities`）。context JSON用character/account/context分组，每事实要求state/value/evidence。
 
 可选`--runtime-db FILE --runtime-context FILE`只读运行库；context必需character_id/account_id/as_of_clock/maximum_age，可选fact_bindings。Provider与查询的world SHA及全部六维客户端必须相同，缺绑定或运行时被替换会拒绝。缺失/迟到/不同clock/不完整状态均unknown，目标完成不是历史交付。所有结果automatic_action_eligible=false，路线can_traverse=false，索引只选候选；楼层/位面/变换/精度和原字段证据继续复核。
+
+## 世界任务、学习与版本（离线）
+
+固定已提交源码后运行无模型/Windows/真实输入的合成入口：
+
+```bash
+npm --prefix agent run layers -- world-demo
+# 每个summary.runs[].directory分别回放
+npm --prefix agent run layers -- replay --run-dir RUN_DIR
+./agent/node_modules/.bin/tsx agent/src/learner/cli.ts learn --run-dir RUN_DIR --knowledge-dir out/knowledge/world-demo
+```
+
+同一episode的接取、两个独立目标、交付为四个有限taskrun；scenario_effect可以confirmed，game_effect仍unverified、real_inputs=0。world-demo仅接受custom:synthetic固定合成来源。`agent/src/game-data/world-task-cli.ts`可读取真实固定世界的不可执行hint，当前M2仍blocked。
+
+`learner/cli.ts learn`支持重复`--run-dir`，每个run先严格验证原始世界、代码/prompt/知识/plan与task/L3/L2证据；v1与layers来源分别验证。v2知识包含world/client/config/task范围，缺所需维度或不匹配不召回；模拟不能进入默认live查询、游戏事实或击杀统计。`knowledge_sha256`是当前消费知识SHA，来源的旧input知识继续作为provenance。
+
+将learner输出的source.id映射到对应绝对run目录保存为source-directories.json，再索引：
+
+```bash
+./agent/node_modules/.bin/tsx agent/src/learner/runtime-index.ts --database out/runtime/agent.sqlite --knowledge KNOWLEDGE_FILE --sha256 KNOWLEDGE_SHA --source-directories SOURCE_MAP_FILE
+```
+
+该前门先独立验证所有引用，再调用项目venv中固定APSW writer。运行库只是原件/SHA和去重索引；counterexample-only保留经验，不伪造正例注册。保护集合包含严格回放依赖，清理时保留所有被引用世界包与来源目录；不得删除旧run需要的原件。Python layers_index是低层受信任调用者传输适配器，不替代TS语义回放。
+
+数据评估发布入口`agent/src/game-data/world-version-cli.ts publish-data`要求registry/parent/version-id、knowledge、world-directory/manifest-sha256/sqlite-sha256、client-profile、source-directories、prompts(id/file JSON数组)。`--activate`切换只影响后续任务；`inspect`、`activate`、`rollback`配合`--registry`/`--version-id`核固定包。数据发布独立验证知识来源、world原件及固定reader，父代码/prompt保持同SHA；不能凭模拟提案修改执行代码。v1版本不补造world字段。v2 live/observe尚未现场验证，目前入口拒绝；正式服需先取得本机当前客户端、任务/目标、位置/校准及物理释放证据。

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, open, readFile, type FileHandle } from 'node:fs/promises';
+import { mkdir, open, readFile, writeFile, type FileHandle } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { assertNativeTimeline, assertNativeMessage, loadNativeValidator, type NativeValidator, type NativeTimeline, type NativeReceipt } from '../hand/protocol.js';
 
@@ -10,7 +10,16 @@ export class LayerJournal {
   private queue = Promise.resolve(); private size = 0;
   private constructor(readonly dir: string, readonly runId: string, private file: FileHandle, private now: () => number) {}
   static async create(dir: string, runId: string, now: () => number, manifest: unknown): Promise<LayerJournal> {
+    const modern = !!manifest && typeof manifest === 'object' && ('schema_version' in manifest || 'audit_version' in manifest);
+    if (modern) {
+      const validate: typeof import('./replay.js').assertLayerManifest = (await import('./replay.js')).assertLayerManifest;
+      validate(manifest);
+    }
     const root = resolve(dir); await mkdir(root, { recursive: false, mode: 0o700 });
+    if (modern) {
+      const { canonicalJson } = await import('../knowledge/validation.js');
+      await writeFile(join(root, 'manifest.json'), canonicalJson(manifest), { flag: 'wx', mode: 0o400 });
+    }
     const file = await open(join(root, 'layers.jsonl'), 'wx', 0o600);
     const journal = new LayerJournal(root, runId, file, now);
     await journal.append('manifest', manifest); return journal;
@@ -31,6 +40,15 @@ export class LayerJournal {
   async close(): Promise<void> { await this.queue; await this.file.sync(); await this.file.close(); if (this.failure) throw this.failure; }
 }
 export async function replayLayerJournal(dir: string): Promise<{ run_id: string; mode: string; records: number; real_inputs: number; input_count_scope: string; status: string; result: unknown }> {
+  const { readBoundedFile } = await import('../knowledge/validation.js');
+  const bytes = await readBoundedFile(join(resolve(dir), 'layers.jsonl'), 64 * 1024 * 1024);
+  const first = JSON.parse(bytes.toString('utf8').split('\n', 1)[0]!) as LayerRecord;
+  if (first.data && typeof first.data === 'object' && ('schema_version' in first.data || 'audit_version' in first.data))
+    return (await import('./replay.js')).replayStrictLayerJournal(dir);
+  return replayLegacyLayerJournal(dir);
+}
+/** Historical journals retain their original audit contract and byte meaning. */
+export async function replayLegacyLayerJournal(dir: string): Promise<{ run_id: string; mode: string; records: number; real_inputs: number; input_count_scope: string; status: string; result: unknown }> {
   const text = await readFile(join(resolve(dir), 'layers.jsonl'), 'utf8');
   if (!text.endsWith('\n') || Buffer.byteLength(text) > 64 * 1024 * 1024) throw new Error('layer_replay_incomplete_or_oversized');
   let previous: string | null = null, at = 0, runId = '', manifest: Record<string, unknown> | null = null, result: Record<string, unknown> | null = null;

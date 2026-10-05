@@ -22,6 +22,7 @@ import type { PlayPlan } from '../play/types.js';
 import { buildCandidates, candidatesHash } from '../reflex/candidates.js';
 import { compileSkill, DEFAULT_SKILL_BINDINGS } from '../reflex/skills.js';
 import type { KnowledgeSnapshot, RuntimeVersion } from './types.js';
+import { copyWorldPackage } from '../game-data/world-package.js';
 import { reviewRuns } from './learning.js';
 import { launchFrozenTask, loadFrozenExecution } from './launch.js';
 import { replaySystemRun } from './replay.js';
@@ -99,6 +100,7 @@ async function main(): Promise<number> {
     if (values.registry) {
       if (values['runtime-version-file'] || values['knowledge-file'] || values['knowledge-sha256'] || values['prompt-file'] || values['native-root'] || values['executing-source-sha256']) throw new Error('system_registry_snapshot_cannot_be_overridden');
       const snapshot = await new RuntimeVersionRegistry(resolve(values.registry)).resolveForTask(values['version-id']);
+      if (snapshot.version.schema_version === 2) throw new Error('system_v2_live_not_verified');
       if (!snapshot.prompts['jev-retail-v1'] || !(await readFile(join(snapshot.code_root, 'agent/src/system/cli.ts'), 'utf8')).includes('loadFrozenExecution')) throw new Error('system_version_frozen_live_not_supported');
       const args = [mode];
       const fileFlags = ['goal', 'bindings', 'calibration', 'combat-calibration', 'npc-calibration', 'client-profile', 'evaluation-context', 'seed-env-file'] as const;
@@ -187,6 +189,10 @@ async function main(): Promise<number> {
   const { canonicalJson } = await import('../knowledge/validation.js');
   await writeFile(join(dir, 'knowledge.json'), canonicalJson(snapshot), { flag: 'wx', mode: 0o400 });
   await writeFile(join(dir, 'runtime-version.json'), canonicalJson(runtimeVersion), { flag: 'wx', mode: 0o400 });
+  if (runtimeVersion.schema_version === 2) {
+    if (!frozen?.world_root) throw new Error('system_v2_world_frozen_required');
+    await copyWorldPackage(frozen.world_root, join(dir, 'world'), runtimeVersion.world, runtimeVersion.client_version, repo);
+  }
   const origin = performance.now(); const now = () => Math.floor(performance.now() - origin);
   const world = new SystemSimulation(store, now, scenario as DemoScenario);
   const validator = await loadProtocolValidator(schemas['agent-v1.schema.json']!);

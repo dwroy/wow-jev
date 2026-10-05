@@ -1,7 +1,11 @@
 import path from 'node:path';
 import { mkdir, lstat, readdir, rename, rm } from 'node:fs/promises';
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import type { RuntimeVersion } from '../../system/types.js';
+import type { RuntimeVersion, WorldPackRef } from '../../system/types.js';
+import type { GameVersion } from '../../game-data/types.js';
+import { copyWorldPackage, validateClientVersion, validateWorldRef, verifyWorldPackage } from '../../game-data/world-package.js';
+import { verifyKnowledgeEvidence } from '../source.js';
+import { assertSafePath } from '../../knowledge/validation.js';
 import type { CandidateManifest, ResolvedRuntimeSnapshot } from './types.js';
 import { verifyReceipt } from './receipt.js';
 import { assert, atomicWrite, deepFreeze, directoryHash, exact, fields, git, hash, id, json, regularFile, relativeFile, safePath, sha256, sourceHash as directoryHashCandidate, writeNew } from './util.js';
@@ -15,6 +19,8 @@ export interface BaselineOptions {
   prompts: { id: string; file: string }[];
   approvedBy: string;
   activate?: boolean;
+  world?: { directory: string; ref: WorldPackRef; clientVersion: GameVersion };
+  sourceDirectories?: Record<string, string>;
 }
 export interface PackageInput extends BaselineOptions {
   parentId: string | null;
@@ -32,7 +38,13 @@ export class RuntimeVersionRegistry {
   constructor(root: string) { this.root = path.resolve(root); }
   private versionPath(versionId: string): string { id(versionId); return path.join(this.root, 'versions', versionId); }
   private async init(): Promise<void> {
+    let ancestor = this.root;
+    for (;;) {
+      try { await lstat(ancestor); await assertSafePath(ancestor, 'directory'); break; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; const parent = path.dirname(ancestor); assert(parent !== ancestor, 'registry ancestor required'); ancestor = parent; }
+    }
     await mkdir(path.join(this.root, 'versions'), { recursive: true });
+    await assertSafePath(this.root, 'directory');
     for (const file of [this.root, path.join(this.root, 'versions')]) assert((await lstat(file)).isDirectory() && !(await lstat(file)).isSymbolicLink(), 'registry directory required');
     try { await writeNew(path.join(this.root, '.registry-key'), randomBytes(32)); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
   }
@@ -43,11 +55,32 @@ export class RuntimeVersionRegistry {
     } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
   }
   async registerBaseline(options: BaselineOptions): Promise<RuntimeVersion> {
-    fields(options, ['versionId', 'repository', 'knowledgeFile', 'prompts', 'approvedBy'], ['codeCommit', 'activate'], 'baseline options');
+    fields(options, ['versionId', 'repository', 'knowledgeFile', 'prompts', 'approvedBy'], ['codeCommit', 'activate', 'world', 'sourceDirectories'], 'baseline options');
     assert(options.activate === undefined || typeof options.activate === 'boolean', 'invalid baseline activation');
     await this.init();
     assert((await readdir(path.join(this.root, 'versions'))).filter((name) => !name.startsWith('.')).length === 0, 'baseline already registered');
     return this.#publishPackage({ ...options, parentId: null, activate: options.activate ?? true });
+  }
+  /** Data-only evaluation: preserve the parent's code/prompts and verify every
+   * new knowledge citation independently before sealing a changed world pack. */
+  async publishWorldData(options: BaselineOptions & { parentId: string; sourceDirectories: Record<string, string> }): Promise<RuntimeVersion> {
+    fields(options, ['versionId', 'repository', 'knowledgeFile', 'prompts', 'approvedBy', 'parentId', 'sourceDirectories', 'world'], ['codeCommit', 'activate'], 'world data options');
+    const parent = await this.resolveForTask(options.parentId);
+    assert(parent.version.schema_version === 2 && options.world !== undefined, 'world data requires v2 parent and world');
+    const knowledgeBytes = await regularFile(options.knowledgeFile);
+    const knowledge: unknown = JSON.parse(knowledgeBytes.toString('utf8')); validateKnowledge(knowledge);
+    assert(knowledge.schema_version === 2, 'world data requires v2 knowledge');
+    await verifyKnowledgeEvidence(knowledge, options.sourceDirectories);
+    assert(options.codeCommit === undefined || options.codeCommit === parent.version.code_commit, 'data-only code changed');
+    assert(options.prompts.length === Object.keys(parent.prompts).length && options.prompts.every(p => Object.hasOwn(parent.prompts, p.id)), 'data-only prompt set changed');
+    for (const p of options.prompts) assert(sha256(await regularFile(await safePath(options.repository, p.file))) === sha256(parent.prompts[p.id]!), 'data-only prompt changed');
+    await verifyWorldPackage(options.world.directory, options.world.ref, options.world.clientVersion, options.repository);
+    const report = { schema_version: 2, scope: 'offline_data_evaluation', parent_id: options.parentId, knowledge_sha256: sha256(knowledgeBytes), world: options.world.ref,
+      source_ids: knowledge.sources.map(s => s.id), passed: true, game_fact_records: knowledge.facts.filter(f => f.kind === 'game_fact').length,
+      monster_statistic_records: knowledge.facts.filter(f => f.kind === 'monster_statistic').length,
+      checks: ['strict_evidence_replay', 'knowledge_schema', 'world_bytes_schema', 'parent_code_prompts_fixed'] };
+    const reportFile = path.join(this.root, 'data-evaluations', `${options.versionId}.json`); id(options.versionId); await writeNew(reportFile, json(report));
+    return this.#publishPackage({ ...options, codeCommit: parent.version.code_commit, evaluation: { file: reportFile, sha256: sha256(json(report)) } }, parent.code_source_sha256, sha256(knowledgeBytes));
   }
   async publishEvaluated(input: PackageInput, proof: { candidatesRoot: string; evaluationId: string; manifestBytes: Buffer; manifest: CandidateManifest; sourceSha256: string }): Promise<RuntimeVersion> {
     await verifyReceipt(proof.candidatesRoot, proof.evaluationId, proof.manifestBytes, proof.manifest, proof.sourceSha256);
@@ -66,6 +99,16 @@ export class RuntimeVersionRegistry {
     const knowledgeBytes = await regularFile(input.knowledgeFile);
     assert(expectedKnowledgeHash === undefined || sha256(knowledgeBytes) === expectedKnowledgeHash, 'knowledge differs from evaluated manifest');
     const knowledge: unknown = JSON.parse(knowledgeBytes.toString('utf8')); validateKnowledge(knowledge);
+    if (knowledge.schema_version === 2 && knowledge.sources.length > 0) {
+      assert(input.sourceDirectories !== undefined, 'v2 source directories required');
+      await verifyKnowledgeEvidence(knowledge, input.sourceDirectories);
+    }
+    if (input.world !== undefined) {
+      exact(input.world, ['directory', 'ref', 'clientVersion'], 'world input');
+      assert(typeof input.world.directory === 'string', 'world directory required');
+      validateWorldRef(input.world.ref); validateClientVersion(input.world.clientVersion);
+      await verifyWorldPackage(input.world.directory, input.world.ref, input.world.clientVersion, input.repository);
+    } else assert(knowledge.schema_version === 1, 'v2 knowledge requires pinned world runtime');
     assert(input.prompts.length > 0, 'runtime requires at least one prompt');
     const promptIds = new Set<string>(); const promptFiles = new Set<string>();
     for (const prompt of input.prompts) { exact(prompt, ['id', 'file'], 'input prompt'); id(prompt.id); relativeFile(prompt.file); assert(/^perception\/prompts\/[A-Za-z0-9_-]+\.txt$/.test(prompt.file) && !promptIds.has(prompt.id) && !promptFiles.has(prompt.file), 'invalid or duplicate prompt'); promptIds.add(prompt.id); promptFiles.add(prompt.file); }
@@ -89,7 +132,14 @@ export class RuntimeVersionRegistry {
         assert(metadata[0] === '100644' || metadata[0] === '100755', 'code package rejects symlinks and submodules'); relativeFile(file);
         await writeNew(path.join(staging, 'code', file), await git(input.repository, ['show', `${codeCommit}:${file}`], true));
       }
-      const version: RuntimeVersion = { schema_version: 1, id: input.versionId, parent_id: input.parentId, created_at: new Date().toISOString(), code_commit: codeCommit, knowledge: { id: knowledge.id, sha256: sha256(knowledgeBytes), file: `knowledge/${knowledge.id}.json` }, prompts };
+      const base = { id: input.versionId, parent_id: input.parentId, created_at: new Date().toISOString(), code_commit: codeCommit, knowledge: { id: knowledge.id, sha256: sha256(knowledgeBytes), file: `knowledge/${knowledge.id}.json` }, prompts };
+      const version: RuntimeVersion = input.world === undefined ? { schema_version: 1, ...base } : { schema_version: 2, ...base, world: structuredClone(input.world.ref), client_version: structuredClone(input.world.clientVersion) };
+      if (input.world) {
+        await copyWorldPackage(input.world.directory, path.join(staging, 'world'), input.world.ref, input.world.clientVersion, input.repository);
+        // The committed reader must understand this exact pack before any
+        // version directory becomes visible, including inactive publications.
+        await verifyWorldPackage(path.join(staging, 'world'), input.world.ref, input.world.clientVersion, path.join(staging, 'code'));
+      }
       const seal: PackageSeal = { schema_version: 1, runtime_sha256: sha256(json(version)), code_source_sha256: await directoryHash(path.join(staging, 'code')), approved_by: input.approvedBy, evaluation: input.evaluation ?? null };
       assert(expectedCodeSourceHash === undefined || seal.code_source_sha256 === expectedCodeSourceHash, 'code commit differs from evaluated source');
       if (input.evaluation !== undefined) {
@@ -111,8 +161,10 @@ export class RuntimeVersionRegistry {
     for (const directory of [this.versionPath(chosen), packageRoot]) assert((await lstat(directory)).isDirectory() && !(await lstat(directory)).isSymbolicLink(), 'regular package directory required');
     const bytes = await regularFile(path.join(packageRoot, 'runtime.json'));
     const value: unknown = JSON.parse(bytes.toString('utf8'));
-    exact(value, ['schema_version', 'id', 'parent_id', 'created_at', 'code_commit', 'knowledge', 'prompts'], 'runtime version');
-    assert(value.schema_version === 1 && value.id === chosen && typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at)), 'invalid runtime identity');
+    const worldVersion = value !== null && typeof value === 'object' && 'schema_version' in value && value.schema_version === 2;
+    exact(value, ['schema_version', 'id', 'parent_id', 'created_at', 'code_commit', 'knowledge', 'prompts', ...(worldVersion ? ['world', 'client_version'] : [])], 'runtime version');
+    assert((value.schema_version === 1 || worldVersion) && value.id === chosen && typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at)), 'invalid runtime identity');
+    if (worldVersion) { validateWorldRef(value.world); validateClientVersion(value.client_version); }
     if (value.parent_id !== null) id(value.parent_id);
     assert(typeof value.code_commit === 'string' && /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(value.code_commit), 'invalid runtime commit');
     exact(value.knowledge, ['id', 'sha256', 'file'], 'knowledge ref'); id(value.knowledge.id); hash(value.knowledge.sha256); relativeFile(value.knowledge.file);
@@ -139,11 +191,13 @@ export class RuntimeVersionRegistry {
       assert(sha256(await regularFile(await safePath(packageRoot, 'evaluation.json'))) === seal.evaluation.sha256, 'evaluation package hash mismatch');
     }
     const packageFiles = (await readdir(packageRoot)).sort();
-    const expectedFiles = ['code', 'knowledge', 'prompts', 'runtime.json', 'seal.json', ...(seal.evaluation === null ? [] : ['evaluation.json'])].sort();
+    const expectedFiles = ['code', 'knowledge', 'prompts', 'runtime.json', 'seal.json', ...(worldVersion ? ['world'] : []), ...(seal.evaluation === null ? [] : ['evaluation.json'])].sort();
     assert(json(packageFiles) === json(expectedFiles), 'unexpected version package files');
     assert(json((await readdir(path.join(packageRoot, 'knowledge'))).sort()) === json([`${knowledge.id}.json`]), 'undeclared knowledge package file');
     assert(json((await readdir(path.join(packageRoot, 'prompts'))).sort()) === json(Object.keys(prompts).map((promptId) => `${promptId}.txt`).sort()), 'undeclared prompt package file');
-    return deepFreeze({ version: value as unknown as RuntimeVersion, knowledge, prompts, code_root: path.join(packageRoot, 'code'), code_source_sha256: seal.code_source_sha256 });
+    if (worldVersion) await verifyWorldPackage(path.join(packageRoot, 'world'), value.world as WorldPackRef, value.client_version as GameVersion, path.join(packageRoot, 'code'));
+    return deepFreeze({ version: value as unknown as RuntimeVersion, knowledge, prompts, code_root: path.join(packageRoot, 'code'), code_source_sha256: seal.code_source_sha256,
+      ...(worldVersion ? { world_root: path.join(packageRoot, 'world') } : {}) });
   }
   async activate(versionId: string): Promise<RuntimeVersion> {
     const snapshot = await this.resolveForTask(versionId);

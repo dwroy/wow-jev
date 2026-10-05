@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { validateMessage, type ActionCondition, type ActionIntent, type Observation } from '../../core/protocol.js';
 import { loadPlayJournal, replayPlayJournal, type PlayJournal } from '../../play/replay.js';
 import type { EyeLogRecord } from '../../eye/store.js';
@@ -9,6 +10,7 @@ import { parseBindings } from '../../reflex/skills.js';
 import { canonicalJson } from '../../reflex/candidates.js';
 import { consultKnowledge } from '../../memory/knowledge.js';
 import type { KnowledgeSnapshot, RuntimeVersion } from '../../system/types.js';
+import { verifyWorldPackage } from '../../game-data/world-package.js';
 import { BRAIN_PROMPT_SHA256, strictJson, validateChoiceResult, validateSelectionRequest } from './planner.js';
 import { buildBrainRoutes, initialPhase, parseBrainGoal, routesHash } from './routes.js';
 import { executionErrors } from './runtime.js';
@@ -49,8 +51,9 @@ export async function replayBrainRun(directory: string, options: BrainReplayOpti
   const journal = await loadPlayJournal(directory), config = journal.manifest.config;
   const mode = config.mode as BrainReplay['mode'], bindings = parseBindings(config.bindings), goal = parseBrainGoal(config.brain_goal);
   const version = config.runtime_version as RuntimeVersion, knowledge = config.knowledge_snapshot as KnowledgeSnapshot;
-  if (!version || !knowledge || version.schema_version !== 1 || knowledge.schema_version !== 1 || version.knowledge.id !== knowledge.id ||
+  if (!version || !knowledge || ![1, 2].includes(version.schema_version) || ![1, 2].includes(knowledge.schema_version) || version.schema_version === 1 && knowledge.schema_version !== 1 || version.knowledge.id !== knowledge.id ||
     version.knowledge.sha256 !== hash(knowledge)) fail('frozen_versions');
+  if (version.schema_version === 2) await verifyWorldPackage(join(directory, 'world'), version.world, version.client_version, fileURLToPath(new URL('../../../..', import.meta.url)));
   const knowledgeFile = config.frozen_knowledge_file ?? version.knowledge.file;
   if (!same(await frozenFile(directory, knowledgeFile, version.knowledge.sha256), knowledge)) fail('knowledge_file_object');
   if (config.frozen_runtime_version_file !== undefined) {
@@ -126,6 +129,7 @@ export async function replayBrainRun(directory: string, options: BrainReplayOpti
         const request = event.request as BrainRequest;
         if (!started || cancelled || changing || current && !current.terminal || states.has(request?.id) || states.size >= maxDecisions) fail('request_order');
         try { validateSelectionRequest(request); } catch { fail('request_schema'); }
+        if (version.schema_version === 2 ? !same(request.world, version.world) || !same(request.client_version, version.client_version) : request.world !== undefined || request.client_version !== undefined) fail('request_world_binding');
         const before = observations.get(request.based_on_observation_id);
         if (!before || request.epoch !== memory.epoch || !same(request.goal, memory.goal) || request.phase !== memory.phase ||
           request.plan.id !== `brain-plan-${request.id}` || request.plan.revision !== memory.goal.revision || request.at_ms > row.at_ms ||

@@ -2,7 +2,8 @@ import type { ActionCondition } from '../../core/protocol.js';
 import type { Collected } from '../../eye/runtime.js';
 import type { JevGoal, JevLoopResult } from '../../jev/types.js';
 import type { PlayPlan, PlayResult, SkillBindings } from '../../play/types.js';
-import type { KnowledgeFact, KnowledgeSnapshot, RuntimeVersion } from '../../system/types.js';
+import type { KnowledgeFact, KnowledgeSnapshot, RuntimeVersion, WorldPackRef } from '../../system/types.js';
+import type { GameVersion } from '../../game-data/types.js';
 
 interface GoalBase { id: string; revision: number; description: string }
 export type BrainGoal = GoalBase & (
@@ -28,6 +29,7 @@ export interface BrainRequest {
   based_on_observation_id: string; window_token: string | null; at_ms: number; deadline_ms: number;
   runtime_version_id: string; knowledge_sha256: string; consulted_fact_ids: string[]; consulted_facts: KnowledgeFact[];
   routes_sha256: string; routes: BrainRoute[];
+  world?: WorldPackRef; client_version?: GameVersion;
 }
 export interface BrainPlannerReply {
   request_id: string; plan_revision: number; route_id: string; evidence_observation_id: string;

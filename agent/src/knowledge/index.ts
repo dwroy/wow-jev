@@ -3,6 +3,8 @@ import { constants } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { KnowledgeFact, KnowledgeSnapshot, VersionRef } from '../system/types.js';
 import { assertKnowledgeSnapshot, assertSafePath, canonicalJson, fail, hash, object, readBoundedFile, sha256, type Scalar } from './validation.js';
+import { layersFactApplicable } from './layers-scope.js';
+export { layerKnowledgeScope, layersFactApplicable, LAYERS_APPLICABILITY_KEYS } from './layers-scope.js';
 export { assertKnowledgeSnapshot, createKnowledgeSnapshot } from './validation.js';
 export type { Scalar } from './validation.js';
 
@@ -56,9 +58,11 @@ export function queryKnowledge(snapshot: KnowledgeSnapshot, query: KnowledgeQuer
   const mode = query.mode ?? 'live'; const certainty = query.certainty ?? 'observed';
   const constraints = ['goal_kind', 'target_name', 'scene', 'layout', 'calibration_id'];
   return snapshot.facts.filter((fact) => {
+    const layers = fact.evidence.some(ref => sources.get(ref.source_id)?.kind === 'layers');
+    if (layers && !layersFactApplicable(snapshot, fact, query.scope)) return false;
     if (fact.scope.test_target === true && query.scope.test_target !== true) return false;
     if (certainty !== 'all' && fact.certainty !== certainty || fact.scope.mode !== mode || !query.includeIncomplete && fact.evidence.some((ref) => !sources.get(ref.source_id)!.complete)) return false;
-    for (const key of constraints) if (fact.scope[key] !== undefined && fact.scope[key] !== null && query.scope[key] !== fact.scope[key]) return false;
+    if (!layers) for (const key of constraints) if (fact.scope[key] !== undefined && fact.scope[key] !== null && query.scope[key] !== fact.scope[key]) return false;
     for (const [key, value] of Object.entries(query.scope)) if (fact.scope[key] !== undefined && fact.scope[key] !== null && fact.scope[key] !== value) return false;
     return true;
   }).map((fact) => structuredClone(fact));

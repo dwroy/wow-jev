@@ -11,6 +11,7 @@ const compile = <T>(name: string) => ajv.compile<T>({ $ref: `urn:wow-jev:layer-b
 const conditionValidator = compile<ActionCondition>('condition');
 const behavior = compile<BehaviorSpec>('behavior');
 const task = compile<LayerTaskSpec>('task');
+const worldTask = ajv.compile<LayerTaskSpec>(JSON.parse(readFileSync(new URL('../../../protocol/layer-task-world-v2.schema.json', import.meta.url), 'utf8')) as object);
 const candidate = compile<BehaviorCandidate>('candidate');
 const request = compile<BehaviorSelectionRequest>('request');
 const reply = compile<BehaviorSelection>('reply');
@@ -21,8 +22,14 @@ export function validateBehavior(value: unknown): asserts value is BehaviorSpec 
   if (!behavior(value)) throw new Error('behavior_schema');
   if (value.kind === 'turn_in_quest' && ((value.params.reward_policy === 'explicit') !== (typeof value.params.reward_id === 'string'))) throw new Error('behavior_reward_policy');
 }
-export function validateTask(value: unknown): asserts value is LayerTaskSpec {
-  if (!task(value)) throw new Error('task_schema');
+export function validateTask(input: unknown): asserts input is LayerTaskSpec {
+  const hasObjective = input !== null && typeof input === 'object' && 'params' in input && input.params !== null && typeof input.params === 'object' && 'objective_ref' in input.params;
+  if (!(hasObjective ? worldTask(input) : task(input))) throw new Error('task_schema');
+  const value = input as LayerTaskSpec;
+  if (hasObjective) {
+    const ref = value.params.objective_ref as unknown as import('../layers/contracts.js').WorldObjectiveRef;
+    if (value.params.quest_id !== String(ref.quest_key.native_id)) throw new Error('task_objective_quest_binding');
+  }
   value.behaviors.forEach(validateBehavior);
   if (new Set(value.behaviors.map(b => b.id)).size !== value.behaviors.length) throw new Error('task_duplicate_behavior');
   if (value.kind === 'kill_count' && value.behaviors.some(b => b.kind !== 'kill_target')) throw new Error('task_kill_behavior_required');
@@ -88,7 +95,8 @@ export function value(observation: Observation, name: string, policy: FieldPolic
 }
 export function conditionError(observation: Observation, conditions: ActionCondition[], policy: FieldPolicy): string | null {
   for (const c of conditions) {
-    const f = readKnown(observation, c.field, { ...policy, maxAgeMs: Math.min(c.max_age_ms, policy.maxAgeMs) });
+    const worldIdentity = c.field === 'target.entity_key' || /^quest\.[^.]+\.objective_ref$/.test(c.field);
+    const f = readKnown(observation, c.field, { ...policy, maxAgeMs: Math.min(c.max_age_ms, policy.maxAgeMs) }, worldIdentity);
     if (!f) return `condition_unknown_or_stale:${c.field}`;
     if (c.op === 'exists') continue;
     if ((c.op === 'gte' || c.op === 'lte') && (typeof f.value !== 'number' || (c.op === 'gte' ? f.value < c.value : f.value > c.value))) return `condition_failed:${c.field}`;

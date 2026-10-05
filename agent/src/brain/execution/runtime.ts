@@ -151,6 +151,10 @@ export class ExecutionBrain {
       based_on_observation_id: before.observation.id, window_token: before.observation.window?.token ?? null, at_ms: at, deadline_ms: Math.min(deadline, at + this.timeout),
       runtime_version_id: this.options.runtimeVersion.id, knowledge_sha256: this.options.runtimeVersion.knowledge.sha256,
       consulted_fact_ids: facts.map((fact) => fact.id), consulted_facts: facts, routes_sha256: routesHash(routes), routes };
+    if (this.options.runtimeVersion.schema_version === 2) {
+      request.world = structuredClone(this.options.runtimeVersion.world);
+      request.client_version = structuredClone(this.options.runtimeVersion.client_version);
+    }
     validateSelectionRequest(request);
     await this.active(this.event('brain.request', { request, image_artifact_id: before.artifact?.id ?? null, image_sha256: before.artifact?.sha256 ?? null }), epoch);
     let reply: BrainChoiceResult;

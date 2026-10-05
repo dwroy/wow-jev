@@ -80,3 +80,15 @@ M2实际包5f762a…2774再次打开查验：当前69933 ID可接/中文/区域�
 | 区域参考 | 40.984 / 48.948 | 24.587 / 30.708 |
 
 `out/acceptance/game-database-v2/milestone-3/{real-source-queries,query-baseline}.json`保留完整来源/blockers/测量。OS缓存未清除，区分新连接与复用连接，非物理冷缓存；不含TS进程启动成本，不设数据规模性能承诺。
+
+## 步骤4a：世界任务、严格layers来源与版本
+
+在game-db-execution：185Python与131TS定向回归、typecheck和diff-check通过，无skip。TS首轮129/131通过，middle身份新前置拦截使旧reason断言失配、评估字段改为game_fact_records/monster_statistic_records使旧计数字段断言失配；修正断言后两模块18/18通过，未放宽生产验证。早期brain测试硬编码旧机器/home/dai路径已改项目venv；实际默认禁用Python worker通过，不读凭据或上传。
+
+新world_task_bridge/WorldTaskClient保存原canonical断言和查询输入、固定两SHA/六维及typed ID。只支持明确kill_credit规范目标，原TDB creature credit不推kill；reference/unknown/不支持保留blockers。合成custom:synthetic两个同NPC目标分别ordinal0/count2和ordinal1/count1；全部hint executable=false。实际M2默认及refs blocked/currentnot_found/steps0。
+
+严格回放从世界原件重查完整plan，核phase/quest/目标断言及count/typed target、原观察/source/capture时间、L4/L3状态机、命令/输入timeline/receipt/释放/效果/计数与取消。模拟只experience，actual_game_sample_count=0、own_kill_count=null；输入结束不等于游戏效果。代码/prompt目录及当前reader规则逐byte匹配，Gitcommit来源标签由版本registry发布时验证；旧run迁移需带原件并使用匹配reader。知识v1字节和旧Eye+v1子layers路径兼容，新schema标记非法不允许fallback。
+
+独立索引探针：162个冻结文件SHA全部在protected_artifacts（169hash），23原始事件+3依赖事件；重复26duplicates/0inserted。原seq→seq+1；每64依赖SHA新增derived事件。模拟1/真实0样本，重算logSHA伪造game_effect仍前门拒绝。第二来源失败后artifact/run/events/account/character/candidate/evaluation/release均回滚为0。索引保留JSONL、manifest、世界source artifacts、runtime/plan/input知识、代码/prompt与有支持时的原Eye附件；不遍历registry/key。来源批次256、raw总64MiB、依赖总256MiB，单文件64MiB；超预算拒绝。
+
+版本8项独立实际SQLite测试覆盖固定reader不兼容时发布前拒绝、world A/B切换、deepFreeze、旧v1原字节、SHA/原件/部分包/symlink/未声明文件、知识证据、父代码/prompt固定及rollback。真实source/包旧引用不删除。v2 live/observe入口显式尚未现场验证，早于native程序拒绝；本轮只有离线/模拟，尚待固定commit后实际默认CLI及主checkout闭环验收。

@@ -877,7 +877,87 @@
               }
             }
           }
+        },
+        "world": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "manifest_sha256",
+            "sqlite_sha256",
+            "directory"
+          ],
+          "properties": {
+            "manifest_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "sqlite_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "directory": {
+              "const": "world"
+            }
+          }
+        },
+        "client_version": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "branch",
+            "expansion",
+            "patch",
+            "build",
+            "region",
+            "locale"
+          ],
+          "properties": {
+            "branch": {
+              "enum": [
+                "retail",
+                "classic-era",
+                "classic-progression",
+                "classic-seasonal",
+                "classic-anniversary",
+                "custom"
+              ]
+            },
+            "expansion": {
+              "type": "string",
+              "minLength": 1
+            },
+            "patch": {
+              "type": "string",
+              "minLength": 1
+            },
+            "build": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "region": {
+              "enum": [
+                "cn",
+                "us",
+                "eu",
+                "kr",
+                "tw"
+              ]
+            },
+            "locale": {
+              "type": "string",
+              "pattern": "^[a-z]{2}_[A-Z]{2}$"
+            }
+          }
         }
+      },
+      "dependencies": {
+        "world": [
+          "client_version"
+        ],
+        "client_version": [
+          "world"
+        ]
       }
     },
     "goal": {

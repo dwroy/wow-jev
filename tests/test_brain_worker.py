@@ -47,6 +47,18 @@ def test_disabled_does_not_read_credentials_image_or_call_network():
     assert result['status'] == 'disabled' and result['reply'] is None and result['model'] is None
 
 
+def test_world_and_client_request_bindings_are_paired_and_legacy_shape_stays_valid():
+    schema = bw.CHOICE_SCHEMA['definitions']['request']
+    legacy = request()
+    world = {'manifest_sha256': 'b' * 64, 'sqlite_sha256': 'c' * 64, 'directory': 'world'}
+    version = {'branch': 'custom', 'expansion': 'Synthetic', 'patch': '1.0.0', 'build': 1001, 'region': 'cn', 'locale': 'zh_CN'}
+    assert bw.matches(legacy, schema, bw.CHOICE_SCHEMA)
+    assert not bw.matches({**legacy, 'world': world}, schema, bw.CHOICE_SCHEMA)
+    assert not bw.matches({**legacy, 'client_version': version}, schema, bw.CHOICE_SCHEMA)
+    assert bw.matches({**legacy, 'world': world, 'client_version': version}, schema, bw.CHOICE_SCHEMA)
+    assert not bw.matches({**legacy, 'world': {**world, 'directory': '../world'}, 'client_version': version}, schema, bw.CHOICE_SCHEMA)
+
+
 def test_valid_seed_choice_and_payload_are_bounded(tmp_path):
     received = []
     def transport(payload, *_args):
