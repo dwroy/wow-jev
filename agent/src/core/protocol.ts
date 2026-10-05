@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { Ajv, type ErrorObject, type ValidateFunction } from 'ajv';
-import type { NativeAction } from '../hand/protocol.js';
+import { assertNativeTimeline, type NativeAction } from '../hand/protocol.js';
 
 export interface Envelope {
   protocol: 'wow-agent';
@@ -134,6 +134,9 @@ export function semanticErrors(message: AgentMessage): string[] {
     if (message.deadline_ms < message.at_ms) errors.push('/deadline_ms: 不得早于动作消息 at_ms。');
     if (message.actor === 'jev' && !message.decision_id) errors.push('/decision_id: Jev 输入必须关联候选选择决策。');
     if (message.actor !== 'jev' && message.decision_id !== undefined) errors.push('/decision_id: 仅 Jev 输入使用此决策关联。');
+    if(message.mode==='live'&&message.action.name==='native_input'&&message.action.args.kind==='timeline'){
+      try{assertNativeTimeline(message.action.args);}catch{errors.push('/action/args: 时间线必须有界、排序且每次按下配对释放。');}
+    }
   } else {
     const { started_at_ms: start, finished_at_ms: finish } = message.timing;
     if (start !== null && start > message.at_ms) errors.push('/timing/started_at_ms: 不得晚于回执 at_ms。');
