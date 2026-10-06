@@ -2,6 +2,8 @@
 
 更新：2026-10-06。实施起点47423e8，新机器 `/home/dw/Projects/wow-jev`；规划见 `docs/handoff-game-database.md`。
 
+TS口径更正：本文里程碑四的131项为17文件定向回归，未覆盖其余35文件/251项，不能表示全量通过。2026-10-06用户第1步已实际重跑dcbf332全量335项（333通过/2失败）和7ccd361全量382项（381通过/1失败），均0skip；旧测试无丢失，新增47项。共同失败是既存mock写死本机不存在的/usr/bin/node。完整比对、环境原因与原始日志见[TS测试数量核查](ts-suite-audit.md)，当前TS全量验收尚非全绿。
+
 ## 步骤0：恢复与旧接口基线
 
 安全备份本机未跟踪旧HANDOFF，保留wow-jev.bundle与pixel-bridge工作树；主checkout切到codex/agent-system。实施在项目独立工作树，不推送。

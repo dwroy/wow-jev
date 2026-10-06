@@ -4,7 +4,9 @@
 
 ## 最新决定与下一阶段
 
-**2026-10-06 里程碑四完成离线闭环，四个里程碑已本地集成验收。** 实现提交a6f5cce已按ff-only合入主checkout，主目录185Python/131TS/0skip、typecheck通过。实际world-demo在固定提交执行接取→两独立目标→交付四任务，ordinal0=2/ordinal1=1，接受/交付/奖励scenario证据完整；game_effect=unverified，real_inputs=0。独立严格回放产生4条experience/4sources，重复来源去重；新知识版本实际召回4条，SQLite索引4候选+评估+注册，simulated_samples=4、actual_game_samples=0。136事件（原始108+28派生依赖）重复索引0新增，444个受保护SHA包含全冻结原件。
+**2026-10-06 用户第1步：TS测试数量核查完成，仅做本步，后续等待指示。** 两个独立工作树保持快照源码不变，分别执行原始全量`npm test`：dcbf332为46文件/335项、333通过/2失败；核查开始时HEAD 7ccd361为52文件/382项、381通过/1失败；均0skip/0cancel/0todo，exit1。无测试删除、禁用或漏发现，旧335项全保留，新增47项。上次131仅为17文件定向回归（84旧+47新），未运行剩余35文件/251项，不能表示全量通过。旧版独有失败是已修正的/home/dai Python路径；两版共同失败是既存PNG CLI mock写死/usr/bin/node，本机该路径不存在，仍未修复。当前TS全量验收尚非全绿。详见`docs/acceptance/ts-suite-audit.md`；原始两版完整TAP、逐文件/逐用例比对、路径探针及SHA清单在`out/acceptance/ts-suite-audit/`。本步仅更正文档，不推送。
+
+**2026-10-06 里程碑四完成离线闭环，四个里程碑已本地集成，完整TS验收状态以上述核查为准。** 实现提交a6f5cce已按ff-only合入主checkout，主目录185项Python和17文件/131项TS定向回归、typecheck通过，0skip；当时未运行完整TS套件。实际world-demo在固定提交执行接取→两独立目标→交付四任务，ordinal0=2/ordinal1=1，接受/交付/奖励scenario证据完整；game_effect=unverified，real_inputs=0。独立严格回放产生4条experience/4sources，重复来源去重；新知识版本实际召回4条，SQLite索引4候选+评估+注册，simulated_samples=4、actual_game_samples=0。136事件（原始108+28派生依赖）重复索引0新增，444个受保护SHA包含全冻结原件。
 
 world A SHA `5d7576f2ef44b13f7dcaec01d61b85e72348c851d848824378320992ecd1e827` 切到B `90427fa1dea8d30bd0e1491ac4ef7ce79642a1bda86c45c175cbef0c468059aa` 后，旧4run仍按A回放；新B任务不召回A范围经验，持有的冻结snapshot不变；实际rollback到synthetic-world-learned后旧run再通过。知识SHA `9c2aac77dc4cc66a3a4d22e63b3d0815fb69b951bfa6d3fda85e6ae775bee2de`。默认world-demo及learner learn/版本inspect/rollback CLI已实测，本轮全程无模型、凭据读取、Windows/游戏输入或远端push。
 
