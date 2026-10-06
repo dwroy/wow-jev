@@ -43,4 +43,4 @@
 
 bindings字段为world_pack_sha256/client_version/quest_key、starter/finisher（typed entity+target_signature或null）、objectives（ordinal/entity/target_signature/attack_ability）、reward_policy:none；budget明确task/behavior期限与次数、action_duration_ms。绑定配置是候选配方，不是当前目标/距离/焦点/对话/效果证明。现存M2示例配置在本阶段out中，运行仍blocked。
 
-阶段A源提交冻结后再在主checkout执行新demo与四个严格回放，结果另存同证据目录；本文全量数字只指已经实际完成的检查。阶段B和真实场景尚未据此宣称完成。
+阶段A源提交`b0cafb2`已ff-only合入主checkout，实际`world-demo`及四个独立严格回放均exit0：接取true、ordinal0=2/ordinal1=1、交付/奖励true，real_inputs=0、game_effect=unverified、scenario_effect=confirmed。`main-demo/summary.json`、`main-demo.log`、`main-replay-0..3.log`和`main-acceptance.json`保留原始结果。阶段A完成离线集成验收；阶段B和真实场景尚未据此宣称完成。
