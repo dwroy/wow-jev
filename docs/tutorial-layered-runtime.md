@@ -48,7 +48,7 @@ L3 在独立同帧 `dialog.open=false` 与 CV `dialog.absence_coverage_complete=
 
 `compareTutorialDecision` 复用 `chooseBenchmarkCandidate`，针对同一原观察和相同安全候选先跑分层代码决策，再跑 single 的视觉+大脑只读决策。它没有 Body/hand/native 能力，input/effect 计数为0。一次只读决策不是成对游戏动作性能测试；模型未配置或未实际调用时不能报告模型延迟。多个样本、有效动作/分钟和 QPC 域观察→发送 p50/p95 留给常驻宿主现场采样。
 
-本阶段只有可接线 API 和离线验收，没有可运行的现场任务 driver，没有 Windows 桌面/模型/游戏输入，也没有把旧图写成当前实测断言。`saveObservations=false` 和 `bindSource(Collected,intent,context)` 已供后续宿主使用：source 回调接收副本，回调后再次检查统一闸。**旧 live 闸仍要求实际截图 artifact**；无 PNG 的 memory frame 需要阶段三独立协议、原帧登记与验证，不能伪造 file SHA 或把 WGC 标成 PrintWindow。当前文件识别也不能把 ROI SHA 当整图 capture SHA。阶段三再接共享识别核心的显式 file/memory 证明、常驻通道和现场 driver。
+阶段二提供接线 API；阶段三增加 `tools/layered_tutorial.py` 的现场 driver，见下文。旧 live 文件闸仍要求实际截图 artifact。新 WGC memory 分支只接受 Resident 当前连接私有登记的原消息、原括号时间、完整映射后的受控 clone 与同一个 `MemoryFrameRegistry.verify`，原生发送前再次核验当前帧/意图/目标。JSON proof 或宽松 verifier 回调不能授权来源。`artifact=null`、`artifacts=[]` 保留其内存性质，不伪造 file SHA 或将 WGC 标成 PrintWindow。共享识别核心通过显式 `file_screenshot|resident_memory_roi` source proof 复用，ROI SHA 绝不填入整图 capture SHA。
 
 可重复专项检查：
 
@@ -65,3 +65,46 @@ cd ..
 ## 完整Git快照验收（2026-10-07）
 
 候选9208675提交后完整回归：TS567/567（旧546+新增21），Python765passed+3原有strict xfail（旧729+新增36，收集768，失败/跳过0），typecheck通过。首次未提交schema导致14项共享Git归档before-hook失败，原始日志保留；专项110TS/73Python并不替代上述完整运行。主证据out/acceptance/layered-tutorial-20261006/stage-2。实际Windows执行/内存frame统一闸/无PNG热输入与现场局部断言写入尚待下一阶段，不报告第一个任务成功。
+
+## 阶段三入口与独立来源
+
+`tools/layered_tutorial.py readonly|run|bootstrap|cancel` 是固定入口。Python 只转发字面 argv 和取消信号到项目 TS，不持有桌面/输入端口。`run` 先调用既有冷恢复命令，冷恢复确认可玩世界即停；随后仅一次 `/IT` 启动常驻宿主，热循环走 Resident JSON 通道。教程只允许一次最长150ms的交互（当前计划60ms），`max_actions=1`，普通输入要求前台、窗口身份与当前源闸；热入口不另做 focus click。恢复入口仍按 AGENTS 的空闲/完整可见/一次点击例外独立管理。登录、凭据、验证码、协议、更新等保留原恢复阻塞。
+
+现场配置必须包含精确 `target`（PID/start/HWND/class/executable/session1）、`client_version` 六维、`client_probe_path` 与整个 probe SHA、冻结世界路径/manifest/SQLite SHA、运行库路径、教程校准路径/SHA，以及1000–300000ms预算。可选 `absence_calibration_path` 与其 SHA 必须成对。`readonly_single=true` 只有显式模型上传授权才可启用。没有默认客户端 profile、原生角色 GUID、键位或对话缺席值。
+
+客户端 probe 格式为 `wow-tutorial-client-probe` version1：
+
+- `target` 与本轮 Resident 的精确进程实例绑定；`client_version` 六维全部已核实。
+- `metadata` 只允许 pid/proc/exe/start_ticks/file_version/branch/region/text_locale。原件来自固定只读 FileVersionInfo 与 Config.wtf 的 portal/textLocale 白名单，不能复制整个 Config.wtf、账户或凭据。
+- `metadata_source={path,sha256,scope:"session0_readonly_process_file_metadata",captured_at}` 指向原始只读结果；TS/Python 重新哈希原件并语义比较。UTC 是该独立采样的注记。
+- `window_source={target_scope:"retail_wow",frame_id,seq,windows_clock_id,source_qpc_ms,client_width,client_height,dpi}` 来自真正 session1 WGC 证据，保留原 QPC。仅与同 QPC/同进程布局的新帧比较，窗口源参考最大300s；与元数据 UTC 不相减。
+- `review={reviewer:"root",reviewed_at,expansion_verified:true}` 为独立审核；资料确认扩展不能冒作 CV。未核实 expansion/build/locale/region 或源缺失即 blocked。
+
+输入路径严格接受 `HostReady.target_scope` 与 `memory_frame.target_scope` 的 `retail_wow`。`recording_fixture` 和缺 scope 都在教程、局部事实和 Seed 构造前拒绝；Native身份 target 本身不混入 scope，原 LocalSession exact schema保持不变。角色标识为本会话用户指定的联盟战士“小啊”，没有从窗口推导账户/角色原生ID。
+
+`readonly` 取得当前低频完整 PNG 和 Native CV，原图SHA/FrameID/QPC/校准、snapshot和客户端probe核验后，由单写 Python 将真正观察条目存到 agent.sqlite；只读宿主没有输入执行器。`run` 同样登记局部步骤，低频编译原验证的 L4 计划后，重新取得新 hot sample，再经既有任务链执行。`collect(true)` 也只采内存 ROI，不能偷偷编码PNG。动作结束后 `collectEffect` 显式采独立新完整PNG+OCR；只有原 OCR 的中文完整 NPC 标题与左侧关联控件几何配对才登记 `conversation_open`。Python 再从原 `native_evidence.ocr` 重算配对并核对派生 source/time/proof，不相信 caller 改写的 dialog.open。CV 写入也重查原校准JSON/资产SHA、归一化比例/锚点/offset/阈值和 Native ROI 覆盖。
+
+每轮保存实际源码清单SHA和Git HEAD、配置原件SHA、三类prompt原件SHA，以及实际 `knowledge.json` SHA；该最小清单范围是冻结世界参考和局部断言规则，无已注册学习知识快照。世界包SHA不冒作knowledge版本。Native二进制/原协议/校准payload哈希与一次任务生命周期在 `resident-host/task-lifecycle.json` 保留。实际局部断言SHA关联计划和贯穿各层的trace。
+
+```bash
+python3 tools/layered_tutorial.py readonly --config CURRENT_CONFIG.json --run-dir /home/dw/Projects/wow-jev/out/CURRENT_READONLY
+python3 tools/layered_tutorial.py bootstrap --snapshot CURRENT_SNAPSHOT.json --image ORIGINAL.png --review ROOT_SAME_SOURCE_REVIEW.json --output /home/dw/Projects/wow-jev/out/CURRENT_ABSENCE.json
+python3 tools/layered_tutorial.py run --config CURRENT_CONFIG.json --run-dir /home/dw/Projects/wow-jev/out/CURRENT_RUN --finite-input-authorized --recovery-authorized --target-character 小啊
+python3 tools/layered_tutorial.py cancel --run-dir /home/dw/Projects/wow-jev/out/CURRENT_RUN
+```
+
+`bootstrap` 只生成审核过的精确参考，不产生新观察或输入许可。当前 absence 实验方案要求左45%×90%全部BGRA(alpha255)与审核图精确相等，Native wire ROI 为 `dialog-absence-dialog_absence`。海水/旗帜/角色动画大概率使后续帧不相等，结果保持unknown，不能保证动态世界一键完成。稳定可用的方案仍需现场独立静态对话框正/反校准与覆盖验证；未取得前，默认不发交谈输入。不能以NPC+hint推absence，不能将模型或人工审核改写成fresh CV；不可用时保存原图并blocked。
+
+可用 Ctrl+C 取消；独立 cancel 命令仅在两次核对协调器 PID、Linux start_ticks 和原 cmdline SHA后发SIGINT，防止PID复用。取消信号经既有层和 Resident.cancel 发原生释放，租约/EOF看门狗独立兜底。退出时再要求真实release回执、Native ledger空/执行器退出/capture释放以及计划任务删除后回查，任一缺失不得从 exitCode0 推定成功。只读 `no_executor_acquired` 与物理按键释放证明分开报告。完成首交谈或任一阻塞即返回 summary，不执行下一个任务。
+
+只读single端口只能调用现有Seed视觉与大脑worker，不持有hand/Body/native；凭据由worker按需读取，fixture从上传前排除。同一初始图的原源时间保留，依序记录分层代码决策和single决策的协调器耗时，`count_scope=decision_only,n=1`。未配置、调用失败或取消明确unmeasured。代码实际帧→首次SendInput在WindowsQPC域另记p50/p95；这两个范围不能相减或报加速倍数。输入已发出与独立效果确认分别记录，首交谈n≤1的有效动作/分钟仅描述单次窗口，不作为持续吞吐量；recording fixture n30另行验收。
+
+本轮离线新增20项TS教程Resident/来源/取消/cleanup/时钟、冷/热计数与跨Python→TS完整链专项，连同旧21项教程测试41/41通过；新增32项Python事实/原OCR/probe/校准/冻结包/幂等、原件重查与完整Native schema边界专项通过，typecheck通过。正路径使用明确contract fixture并通过实际Native唯一schema，不是实际Native/WGC现场样本；真实WGC采样、初始局部事实、视觉调用、首交谈与实际延迟均pending。RDP断开后不再轮询、不启动Windows任务、不发输入；完整集成数字和推送由主checkout验收记录。
+
+收尾专项实际151/151 TS（上述教程41加恢复/Body/L3/L4/memory闸回归）、68/68 Python（新32加旧局部断言36）、typecheck通过，失败/取消/跳过0；原始日志在 `out/acceptance/layered-tutorial-20261006/stage-3-tutorial/`。这组数字只表示指定专项，不代替主checkout完整回归。原本将模板/probe列为额外artifact但reader只重查顶层图片/JSON的缺口已修复：LocalAssertions读/写均重查原event的全部索引artifact字节。
+
+独立 Python register 入口在落库前用固定离线 Node/Ajv bridge 复用 `assertResident`、实际 resident/native 两份唯一schema，完整验证原sample/evidence字段及源时钟/窗口/帧约束，不另写字段白名单当schema。缺字段、错类型、extra字段直接拒绝，验证器/依赖环境故障与原源schema拒绝分开记；不启动Windows、模型或输入。Python contract fixture也包含完整合法DTO。
+
+summary的 `input_counts.cold|hot|total` 分开记录尝试、已发命令与known/lower_bound范围。冷恢复已经发点击后blocked/cancelled的原terminal结果仍保存，不能因exit1丢掉计数。stdout损坏先查原冻结summary；已启动但无法取得终态时0仅为已知下界。热链原Native execute回执即使后续Task异常也保留，重复回执不双计；未取得终态回执的尝试保持lower_bound。顶层input_issued为冷+热总数，真实教程QPC延迟只统计hot；确认交谈效果独立，不把恢复点击当有效游戏任务动作。
+
+恢复现场时的验收顺序：先取得用户重新连接且窗口准备好的通知，再运行独立只读Resident确认WGC新帧/客户区/DPI/焦点/Native cursor，并补客户端probe的真实windowSource；身份或源未知停止。审核当前完整截图的教程指令与独立对话缺席覆盖；exact参考在动态场景不匹配时停止并安排静态对话正反校准，不尝试输入来“证明”缺席。只读模式与明确cancel/lease/任务删除的现场证据在前，有限一次交互在后。输入后只采独立效果图并核对标题/控件配对；源不配对时unknown并保存图，交谈确认或阻塞都停，不点接受、不进入下一项任务。

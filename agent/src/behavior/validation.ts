@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { Ajv } from 'ajv';
 import type { ActionCondition, JsonValue, Observation, ObservedField } from '../core/protocol.js';
-import type { BehaviorCandidate, BehaviorSelection, BehaviorSelectionRequest, BehaviorSpec, LayerMode, LayerTaskSpec } from '../layers/contracts.js';
+import type { BehaviorCandidate, BehaviorSelection, BehaviorSelectionRequest, BehaviorSpec, BoundTargetScope, TargetScopeVerifier, LayerMode, LayerTaskSpec } from '../layers/contracts.js';
 
 const schema = JSON.parse(readFileSync(new URL('../../../protocol/layer-behavior-v1.schema.json', import.meta.url), 'utf8')) as object;
 const ajv = new Ajv({ strict: true, allErrors: true });
@@ -118,4 +118,23 @@ export function bindingError(spec: BehaviorSpec, o: Observation, policy: FieldPo
   }
   if (typeof spec.params.destination_id === 'string' && value(o, 'navigation.destination_id', policy) !== spec.params.destination_id) return 'navigation_destination_changed_or_unknown';
   return null;
+}
+
+/** Resolve and freeze native scope while this exact observation is still active.
+ * Existing untagged game/simulation observations retain their legacy semantics. */
+export function resolveTargetScope(o: Observation, policy: FieldPolicy, verifier?: TargetScopeVerifier, required = false): { proof: BoundTargetScope | null; error: string | null } {
+  const declared=o.fields['window.scope'];
+  if(!verifier&&!declared&&!required)return {proof:null,error:null};
+  if(!verifier)return {proof:null,error:'target_scope_not_native_verified'};
+  try {
+    const proof=verifier(o),field=readKnown(o,'window.scope',policy,true);
+    if(!proof||!['retail_wow','recording_fixture'].includes(proof.scope)||!field||field.value!==proof.scope||
+      policy.mode==='live'&&field.source!=='window'||proof.source_observation_id!==o.id||!o.window||
+      proof.window.token!==o.window.token||proof.window.pid!==o.window.pid||!/^0x[0-9a-f]+$/i.test(proof.window.hwnd)||
+      BigInt(proof.window.hwnd)!==BigInt(o.window.hwnd)||!/^[a-f0-9]{64}$/.test(proof.native_target_id))return {proof:null,error:'target_scope_source_or_window_mismatch'};
+    return {proof:structuredClone(proof),error:null};
+  }catch{return {proof:null,error:'target_scope_verification_failed'};}
+}
+export function targetScopeKey(proof: BoundTargetScope): string {
+  return hash([proof.scope,proof.native_target_id,proof.window.token,BigInt(proof.window.hwnd).toString(),proof.window.pid]);
 }

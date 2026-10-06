@@ -682,6 +682,61 @@
             "max_duration_ms",
             "max_actions"
           ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "kind": {
+              "const": "activate_control"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "target_signature",
+                "control_id"
+              ],
+              "properties": {
+                "target_signature": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "control_id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                },
+                "action_duration_ms": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 150
+                }
+              }
+            },
+            "max_duration_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 120000
+            },
+            "max_actions": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "params",
+            "max_duration_ms",
+            "max_actions"
+          ]
         }
       ]
     },

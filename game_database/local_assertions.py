@@ -116,7 +116,10 @@ class LocalAssertions:
             raise ValidationError('local assertion: fact absent or duplicated in original')
         if value['capture_sha256'] not in event['artifact_sha256s'] or value['calibration_sha256'] not in event['artifact_sha256s']:
             raise ValidationError('local assertion: evidence artifact absent from event')
-        for sha in [value['capture_sha256'], value['calibration_sha256']]:
+        # Every indexed source witness belongs to this original event: profile
+        # PNG assets, raw snapshot and separate client-probe files are as
+        # material as the top-level PNG/calibration pair.
+        for sha in event['artifact_sha256s']:
             self.runtime.get_artifact(sha)  # Rehash actual bytes, including on reads.
 
     def put(self, record: Any) -> dict:

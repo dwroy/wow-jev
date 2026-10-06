@@ -1,5 +1,7 @@
 # 联盟战士现场验收入口
 
+2026-10-07常驻会话路线保留前台输入闸，WGC与ROI在Windows内存内处理，低频证据/OCR单独请求。教程由局部事实与既有L4/L3/Body执行，恢复只到可玩世界；详见[教程分层入口](tutorial-layered-runtime.md)、[常驻宿主](resident-session.md)、[常驻集成实测](acceptance/resident-session-integration.md)。专用记录窗口以独立fixture_effect验收相同执行链，不能代替游戏效果。当前RDP会话1已断开，用户要求只完成离线代码/测试/文档后推送并停止，不轮询RDP或发送输入；实际WGC/30次控件输入/持键断链及首个交谈待用户通知窗口就绪。
+
 2026-10-06新增受限会话启动/选角/焦点恢复和首个交谈入口见[session-recovery](session-recovery.md)。最新用户授权允许空闲/无遮挡且身份确认后的单次恢复点击，普通输入仍前台；本节原背包对照方案不自动获得任意失焦输入权限。恢复的code/冷桥/QPC输入/独立效果证据另记，不冒充single/layered成对跑分。
 
 离线交付时客户端仍在安装，当时仅运行`prepare`、`validate`和`--help`。2026-10-06用户已授权Windows桌面只读截图、低频视觉及“联盟战士第一个教程任务”的有限输入，保留前台校验、有限时长、取消及独立释放要求；现场最新授权与实际阻塞以`HANDOFF.md`和[第一个任务验收记录](acceptance/exiles-first-task.md)为准。下面通用基准命令仍需满足各自前置证据，不因客户端启动或焦点恢复自动串联执行；现有背包对照入口不能冒充教程NPC任务执行入口。

@@ -97,7 +97,7 @@ export class NativeEyeClient {
       this.child.stdin.write(`${JSON.stringify(command)}\n`, (error) => { if (error) this.fail(new Error('eye_write_failed')); });
     });
   }
-  async sample(save = false): Promise<SampleBracket> {
+  async sample(save = false): Promise<SampleBracket<EyeSample>> {
     const start = this.options.now();
     const sample = await this.request('sample', save);
     const received = this.options.now();

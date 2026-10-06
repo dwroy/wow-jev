@@ -9,11 +9,13 @@ import type { NativeEyeClient } from './client.js';
 import { EyeState, type SourceImage } from './state.js';
 import type { SeedClient } from './seed.js';
 import type { EyeRunStore } from './store.js';
-import type { SampleBracket } from './protocol.js';
+import type { EyeSample, SampleBracket } from './protocol.js';
+import type { ResidentMemorySample } from '../resident/protocol.js';
+import type { MemoryFrameProof } from './memory-frame.js';
 import { traceAsync, type TraceRecorder } from '../benchmark/trace.js';
 
 export interface EyeRuntimeOptions { now: () => number; seed?: SeedClient; seedIntervalMs?: number; cvMaxAgeMs?: number; seedMaxAgeMs?: number; artifactConvert?: (path: string) => Promise<string>; effectWaitMs?: number; trace?: TraceRecorder; windowsClockId?: string }
-export interface Collected { observation: Observation; bracket: SampleBracket; artifact: Artifact | null }
+export interface Collected<T extends EyeSample | ResidentMemorySample = EyeSample | ResidentMemorySample> { observation: Observation; bracket: SampleBracket<T>; artifact: Artifact | null; memoryProof?: MemoryFrameProof }
 export class EyeRuntime {
   readonly state: EyeState;
   private seq = 0; private lastSeed = -Infinity; private seedJobs = new Set<Promise<void>>();
@@ -33,7 +35,7 @@ export class EyeRuntime {
     if (!result.ok) throw new Error(`eye_observation_invalid:${result.errors.join('; ')}`);
     await this.store.append('observation', observation, this.options.now());
   }
-  async collect(save = false): Promise<Collected> {
+  async collect(save = false): Promise<Collected<EyeSample>> {
     const bracket = await traceAsync(this.options.trace, 'bridge', null, () => this.native.sample(save), {includes:'native_capture_cv_artifact_transport'});
     const nativeTiming = bracket.sample.processing_timing, clockId = this.options.windowsClockId;
     if (nativeTiming && clockId && this.options.trace) {
@@ -77,7 +79,7 @@ export class EyeRuntime {
     return { observation, bracket, artifact };
     });
   }
-  async recordAction(hand: NativeInputClient, action: NativeAction, expectInventory?: boolean): Promise<{ receipt: ExecutionReceipt; before: Collected; after: Observation }> {
+  async recordAction(hand: NativeInputClient, action: NativeAction, expectInventory?: boolean): Promise<{ receipt: ExecutionReceipt; before: Collected<EyeSample>; after: Observation }> {
     if (this.actionRecorded) throw new Error('single_action_run_already_used');
     this.actionRecorded = true;
     if (!hand.ready || !this.native.ready || BigInt(hand.ready.window.hwnd) !== BigInt(this.native.ready.window.hwnd) || hand.ready.window.pid !== this.native.ready.window.pid) throw new Error('record_action_hand_binding_mismatch');
@@ -108,7 +110,7 @@ export class EyeRuntime {
     finally { hand.off('receipt', rawInput); }
     const receivedInputAt = input ? this.options.now() : null;
     if (input && !sawTerminal) await this.store.append('native_input', { direction: 'in', message: input, action_id: intent.id }, this.options.now());
-    let after: Collected | null = null; let afterObservation: Observation | null = null; let confirmed = false;
+    let after: Collected<EyeSample> | null = null; let afterObservation: Observation | null = null; let confirmed = false;
     const pre = before.observation.fields['ui.inventory_open'];
     const fullInput = input !== null && input.status === 'completed' && ['sent', 'released'].includes(input.input.status) && input.input.released &&
       input.input.events_requested > 0 && input.input.events_inserted === input.input.events_requested;

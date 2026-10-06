@@ -1,0 +1,1534 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:wow-resident:protocol:session-v1",
+  "title": "Bounded session-1 resident WGC and input transport v1",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/command"
+    },
+    {
+      "$ref": "#/definitions/ready"
+    },
+    {
+      "$ref": "#/definitions/sample"
+    },
+    {
+      "$ref": "#/definitions/receipt"
+    },
+    {
+      "$ref": "#/definitions/evidence"
+    },
+    {
+      "$ref": "#/definitions/stopped"
+    },
+    {
+      "$ref": "#/definitions/error"
+    }
+  ],
+  "definitions": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ticks": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,18}$"
+    },
+    "hwnd": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{1,16}$"
+    },
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "domain": {
+          "const": "windows-qpc"
+        },
+        "at_ms": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "domain",
+        "at_ms"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "start_ticks": {
+          "$ref": "#/definitions/ticks"
+        },
+        "hwnd": {
+          "$ref": "#/definitions/hwnd"
+        },
+        "class": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "executable": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "windows_session_id": {
+          "const": 1
+        }
+      },
+      "required": [
+        "pid",
+        "start_ticks",
+        "hwnd",
+        "class",
+        "executable",
+        "windows_session_id"
+      ]
+    },
+    "rect": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "left": {
+          "type": "integer",
+          "minimum": -65536,
+          "maximum": 65536
+        },
+        "top": {
+          "type": "integer",
+          "minimum": -65536,
+          "maximum": 65536
+        },
+        "right": {
+          "type": "integer",
+          "minimum": -65536,
+          "maximum": 65536
+        },
+        "bottom": {
+          "type": "integer",
+          "minimum": -65536,
+          "maximum": 65536
+        }
+      },
+      "required": [
+        "left",
+        "top",
+        "right",
+        "bottom"
+      ]
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hwnd": {
+          "$ref": "#/definitions/hwnd"
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "client_width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "client_height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "focused": {
+          "type": "boolean"
+        },
+        "class": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "executable": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "start_ticks": {
+          "$ref": "#/definitions/ticks"
+        },
+        "dpi": {
+          "type": "integer",
+          "minimum": 48,
+          "maximum": 768
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "minimized": {
+          "type": "boolean"
+        },
+        "client_rect": {
+          "$ref": "#/definitions/rect"
+        }
+      },
+      "required": [
+        "hwnd",
+        "pid",
+        "client_width",
+        "client_height",
+        "focused",
+        "class",
+        "executable",
+        "start_ticks",
+        "dpi",
+        "visible",
+        "minimized",
+        "client_rect"
+      ]
+    },
+    "roi": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "sha256": {
+          "$ref": "#/definitions/sha256"
+        },
+        "calibration_id": {
+          "$ref": "#/definitions/id"
+        },
+        "calibration_sha256": {
+          "$ref": "#/definitions/sha256"
+        }
+      },
+      "required": [
+        "id",
+        "x",
+        "y",
+        "width",
+        "height",
+        "sha256",
+        "calibration_id",
+        "calibration_sha256"
+      ]
+    },
+    "memory_frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "$ref": "#/definitions/uuid"
+        },
+        "channel_generation": {
+          "$ref": "#/definitions/uuid"
+        },
+        "host_pid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "host_start_ticks": {
+          "$ref": "#/definitions/ticks"
+        },
+        "windows_clock_id": {
+          "$ref": "#/definitions/id"
+        },
+        "target": {
+          "$ref": "#/definitions/target"
+        },
+        "frame_id": {
+          "$ref": "#/definitions/id"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "layout_id": {
+          "$ref": "#/definitions/sha256"
+        },
+        "client_width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "client_height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "dpi": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "source_qpc_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "request_received_qpc_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "roi_sha256": {
+          "$ref": "#/definitions/sha256"
+        },
+        "full_frame_sha256": {
+          "type": "null"
+        },
+        "rois": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/definitions/roi"
+          }
+        },
+        "target_scope": {
+          "enum": [
+            "retail_wow",
+            "recording_fixture"
+          ]
+        }
+      },
+      "required": [
+        "session_id",
+        "channel_generation",
+        "host_pid",
+        "host_start_ticks",
+        "windows_clock_id",
+        "target",
+        "frame_id",
+        "seq",
+        "layout_id",
+        "client_width",
+        "client_height",
+        "dpi",
+        "source_qpc_ms",
+        "request_received_qpc_ms",
+        "roi_sha256",
+        "full_frame_sha256",
+        "rois",
+        "target_scope"
+      ]
+    },
+    "input_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "known",
+            "unknown"
+          ]
+        },
+        "cursor_visible": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "cursor_free": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "mouse_buttons_held": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "cursor_flags": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "capture_hwnd": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/hwnd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_thread_id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sampled_qpc_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "cursor_visible",
+        "cursor_free",
+        "mouse_buttons_held",
+        "cursor_flags",
+        "capture_hwnd",
+        "target_thread_id",
+        "sampled_qpc_ms",
+        "reason"
+      ]
+    },
+    "reason": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/definitions/id"
+        }
+      },
+      "required": [
+        "code"
+      ]
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "ok",
+            "unavailable"
+          ]
+        },
+        "method": {
+          "const": "wgc"
+        },
+        "started_qpc_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "finished_qpc_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "request_received_qpc_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "arrived_qpc_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "reason": {
+          "$ref": "#/definitions/reason"
+        }
+      },
+      "required": [
+        "status",
+        "method",
+        "started_qpc_ms",
+        "finished_qpc_ms",
+        "request_received_qpc_ms",
+        "arrived_qpc_ms"
+      ]
+    },
+    "detector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "known",
+            "unknown",
+            "unavailable"
+          ]
+        },
+        "value": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "reason": {
+          "$ref": "#/definitions/reason"
+        },
+        "calibration_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "status",
+        "value",
+        "confidence",
+        "calibration_id"
+      ]
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "observation_id": {
+          "$ref": "#/definitions/id"
+        },
+        "intent_id": {
+          "$ref": "#/definitions/id"
+        },
+        "actor": {
+          "enum": [
+            "code",
+            "jev",
+            "brain"
+          ]
+        },
+        "plan_id": {
+          "$ref": "#/definitions/id"
+        },
+        "plan_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "task_id": {
+          "$ref": "#/definitions/id"
+        },
+        "task_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "run_epoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gate_id": {
+          "$ref": "#/definitions/sha256"
+        },
+        "action_sha256": {
+          "$ref": "#/definitions/sha256"
+        }
+      },
+      "required": [
+        "observation_id",
+        "intent_id",
+        "actor",
+        "plan_id",
+        "plan_revision",
+        "task_id",
+        "task_revision",
+        "run_epoch",
+        "gate_id",
+        "action_sha256"
+      ]
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "wow-resident"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "sample"
+        },
+        "session_id": {
+          "$ref": "#/definitions/uuid"
+        },
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "window": {
+          "$ref": "#/definitions/window"
+        },
+        "capture": {
+          "$ref": "#/definitions/capture"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mean_luma": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "variance_luma": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "frame_delta": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "mean_luma",
+            "variance_luma",
+            "frame_delta"
+          ]
+        },
+        "detectors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "inventory_open": {
+              "$ref": "#/definitions/detector"
+            }
+          },
+          "required": [
+            "inventory_open"
+          ]
+        },
+        "artifact": {
+          "type": "null"
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        },
+        "memory_frame": {
+          "$ref": "#/definitions/memory_frame"
+        },
+        "cv": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "selected_character": {
+              "type": "object"
+            },
+            "tutorial_interaction": {
+              "type": "object"
+            },
+            "dialog_absence": {
+              "type": "object"
+            },
+            "recording_fixture": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "selected_character",
+            "tutorial_interaction"
+          ]
+        },
+        "input_state": {
+          "$ref": "#/definitions/input_state"
+        },
+        "processing_timing": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "clock": {
+              "const": "windows_qpc"
+            },
+            "request_ms": {
+              "type": "number",
+              "minimum": 0
+            },
+            "frame_arrived_ms": {
+              "type": "number",
+              "minimum": 0
+            },
+            "roi_started_ms": {
+              "type": "number",
+              "minimum": 0
+            },
+            "roi_finished_ms": {
+              "type": "number",
+              "minimum": 0
+            },
+            "cv_started_ms": {
+              "type": "number",
+              "minimum": 0
+            },
+            "cv_finished_ms": {
+              "type": "number",
+              "minimum": 0
+            },
+            "response_ms": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "clock",
+            "request_ms",
+            "frame_arrived_ms",
+            "roi_started_ms",
+            "roi_finished_ms",
+            "cv_started_ms",
+            "cv_finished_ms",
+            "response_ms"
+          ]
+        }
+      },
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "id",
+        "seq",
+        "window",
+        "capture",
+        "metrics",
+        "detectors",
+        "artifact",
+        "local_clock",
+        "memory_frame",
+        "cv",
+        "input_state",
+        "processing_timing"
+      ]
+    },
+    "ready": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "wow-resident"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "ready"
+        },
+        "session_id": {
+          "$ref": "#/definitions/uuid"
+        },
+        "channel_generation": {
+          "$ref": "#/definitions/uuid"
+        },
+        "host_pid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "host_start_ticks": {
+          "$ref": "#/definitions/ticks"
+        },
+        "windows_clock_id": {
+          "$ref": "#/definitions/id"
+        },
+        "windows_session_id": {
+          "const": 1
+        },
+        "target": {
+          "$ref": "#/definitions/target"
+        },
+        "window": {
+          "$ref": "#/definitions/window"
+        },
+        "native_ready": {
+          "oneOf": [
+            {
+              "$ref": "urn:wow-input:protocol:native-v1#/definitions/ready"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "capture": {
+              "const": "wgc"
+            },
+            "fresh_frame": {
+              "const": true
+            },
+            "memory_roi": {
+              "const": true
+            },
+            "input": {
+              "type": "boolean"
+            },
+            "max_duration_ms": {
+              "const": 150
+            },
+            "controller_lease_ms": {
+              "const": 750
+            }
+          },
+          "required": [
+            "capture",
+            "fresh_frame",
+            "memory_roi",
+            "input",
+            "max_duration_ms",
+            "controller_lease_ms"
+          ]
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        },
+        "target_scope": {
+          "enum": [
+            "retail_wow",
+            "recording_fixture"
+          ]
+        }
+      },
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "channel_generation",
+        "host_pid",
+        "host_start_ticks",
+        "windows_clock_id",
+        "windows_session_id",
+        "target",
+        "window",
+        "native_ready",
+        "capabilities",
+        "local_clock",
+        "target_scope"
+      ]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "wow-resident"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "evidence"
+        },
+        "session_id": {
+          "$ref": "#/definitions/uuid"
+        },
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "sample": {
+          "$ref": "#/definitions/sample"
+        },
+        "artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/id"
+            },
+            "windows_path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sha256": {
+              "$ref": "#/definitions/sha256"
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "source_frame_id": {
+              "$ref": "#/definitions/id"
+            },
+            "source_qpc_ms": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "id",
+            "windows_path",
+            "sha256",
+            "width",
+            "height",
+            "source_frame_id",
+            "source_qpc_ms"
+          ]
+        },
+        "ocr": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        }
+      },
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "id",
+        "sample",
+        "artifact",
+        "ocr",
+        "local_clock"
+      ]
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "wow-resident"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "receipt"
+        },
+        "session_id": {
+          "$ref": "#/definitions/uuid"
+        },
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "native": {
+          "$ref": "urn:wow-input:protocol:native-v1#/definitions/receipt"
+        },
+        "source": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/memory_frame"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "intent": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/intent"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dispatch_qpc_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        }
+      },
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "id",
+        "native",
+        "source",
+        "intent",
+        "dispatch_qpc_ms",
+        "local_clock"
+      ]
+    },
+    "stopped": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "wow-resident"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "stopped"
+        },
+        "session_id": {
+          "$ref": "#/definitions/uuid"
+        },
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "reason": {
+          "$ref": "#/definitions/id"
+        },
+        "release_confirmed": {
+          "type": "boolean"
+        },
+        "release_receipt": {
+          "oneOf": [
+            {
+              "$ref": "urn:wow-input:protocol:native-v1#/definitions/receipt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ledger_empty": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "native_exited": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "capture_disposed": {
+          "type": "boolean"
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        }
+      },
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "id",
+        "reason",
+        "release_confirmed",
+        "release_receipt",
+        "ledger_empty",
+        "native_exited",
+        "capture_disposed",
+        "local_clock"
+      ]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "const": "wow-resident"
+        },
+        "version": {
+          "const": 1
+        },
+        "type": {
+          "const": "error"
+        },
+        "session_id": {
+          "$ref": "#/definitions/uuid"
+        },
+        "id": {
+          "oneOf": [
+            {
+              "$ref": "#/definitions/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "$ref": "#/definitions/reason"
+        },
+        "local_clock": {
+          "$ref": "#/definitions/clock"
+        }
+      },
+      "required": [
+        "protocol",
+        "version",
+        "type",
+        "session_id",
+        "id",
+        "reason",
+        "local_clock"
+      ]
+    },
+    "command": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "wow-resident"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "command"
+            },
+            "session_id": {
+              "$ref": "#/definitions/uuid"
+            },
+            "id": {
+              "$ref": "#/definitions/id"
+            },
+            "op": {
+              "enum": [
+                "heartbeat",
+                "observe",
+                "cancel",
+                "release_all",
+                "shutdown",
+                "status"
+              ]
+            }
+          },
+          "required": [
+            "protocol",
+            "version",
+            "type",
+            "session_id",
+            "id",
+            "op"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "wow-resident"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "command"
+            },
+            "session_id": {
+              "$ref": "#/definitions/uuid"
+            },
+            "id": {
+              "$ref": "#/definitions/id"
+            },
+            "op": {
+              "const": "evidence"
+            },
+            "ocr": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "protocol",
+            "version",
+            "type",
+            "session_id",
+            "id",
+            "op",
+            "ocr"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "wow-resident"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "command"
+            },
+            "session_id": {
+              "$ref": "#/definitions/uuid"
+            },
+            "id": {
+              "$ref": "#/definitions/id"
+            },
+            "op": {
+              "const": "execute"
+            },
+            "action": {
+              "allOf": [
+                {
+                  "$ref": "urn:wow-input:protocol:native-v1#/definitions/action"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "key",
+                        "mouse_click",
+                        "focus_click",
+                        "timeline"
+                      ]
+                    },
+                    "duration_ms": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 150
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "duration_ms"
+                  ]
+                }
+              ]
+            },
+            "source": {
+              "$ref": "#/definitions/memory_frame"
+            },
+            "intent": {
+              "$ref": "#/definitions/intent"
+            }
+          },
+          "required": [
+            "protocol",
+            "version",
+            "type",
+            "session_id",
+            "id",
+            "op",
+            "action",
+            "source",
+            "intent"
+          ]
+        }
+      ]
+    },
+    "launch_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "session_id": {
+          "$ref": "#/definitions/uuid"
+        },
+        "channel_generation": {
+          "$ref": "#/definitions/uuid"
+        },
+        "pipe_name": {
+          "type": "string",
+          "pattern": "^WowJevResident-[0-9a-f]{32}$"
+        },
+        "nonce": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "target": {
+          "$ref": "#/definitions/target"
+        },
+        "authorized_input": {
+          "type": "boolean"
+        },
+        "focus_recovery_authorized": {
+          "type": "boolean"
+        },
+        "max_actions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 300000
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "local_output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "payload_hashes": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/definitions/sha256"
+          }
+        },
+        "dialog_absence_calibration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_scope": {
+          "enum": [
+            "retail_wow",
+            "recording_fixture"
+          ]
+        },
+        "fixture_executable": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "version",
+        "session_id",
+        "channel_generation",
+        "pipe_name",
+        "nonce",
+        "target",
+        "authorized_input",
+        "focus_recovery_authorized",
+        "max_actions",
+        "duration_ms",
+        "output",
+        "local_output",
+        "payload_hashes",
+        "dialog_absence_calibration",
+        "target_scope",
+        "fixture_executable"
+      ]
+    },
+    "roi_rect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        }
+      }
+    },
+    "dialog_absence_calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "id",
+        "target",
+        "client",
+        "layout_id",
+        "source",
+        "coverage",
+        "regions",
+        "pixel_format",
+        "match",
+        "automatic_action_eligible"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "id": {
+          "const": "tutorial-dialog-absence-exact-v1"
+        },
+        "target": {
+          "$ref": "#/definitions/target"
+        },
+        "client": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "width",
+            "height",
+            "dpi"
+          ],
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16384
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16384
+            },
+            "dpi": {
+              "type": "integer",
+              "minimum": 48,
+              "maximum": 768
+            }
+          }
+        },
+        "layout_id": {
+          "$ref": "#/definitions/sha256"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "frame_id",
+            "seq",
+            "source_qpc_ms",
+            "windows_clock_id",
+            "capture_sha256",
+            "review_sha256",
+            "review_kind"
+          ],
+          "properties": {
+            "frame_id": {
+              "$ref": "#/definitions/id"
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "source_qpc_ms": {
+              "type": "number",
+              "minimum": 0
+            },
+            "windows_clock_id": {
+              "$ref": "#/definitions/id"
+            },
+            "capture_sha256": {
+              "$ref": "#/definitions/sha256"
+            },
+            "review_sha256": {
+              "$ref": "#/definitions/sha256"
+            },
+            "review_kind": {
+              "const": "root_reviewed_same_capture"
+            }
+          }
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "rect",
+            "complete"
+          ],
+          "properties": {
+            "kind": {
+              "const": "left_npc_dialog_surface"
+            },
+            "rect": {
+              "$ref": "#/definitions/roi_rect"
+            },
+            "complete": {
+              "const": true
+            }
+          }
+        },
+        "regions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "rect",
+              "raw_bgra8_opaque_sha256"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/id"
+              },
+              "rect": {
+                "$ref": "#/definitions/roi_rect"
+              },
+              "raw_bgra8_opaque_sha256": {
+                "$ref": "#/definitions/sha256"
+              }
+            }
+          }
+        },
+        "pixel_format": {
+          "const": "bgra8_top_down_alpha255"
+        },
+        "match": {
+          "const": "exact"
+        },
+        "automatic_action_eligible": {
+          "const": false
+        }
+      }
+    }
+  }
+}

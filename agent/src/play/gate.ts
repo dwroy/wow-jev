@@ -1,5 +1,6 @@
 import type { ActionIntent, ObservedField } from '../core/protocol.js';
 import type { Collected } from '../eye/runtime.js';
+import { hasMemoryFrameProvenance, verifyMemoryFrameProvenance, type MemoryProofVerifier } from '../eye/memory-frame.js';
 import type { NativeReady } from '../hand/protocol.js';
 import type { GateDecision } from './types.js';
 
@@ -13,6 +14,7 @@ export interface GateContext {
   planUnchanged: boolean;
   handReady?: NativeReady | null;
   expectedWindow?: { token: string; hwnd: string; pid: number } | null;
+  memoryProofVerifier?: MemoryProofVerifier;
 }
 const fail = (reason: string): GateDecision => ({ ok: false, reason });
 const integer = (n: unknown): n is number => Number.isSafeInteger(n) && Number(n) >= 0;
@@ -59,7 +61,15 @@ export function evaluateGate(intent: ActionIntent, collected: Collected, context
       window.client_width !== sample.window.client_width || window.client_height !== sample.window.client_height ||
       window.client_width !== ready.window.client_width || window.client_height !== ready.window.client_height) return fail('window_binding_mismatch');
     if (!window.focused || !sample.window.focused) return fail('window_not_focused');
-    if (sample.capture.status !== 'ok' || !collected.artifact || !sample.artifact ||
+    if (hasMemoryFrameProvenance(collected)) {
+      if (sample.protocol !== 'wow-resident' || sample.capture.method !== 'wgc' || sample.capture.status !== 'ok' ||
+        sample.artifact !== null || collected.artifact !== null || observation.artifacts.length !== 0 || !context.memoryProofVerifier) return fail('memory_capture_evidence_missing');
+      try {
+        const proof = verifyMemoryFrameProvenance(collected, { runId: context.runId, now: context.now,
+          maxObservationAgeMs: context.maxObservationAgeMs, expectedWindow: context.expectedWindow, handReady: ready }, context.memoryProofVerifier);
+        if (!proof.ok) return fail(proof.reason);
+      } catch { return fail('memory_capture_verifier_failed'); }
+    } else if (sample.protocol !== 'wow-eye' || sample.capture.method !== 'printwindow' || sample.capture.status !== 'ok' || !collected.artifact || !sample.artifact ||
       collected.artifact.kind !== 'screenshot' || !/^[0-9a-f]{64}$/.test(collected.artifact.sha256 ?? '') ||
       collected.artifact.id !== sample.artifact.id || collected.artifact.sha256 !== sample.artifact.sha256 ||
       sample.artifact.width !== window.client_width || sample.artifact.height !== window.client_height ||

@@ -13,7 +13,7 @@ export function bodyProfile(): BodyProfile {
     mode_field: 'player.movement_mode', mouse_mode_field: 'input.mouse_mode', bindings, abilities,
     capabilities: ['ground_move', 'mouse_turn', 'jump', 'mount', 'dismount', 'fly', 'cast', 'interact', 'ui_click'], mouse_look_button: 'right', mouse_look_modes: ['ground', 'mounted', 'steady_flight'] });
 }
-export function bodySample(id: string, at: number, mode: 'live' | 'simulated' = 'simulated'): Collected {
+export function bodySample(id: string, at: number, mode: 'live' | 'simulated' = 'simulated'): Collected<import('../../src/eye/protocol.js').EyeSample> {
   const artifact = { id: `image-${id}`, kind: 'screenshot' as const, path: `artifacts/${id}.jpg`, sha256: 'b'.repeat(64) };
   const field = (value: JsonValue, source: ObservedField['source'] = mode === 'live' ? 'cv' : 'simulated'): ObservedField => ({ status: 'known', value, source, captured_at_ms: at, source_observation_id: id });
   return { artifact, observation: { protocol: 'wow-agent', version: 1, type: 'observation', id, run_id: 'run', observation_seq: 1, at_ms: at,

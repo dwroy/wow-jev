@@ -1,8 +1,14 @@
 # WoW Agent 当前交接
 
-更新：2026-10-06。用户最新授权和项目规则见 `AGENTS.md`，实施计划见 `docs/agent-roadmap.md`。历史3.3.5a像素桥任务原文已保留在 `docs/handoff-pixel-bridge.md`；当前测试目标为用户指定的正式服客户端。
+更新：2026-10-07。用户最新授权和项目规则见 `AGENTS.md`，实施计划见 `docs/agent-roadmap.md`。历史3.3.5a像素桥任务原文已保留在 `docs/handoff-pixel-bridge.md`；当前测试目标为用户指定的正式服客户端。
 
 ## 最新决定与下一阶段
+
+**2026-10-07 第3阶段离线组合候选，完整Git快照回归待执行；现场按用户最新要求停止。** 第1阶段归一化ROI和第2阶段局部事实/L4/L3路径已全绿正常推送至ebed98b。第3阶段在独立session-integration树组合常驻session1 WGC/ROI、会话0固定relay/本地JSON通道、私有来源登记与统一Body执行闸、原hand/watchdog、完整Native协议、取消/心跳/独立释放与任务删除，以及教程readonly/run/bootstrap/cancel和专用控件基准入口。控件走通用L3 activate_control、fixture_effect独立于game_effect；recovery仍只到可玩世界，教程仍只做首交谈，不接下一任务。数据原件包括实际知识使用清单/代码prompt配置与六维client证明，冻结世界包不改，临时模板不能伪装当前事实。模块专项全绿后形成隔离候选供Git快照完整套件验证，不以专项数字代替全量数字。
+
+本轮root六次只读宿主验证，未取得输入所有权、游戏输入/模型/成功WGC采样均0。05身份链已通过；06确认同用户的session1 medium宿主与session0 high relay，双方PID/start/path/SHA及pipe session/SID校验，relay只为自身进程补当前用户0x1000查询ACE、不改全局。06实际WTS状态4(Disconnected)、Default线程桌面/OpenInputDesktop错误5/FG0、WGC零回调/零帧；同Wow PID22072/start639268827443062278/HWND0x904a6仍visible/nonminimized，物理2560×1440/DPI144。06正常shutdown收到同session ACK/capture_disposed，release_scope仅no_executor_acquired；六个WowJev-Resident临时任务均删除且GetTask80070002回查。源/原件/失败与清理见out/acceptance/layered-tutorial-20261006/stage-3-native和docs/acceptance/resident-session-integration.md，不把只读退出外推持键强杀释放。
+
+用户随后明确RDP仍断开、暂不在线：完成全部离线实现/测试/文档，全绿后仅正常推codex/agent-system，再停止汇报；不轮询RDP、不启动现场任务、不发输入，窗口就绪由用户另行通知。待现场：实际WGC分布、记录窗n>=30真实有限输入与持键EOF/强杀释放、当前世界初始facts与独立dialog缺席校准、首个与吉安娜交谈及可选单层只读模型对照。严格exact左侧缺席模板在动态世界可能unknown，不能承诺一键成功或由NPC+hint推absence。当前Windows QPC观察→输入p50及150ms目标均未测、首任务未完成。只读FileVersion12.1.0.69933/CN/zhCN已实际核验，但缺成功WGC窗口来源，完整client-proof尚未生成；不默认旧profile为当前证据。
 
 **2026-10-07 第2阶段完整Git快照复验全绿，准备ff-only集成后实施第3阶段。** 9208675隔离候选形成完整归档后，全量TS567/567（546旧+21新增）、Python765passed+3原有strict xfail（729旧+36新增，收集768），失败/跳过均0，typecheck通过。14个初始化失败确为新schema未入旧Git快照，提交后同一完整套件恢复；全部首次日志保留，未删除/跳过测试。28文件候选含源/文档与AGENTS边界；root仅追加此验收记录。当前仍无现场事实、输入、模型或目标完成；hotmemory/常驻宿主/当前现场driver属于下一阶段，窗口就绪通知仍待用户。主日志out/acceptance/layered-tutorial-20261006/stage-2，API入口docs/tutorial-layered-runtime.md。
 

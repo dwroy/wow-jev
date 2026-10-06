@@ -1,6 +1,6 @@
 import type { Artifact, Observation, ObservedField } from '../core/protocol.js';
 import { RegionState } from './regions/state.js';
-import type { EyeReason, EyeWindow, SampleBracket } from './protocol.js';
+import type { EyeReason, EyeWindow, EyeSample, SampleBracket } from './protocol.js';
 export interface SeedField { status: 'known' | 'unknown' | 'unavailable'; value: string | number | boolean | null; confidence: number; reason?: EyeReason }
 export interface SeedResult { type: 'seed_result'; id: string; status: 'ok' | 'disabled' | 'failed'; model: string | null; prompt_sha256: string; fields: Record<string, SeedField>; usage: { input_tokens: number | null; output_tokens: number | null }; elapsed_ms: number; reason?: EyeReason; prompt_version?: 'eye-retail-v1'; schema_version?: 1; raw_text?: string | null }
 /** Visible target UI context, not an entity GUID. Repeated identical units can share a signature. */
@@ -24,8 +24,9 @@ export class EyeState {
     this.fields.set('player.health_ratio', { measured: false, field: { status: 'unavailable', value: null, captured_at_ms: 0, source: 'manual', source_observation_id: firstObservationId, reason: { code: 'unsupported' } } });
     this.fields.set('ui.inventory_open', { measured: false, field: { status: 'unavailable', value: null, captured_at_ms: 0, source: 'cv', source_observation_id: firstObservationId, reason: { code: 'not_calibrated' } } });
   }
-  applySample(bracket: SampleBracket, observationId: string, artifact?: Artifact): void {
+  applySample(bracket: SampleBracket<EyeSample>, observationId: string, artifact?: Artifact): void {
     const { sample, started_at_ms: earliest, received_at_ms: latest } = bracket;
+    if (sample.protocol !== 'wow-eye') throw new Error('eye_state_resident_requires_trusted_mapper');
     if (earliest > latest) throw new Error('invalid_capture_bracket');
     this.window = sample.capture.status === 'ok' ? sample.window : null;
     const metadata = { captured_at_ms: earliest, capture_window: { earliest_ms: earliest, latest_ms: latest }, source_observation_id: observationId,

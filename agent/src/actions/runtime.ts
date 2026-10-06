@@ -1,6 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import type { ActionIntent } from '../core/protocol.js';
 import type { Collected } from '../eye/runtime.js';
+import { cloneCollectedForRuntime, type MemoryProofVerifier } from '../eye/memory-frame.js';
 import type { NativeInputClient } from '../hand/client.js';
 import type { BodyAction, BodyOutcome, ExecutionContext } from '../layers/contracts.js';
 import { evaluateGate } from '../play/gate.js';
@@ -27,6 +28,7 @@ export interface BodyRuntimeOptions {
   bindSource?: (before: Collected, intent: ActionIntent, context: ExecutionContext) => Promise<void>;
   /** Hot-path callers can avoid evidence encoding; default preserves existing tools. */
   saveObservations?: boolean;
+  memoryProofVerifier?: MemoryProofVerifier;
 }
 export interface DetailedBodyOutcome extends BodyOutcome { input_count_scope: 'known' | 'lower_bound' }
 class Stopped extends Error { }
@@ -150,7 +152,7 @@ export class BodyRuntime {
         }
         return evaluateGate(intent, before, {
         runId: this.options.runId, mode: intent.mode, plan: base.plan, now: this.options.now(), maxObservationAgeMs: this.maxAge,
-        cancelled: cancelled || context.signal.aborted, planUnchanged: unchanged(), handReady: this.options.hand?.ready ?? null, expectedWindow: this.options.expectedWindow ?? null,
+        cancelled: cancelled || context.signal.aborted, planUnchanged: unchanged(), handReady: this.options.hand?.ready ?? null, expectedWindow: this.options.expectedWindow ?? null, ...(this.options.memoryProofVerifier ? { memoryProofVerifier: this.options.memoryProofVerifier } : {}),
       });
       };
       // A live wait has no native dispatch, but cannot accept simulated conditions.
@@ -168,7 +170,7 @@ export class BodyRuntime {
         intent, native_action: compiled.action, resources: compiled.resources });
       checked = measuredGate(); if (!checked.ok) { outcome.reason = checked.reason; return outcome; }
       if (this.options.bindSource && context.mode === 'live' && compiled.action !== null) {
-        await abortable(bounded(this.options.bindSource(structuredClone(before), structuredClone(intent), { ...context, conditions: structuredClone(context.conditions) }), 1500), context.signal);
+        await abortable(bounded(this.options.bindSource(cloneCollectedForRuntime(before), structuredClone(intent), { ...context, conditions: structuredClone(context.conditions) }), 1500), context.signal);
         checked = measuredGate(); if (!checked.ok) { outcome.reason = checked.reason; return outcome; }
       }
       monitor = setInterval(() => { if (!unchanged()) requestCancel('task_epoch_or_profile_changed'); }, 25);

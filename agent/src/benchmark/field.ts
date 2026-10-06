@@ -14,7 +14,7 @@ import { runCommand } from '../core/process.js';
 import { loadProtocolValidator } from '../core/protocol.js';
 import { NativeEyeClient } from '../eye/client.js';
 import { loadEyeValidator } from '../eye/protocol.js';
-import { EyeRuntime, type Collected } from '../eye/runtime.js';
+import { EyeRuntime, type Collected as AnyCollected } from '../eye/runtime.js';
 import { SeedClient, loadSeedValidator } from '../eye/seed.js';
 import { replayRun } from '../eye/replay.js';
 import { EyeRunStore, codeVersion, hashBuffer, hashFile, wslPath } from '../eye/store.js';
@@ -31,6 +31,9 @@ import type { PlayResult, SkillBindings, SkillStep } from '../play/types.js';
 import { chooseBenchmarkCandidate, type BenchmarkPolicy, type PolicyCandidate } from './policies.js';
 import { TraceRecorder, traceAsync, type TraceRecord, type TraceStage } from './trace.js';
 import { calibrateClock, distribution, latencyInterval, nativeInputSpan, summarizeSpans, type ClockCalibration } from './metrics.js';
+
+// This legacy PrintWindow field runner retains disk screenshot semantics.
+type Collected = AnyCollected<import('../eye/protocol.js').EyeSample>;
 
 const HASH = /^[a-f0-9]{64}$/;
 const CONTRACT_FILES=['protocol/agent-v1.schema.json','protocol/native-eye-v1.schema.json','protocol/native-input-v1.schema.json','protocol/eye-log-v1.schema.json','protocol/regional-eye-v1.schema.json',

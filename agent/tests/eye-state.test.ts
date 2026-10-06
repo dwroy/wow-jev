@@ -10,7 +10,7 @@ const sample: EyeSample = { protocol: 'wow-eye', version: 1, type: 'sample', ses
   capture: { status: 'ok', started_qpc_ms: 9000000, finished_qpc_ms: 9000002, method: 'printwindow' },
   metrics: { mean_luma: 30, variance_luma: 100, frame_delta: 0.1 }, detectors: { inventory_open: { status: 'known', value: false, confidence: 0.9, calibration_id: 'test' } },
   artifact: null, local_clock: { domain: 'windows-qpc', at_ms: 9000003 } };
-const bracket = (at: number): SampleBracket => ({ sample, started_at_ms: at, received_at_ms: at + 10 });
+const bracket = (at: number): SampleBracket<EyeSample> => ({ sample, started_at_ms: at, received_at_ms: at + 10 });
 const seed = (fields: SeedResult['fields']): SeedResult => ({ type: 'seed_result', id: 'look', status: 'ok', model: 'mock', prompt_sha256: 'a'.repeat(64), fields, usage: { input_tokens: 1, output_tokens: 1 }, elapsed_ms: 1 });
 const source = { captured_at_ms: 10, received_at_ms: 20, source_observation_id: 'obs0', artifact_id: 'img', source_qpc_ms: 9000000 };
 
@@ -49,7 +49,7 @@ test('capture failure has unknown focus; unmeasured placeholders self-reference'
 });
 
 const calibrated = (value: boolean | null) => ({ status: value === null ? 'unknown' as const : 'known' as const, value, confidence: value === null ? 0 : 0.95, calibration_id: 'combat-test' });
-function combat(at: number, signature: string | null = 'a'.repeat(64), present: boolean | null = true): SampleBracket {
+function combat(at: number, signature: string | null = 'a'.repeat(64), present: boolean | null = true): SampleBracket<EyeSample> {
   return { ...bracket(at), sample: { ...sample, detectors: { ...sample.detectors, target_present: calibrated(present), target_dead: calibrated(present === true ? false : null), player_in_combat: calibrated(false),
     target_signature: { status: signature === null ? 'unknown' : 'known', value: signature, confidence: signature === null ? 0 : 1, calibration_id: 'combat-test' } } } };
 }

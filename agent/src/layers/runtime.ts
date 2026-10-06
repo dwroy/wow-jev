@@ -1,6 +1,7 @@
 import type { Observation } from '../core/protocol.js';
 import { createHash } from 'node:crypto';
 import type { Collected } from '../eye/runtime.js';
+import { cloneCollectedForRuntime } from '../eye/memory-frame.js';
 import { BodyRuntime, type BodyRuntimeOptions } from '../actions/runtime.js';
 import { BehaviorRuntime, type BehaviorOptions } from '../behavior/runtime.js';
 import { BehaviorJev } from '../behavior/jev.js';
@@ -23,7 +24,7 @@ export function createLayerExecution(options: BodyRuntimeOptions & {
   const collect = async (): Promise<Collected> => {
     const effect = effectPending && options.collectEffect !== undefined; effectPending = false;
     const collected = effect ? await options.collectEffect!() : await options.collect(options.saveObservations ?? true);
-    retained.set(collected.observation.id, structuredClone(collected));
+    retained.set(collected.observation.id, cloneCollectedForRuntime(collected));
     while (retained.size > 64) retained.delete(retained.keys().next().value!);
     return collected;
   };

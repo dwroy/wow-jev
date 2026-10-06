@@ -1,15 +1,15 @@
 import type { Observation } from '../core/protocol.js';
-import type { BehaviorCandidate, BehaviorPorts, BehaviorResult, BehaviorSpec, ExecutionContext, LayerTaskSpec } from '../layers/contracts.js';
+import type { BehaviorCandidate, BehaviorPorts, BehaviorResult, BehaviorSpec, ExecutionContext, LayerTaskSpec, BoundTargetScope } from '../layers/contracts.js';
 import { BehaviorJev } from '../behavior/jev.js';
 import { RunLease, cleanupBound } from '../behavior/lease.js';
 import { BehaviorRuntime, type BehaviorExecutionResult } from '../behavior/runtime.js';
-import { canonical, conditionError, validateConditions, hash, observationError, readKnown, validateTask, value } from '../behavior/validation.js';
+import { canonical, conditionError, validateConditions, hash, observationError, readKnown, validateTask, value, targetScopeKey } from '../behavior/validation.js';
 import type { WorldObjectiveRef } from '../layers/contracts.js';
 export type TaskContext = Omit<ExecutionContext, 'command_id'>;
 export interface TaskCheckpoint { task_id: string; task_revision: number; run_epoch: number; mode: ExecutionContext['mode']; task_sha256: string; elapsed_ms: number; attempted_behaviors: number; next_behavior: number; completed_behaviors: string[]; source_count: number | null; evidence_observation_ids: string[]; }
 export interface TaskResult {
   id: string; revision: number; run_epoch: number; mode: ExecutionContext['mode']; status: BehaviorResult['status']; reason: string;
-  behaviors: BehaviorExecutionResult[]; input_count_scope: 'known' | 'lower_bound'; chooser_calls: number; real_inputs: number; release: BehaviorResult['release']; game_effect: BehaviorResult['game_effect']; scenario_effect: BehaviorResult['game_effect']; checkpoint: TaskCheckpoint;
+  behaviors: BehaviorExecutionResult[]; input_count_scope: 'known' | 'lower_bound'; chooser_calls: number; real_inputs: number; release: BehaviorResult['release']; game_effect: BehaviorResult['game_effect']; scenario_effect: BehaviorResult['game_effect']; fixture_effect?: BehaviorResult['game_effect']; checkpoint: TaskCheckpoint;
 }
 export interface TaskRunOptions { worldPackSha256?: string; isCurrent?: () => boolean; checkpoint?: TaskCheckpoint; verifyCheckpoint?: (checkpoint: TaskCheckpoint, freshObservation: Observation) => Promise<boolean>; }
 export function objectiveCountField(task: LayerTaskSpec): string {
@@ -31,10 +31,10 @@ export class TaskRuntime {
     const promise = this.execute(frozen, ctx, options).finally(() => { this.active = false; }); this.runs.set(key, { hash: h, promise }); return promise;
   }
   private empty(task: LayerTaskSpec, context: TaskContext): TaskResult {
-    return { id: task.id, revision: task.revision, run_epoch: context.run_epoch, mode: context.mode, input_count_scope: 'known', status: 'failed', reason: 'task_exception', behaviors: [], chooser_calls: 0, real_inputs: 0, release: 'unconfirmed', game_effect: 'unverified', scenario_effect: 'unverified', checkpoint: { task_id: task.id, task_revision: task.revision, run_epoch: context.run_epoch, mode: context.mode, task_sha256: hash(task), elapsed_ms: 0, attempted_behaviors: 0, next_behavior: 0, completed_behaviors: [], source_count: null, evidence_observation_ids: [] } };
+    return { ...(task.behaviors.some(b=>b.kind==='activate_control')?{fixture_effect:'unverified' as const}:{}), id: task.id, revision: task.revision, run_epoch: context.run_epoch, mode: context.mode, input_count_scope: 'known', status: 'failed', reason: 'task_exception', behaviors: [], chooser_calls: 0, real_inputs: 0, release: 'unconfirmed', game_effect: 'unverified', scenario_effect: 'unverified', checkpoint: { task_id: task.id, task_revision: task.revision, run_epoch: context.run_epoch, mode: context.mode, task_sha256: hash(task), elapsed_ms: 0, attempted_behaviors: 0, next_behavior: 0, completed_behaviors: [], source_count: null, evidence_observation_ids: [] } };
   }
   private async execute(task: LayerTaskSpec, context: TaskContext, options: TaskRunOptions): Promise<TaskResult> {
-    const result = this.empty(task, context); const started = this.ports.now(); let runId: string | undefined; let previous: Observation | undefined;
+    const result = this.empty(task, context); const started = this.ports.now(); let runId: string | undefined; let previous: Observation | undefined; let scope: BoundTargetScope | null = null; let initialScope:string|undefined;
     const objectiveRef = task.params.objective_ref as unknown as WorldObjectiveRef | undefined;
     const countField = objectiveCountField(task);
     const priorElapsed = options.checkpoint?.elapsed_ms ?? 0;
@@ -46,6 +46,17 @@ export class TaskRuntime {
       const invalid = observationError(o, p, runId) ?? conditionError(o, context.conditions, p);
       if (invalid) throw new Error(invalid);
       if (previous && (o.id === previous.id || o.observation_seq <= previous.observation_seq || o.at_ms < previous.at_ms)) throw new Error('task_observation_not_new');
+      const resolved=this.behaviors.resolveScope(o,context,task.behaviors.some(b=>b.kind==='activate_control'));
+      if(resolved.error)throw new Error(resolved.error);
+      scope=resolved.proof;
+      if(scope){
+        const key=targetScopeKey(scope);if(initialScope!==undefined&&initialScope!==key)throw new Error('task_target_scope_or_native_identity_changed');initialScope??=key;
+        if(scope.scope==='recording_fixture'){
+          result.fixture_effect='unverified';result.game_effect='unverified';
+          if(task.kind!=='sequence'||task.behaviors.some(b=>b.kind!=='activate_control'))throw new Error('recording_fixture_requires_control_sequence');
+          if(options.checkpoint&&options.checkpoint.next_behavior!==0)throw new Error('fixture_checkpoint_requires_fresh_full_run');
+        }
+      }else if(initialScope!==undefined)throw new Error('task_target_scope_became_unverified');
       runId ??= o.run_id; previous = o; result.checkpoint.evidence_observation_ids.push(o.id); return o;
     };
     try {
@@ -82,7 +93,7 @@ export class TaskRuntime {
             const q = String(task.params.quest_id); const p = this.behaviors.policy(context);
             if (value(latest, `quest.${q}.turned_in`, p, true) !== true || value(latest, `quest.${q}.reward_received`, p, true) !== true || task.params.reward_policy === 'explicit' && value(latest, `quest.${q}.received_reward_id`, p, true) !== task.params.reward_id) { result.status = 'blocked'; result.reason = 'task_delivery_evidence_unknown'; break; }
           }
-          result.status = 'completed'; result.reason = task.kind === 'deliver_quest' ? 'quest_delivery_confirmed' : 'sequence_completed'; result.game_effect = result.behaviors.every(b => context.mode === 'simulated' ? b.scenario_effect === 'confirmed' : b.game_effect === 'confirmed') ? 'confirmed' : 'unverified'; break;
+          result.status = 'completed'; result.reason = task.kind === 'deliver_quest' ? 'quest_delivery_confirmed' : 'sequence_completed'; if((scope as BoundTargetScope|null)?.scope==='recording_fixture'){result.fixture_effect=result.behaviors.length===task.behaviors.length&&result.behaviors.every(b=>b.fixture_effect==='confirmed')?'confirmed':'unverified';result.game_effect='unverified';}else result.game_effect = result.behaviors.every(b => context.mode === 'simulated' ? b.scenario_effect === 'confirmed' : b.game_effect === 'confirmed') ? 'confirmed' : 'unverified'; break;
         }
         if (result.checkpoint.attempted_behaviors >= task.max_behaviors) { result.status = 'blocked'; result.reason = 'task_behavior_budget'; break; }
         const index = result.checkpoint.attempted_behaviors;
@@ -114,14 +125,14 @@ export class TaskRuntime {
         } else { result.checkpoint.completed_behaviors.push(selected.candidate.behavior.id); result.checkpoint.next_behavior++; }
         await lease.wait(() => this.ports.append('task_checkpoint', result.checkpoint));
       }
-    } catch (e) { result.status = lease.signal.reason === 'deadline' ? 'blocked' : lease.signal.aborted ? 'cancelled' : 'failed'; result.reason = e instanceof Error ? e.message : 'task_exception'; result.game_effect = 'unverified'; }
+    } catch (e) { result.status = lease.signal.reason === 'deadline' ? 'blocked' : lease.signal.aborted ? 'cancelled' : 'failed'; result.reason = e instanceof Error ? e.message : 'task_exception'; result.game_effect = 'unverified';if(result.fixture_effect!==undefined)result.fixture_effect='unverified'; }
     finally {
       result.checkpoint.elapsed_ms = priorElapsed + this.ports.now() - started;
       try { result.release = await cleanupBound(this.ports.release(result.reason)); } catch { result.release = 'unconfirmed'; }
       if (result.behaviors.some(b => b.release !== 'confirmed')) result.release = 'unconfirmed';
-      if (result.release !== 'confirmed' && result.status === 'completed') { result.status = 'blocked'; result.reason = 'task_release_unconfirmed'; result.game_effect = 'unverified'; }
+      if (result.release !== 'confirmed' && result.status === 'completed') { result.status = 'blocked'; result.reason = 'task_release_unconfirmed'; result.game_effect = 'unverified';if(result.fixture_effect!==undefined)result.fixture_effect='unverified'; }
       if (context.mode === 'simulated') { result.scenario_effect = result.game_effect; result.game_effect = 'unverified'; }
-      try { await cleanupBound(this.ports.append('task_result', result)); } catch { result.status = 'failed'; result.reason = 'task_result_log_failed'; result.game_effect = 'unverified'; result.scenario_effect = 'unverified'; }
+      try { await cleanupBound(this.ports.append('task_result', result)); } catch { result.status = 'failed'; result.reason = 'task_result_log_failed'; result.game_effect = 'unverified';if(result.fixture_effect!==undefined)result.fixture_effect='unverified'; result.scenario_effect = 'unverified'; }
       lease.close();
     }
     return result;

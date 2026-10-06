@@ -1,13 +1,13 @@
 import type { ActionCondition, JsonValue, Observation } from '../core/protocol.js';
-import type { BehaviorPorts, BehaviorResult, BehaviorSpec, BodyAction, ExecutionContext, MovementAxis } from '../layers/contracts.js';
+import type { BehaviorPorts, BehaviorResult, BehaviorSpec, BodyAction, ExecutionContext, MovementAxis, TargetScopeVerifier, BoundTargetScope } from '../layers/contracts.js';
 import { RunLease, cleanupBound } from './lease.js';
-import { bindingError, conditionError, validateConditions, hash, observationError, readKnown, validateBehavior, value, type FieldPolicy } from './validation.js';
+import { bindingError, conditionError, validateConditions, hash, observationError, readKnown, validateBehavior, value, resolveTargetScope, targetScopeKey, type FieldPolicy } from './validation.js';
 
 export interface BehaviorExecutionResult extends BehaviorResult { input_count_scope: 'known' | 'lower_bound'; scenario_effect: 'confirmed' | 'unverified'; }
-export interface BehaviorOptions { maxFieldAgeMs?: number; maxObservationAgeMs?: number; trustedSources?: ReadonlyArray<string>; maxEffectFieldAgeMs?: number; }
+export interface BehaviorOptions { maxFieldAgeMs?: number; maxObservationAgeMs?: number; trustedSources?: ReadonlyArray<string>; maxEffectFieldAgeMs?: number; targetScopeVerifier?: TargetScopeVerifier; }
 export interface BehaviorRunOptions { isCurrent?: () => boolean; }
 type Decision = { action: BodyAction; conditions: ActionCondition[]; state: string } | { status: BehaviorResult['status']; reason: string; effect?: boolean };
-interface State { initialAlive: boolean; killActionAt?: number; killActionObservation?: string; lastActionAt?: number; lastActionObservation?: string; initialProgress?: number; lastProgress?: number; noProgress: number; recoverAttempts: number; safeFrames: number; lastSafeId?: string; rewardSelected: boolean; }
+interface State { initialAlive: boolean; killActionAt?: number; killActionObservation?: string; lastActionAt?: number; lastActionObservation?: string; initialProgress?: number; lastProgress?: number; noProgress: number; recoverAttempts: number; safeFrames: number; lastSafeId?: string; rewardSelected: boolean; controlBefore?: { activation_count: number; state_token: string; frame_nonce: number; layout_id: string }; }
 const finish = (status: BehaviorResult['status'], reason: string, effect = false): Decision => ({ status, reason, effect });
 const condition = (field: string, v: JsonValue, age: number): ActionCondition => ({ field, op: 'eq', value: v, max_age_ms: age });
 const axes = new Set<MovementAxis>(['forward', 'backward', 'strafe_left', 'strafe_right']);
@@ -30,17 +30,20 @@ export class BehaviorRuntime {
     const promise = this.execute(frozen, ctx, options).finally(() => { this.active = false; }); this.runs.set(key, { hash: signature, promise }); return promise;
   }
   private empty(spec: BehaviorSpec, status: BehaviorResult['status'], reason: string): BehaviorExecutionResult {
-    return { id: spec.id, kind: spec.kind, status, reason, input_count_scope: 'known', actions: 0, real_inputs: 0, game_effect: 'unverified', scenario_effect: 'unverified', release: 'unconfirmed', evidence_observation_ids: [] };
+    return { ...(spec.kind === 'activate_control' ? { fixture_effect: 'unverified' as const } : {}), id: spec.id, kind: spec.kind, status, reason, input_count_scope: 'known', actions: 0, real_inputs: 0, game_effect: 'unverified', scenario_effect: 'unverified', release: 'unconfirmed', evidence_observation_ids: [] };
   }
   policy(context: Pick<ExecutionContext, 'mode'>): FieldPolicy {
     return { mode: context.mode, now: this.ports.now(), maxAgeMs: this.options.maxFieldAgeMs ?? 1000, ...(this.options.trustedSources ? { trustedSources: this.options.trustedSources } : {}) };
+  }
+  resolveScope(o: Observation, context: Pick<ExecutionContext,'mode'>, required=false) {
+    return resolveTargetScope(o,this.policy(context),this.options.targetScopeVerifier,required);
   }
   private async execute(spec: BehaviorSpec, context: ExecutionContext, options: BehaviorRunOptions): Promise<BehaviorExecutionResult> {
     const result = this.empty(spec, 'failed', 'behavior_exception'); const started = this.ports.now();
     const lease = new RunLease(context.signal, spec.max_duration_ms, () => this.ports.now(), options.isCurrent);
     context = { ...context, signal: lease.signal };
     const state: State = { initialAlive: false, noProgress: 0, recoverAttempts: 0, safeFrames: 0, rewardSelected: false };
-    let runId: string | undefined; let previous: Observation | undefined; let initialWindow: string | undefined;
+    let runId: string | undefined; let previous: Observation | undefined; let initialWindow: string | undefined; let initialScope: string | undefined; let scope: BoundTargetScope | null = null;
     let outcomeUnconfirmed = false; let dispatched = false;
     const current = () => { lease.check(); return true; };
     try {
@@ -54,6 +57,16 @@ export class BehaviorRuntime {
         const o = await lease.wait(() => this.ports.observe()); const policy = this.policy(context);
         if (!current()) { result.status = 'cancelled'; result.reason = 'cancelled_or_revision_changed'; break; }
         if (this.ports.now() - started >= spec.max_duration_ms) { result.status = 'blocked'; result.reason = 'behavior_deadline'; break; }
+        const resolved=this.resolveScope(o,context,spec.kind==='activate_control');
+        if(resolved.error){result.status='blocked';result.reason=resolved.error;break;}
+        scope=resolved.proof;
+        if(scope){
+          const key=targetScopeKey(scope);if(initialScope!==undefined&&initialScope!==key){result.status='blocked';result.reason='target_scope_or_native_identity_changed';break;}initialScope??=key;
+          if(scope.scope==='recording_fixture'){
+            result.fixture_effect='unverified';result.game_effect='unverified';
+            if(spec.kind!=='activate_control'){result.status='blocked';result.reason='recording_fixture_requires_control_behavior';break;}
+          }
+        }else if(initialScope!==undefined){result.status='blocked';result.reason='target_scope_became_unverified';break;}
         const confirmingTalk = spec.kind === 'talk_to' && state.lastActionAt !== undefined;
         // A slow, independently captured dialog result can only terminate talk_to.
         // It never supplies a new action, hazard movement or a refreshed input frame.
@@ -77,7 +90,8 @@ export class BehaviorRuntime {
           if (hazardous) decision = finish('blocked', 'post_action_hazard_observed');
           else if (target?.value !== spec.params.target_signature || open?.value !== true || dialogTarget?.value !== spec.params.target_signature) decision = finish('blocked', 'dialog_effect_not_new_or_unconfirmed');
           else decision = finish('completed', 'dialog_open_confirmed', true);
-        } else if (hazardous && spec.kind !== 'avoid_hazard') {
+        } else if(hazardous&&spec.kind==='activate_control') decision=finish('blocked','control_activation_hazard_observed');
+        else if (hazardous && spec.kind !== 'avoid_hazard') {
           const released = await lease.wait(() => this.ports.release('hazard_preempt'));
           if (released !== 'confirmed') { outcomeUnconfirmed = true; result.status = 'blocked'; result.reason = 'hazard_release_unconfirmed'; break; }
           decision = this.avoid(o, policy, state, 200, 1, false);
@@ -85,7 +99,7 @@ export class BehaviorRuntime {
         } else decision = this.decide(spec, o, policy, state);
         await lease.wait(() => this.ports.append('behavior_state', { behavior_id: spec.id, observation_id: o.id, state: 'action' in decision ? decision.state : decision.reason, actions: result.actions, task_revision: context.task_revision, run_epoch: context.run_epoch }));
         if ('status' in decision) {
-          result.status = decision.status; result.reason = decision.reason; result.game_effect = decision.effect ? 'confirmed' : 'unverified'; break;
+          result.status = decision.status; result.reason = decision.reason; if(scope?.scope==='recording_fixture'){result.fixture_effect=decision.effect?'confirmed':'unverified';result.game_effect='unverified';}else result.game_effect = decision.effect ? 'confirmed' : 'unverified'; break;
         }
         if (result.actions >= spec.max_actions) { result.status = 'blocked'; result.reason = 'behavior_action_budget'; break; }
         if (!current()) { result.status = 'cancelled'; result.reason = 'cancelled_or_revision_changed'; break; }
@@ -118,26 +132,52 @@ export class BehaviorRuntime {
       }
     } catch (error) {
       if (dispatched) { result.input_count_scope = 'lower_bound'; result.actions++; }
-      result.status = lease.signal.reason === 'deadline' ? 'blocked' : lease.signal.aborted ? 'cancelled' : 'failed'; result.reason = error instanceof Error ? error.message : 'behavior_exception'; result.game_effect = 'unverified';
+      result.status = lease.signal.reason === 'deadline' ? 'blocked' : lease.signal.aborted ? 'cancelled' : 'failed'; result.reason = error instanceof Error ? error.message : 'behavior_exception'; result.game_effect = 'unverified'; if(result.fixture_effect!==undefined)result.fixture_effect='unverified';
     } finally {
       try { const released = await cleanupBound(this.ports.release(result.reason)); result.release = released === 'confirmed' && !outcomeUnconfirmed ? 'confirmed' : 'unconfirmed'; }
       catch { result.release = 'unconfirmed'; }
-      if (result.release !== 'confirmed' && result.status === 'completed') { result.status = 'blocked'; result.reason = 'behavior_release_unconfirmed'; result.game_effect = 'unverified'; }
+      if (result.release !== 'confirmed' && result.status === 'completed') { result.status = 'blocked'; result.reason = 'behavior_release_unconfirmed'; result.game_effect = 'unverified'; if(result.fixture_effect!==undefined)result.fixture_effect='unverified'; }
       if (context.mode === 'simulated') { result.scenario_effect = result.game_effect; result.game_effect = 'unverified'; }
       try { await cleanupBound(this.ports.append('behavior_result', { ...result, task_id: context.task_id, task_revision: context.task_revision, run_epoch: context.run_epoch, mode: context.mode })); }
-      catch { result.status = 'failed'; result.reason = 'behavior_result_log_failed'; result.game_effect = 'unverified'; result.scenario_effect = 'unverified'; }
+      catch { result.status = 'failed'; result.reason = 'behavior_result_log_failed'; result.game_effect = 'unverified'; if(result.fixture_effect!==undefined)result.fixture_effect='unverified'; result.scenario_effect = 'unverified'; }
       lease.close();
     }
     return result;
   }
   private decide(spec: BehaviorSpec, o: Observation, p: FieldPolicy, s: State): Decision {
     const duration = Number(spec.params.action_duration_ms ?? spec.params.step_duration_ms ?? 200);
+    if (spec.kind === 'activate_control') return this.activateControl(spec,o,p,s,Number(spec.params.action_duration_ms??50));
     if (spec.kind === 'kill_target') return this.kill(spec, o, p, s, duration);
     if (spec.kind === 'loot_target') return this.loot(spec, o, p, s, duration);
     if (['talk_to', 'accept_quest', 'turn_in_quest'].includes(spec.kind)) return this.dialog(spec, o, p, s, duration);
     if (spec.kind === 'move_to' || spec.kind === 'fly_to') return this.navigate(spec, o, p, s, duration);
     if (spec.kind === 'avoid_hazard') return this.avoid(o, p, s, duration, Number(spec.params.safe_observations ?? 2), true);
     return this.recover(spec, o, p, s, duration);
+  }
+  private activateControl(spec:BehaviorSpec,o:Observation,p:FieldPolicy,s:State,duration:number):Decision {
+    const layout=readKnown(o,'ui.layout_id',p,true,s.lastActionAt),state=readKnown(o,'ui.control_state',p,true,s.lastActionAt);
+    const elements=readKnown(o,'ui.elements',p,true),mode=readKnown(o,'input.mouse_mode',p,true);
+    if(!layout||typeof layout.value!=='string'||!state||!state.value||Array.isArray(state.value)||typeof state.value!=='object'||
+      p.mode==='live'&&(layout.source!=='cv'||state.source!=='cv'))return finish('blocked','control_state_or_layout_unknown');
+    const row=state.value;
+    if(Object.keys(row).length!==5||row.control_id!==spec.params.control_id||row.layout_id!==layout.value||
+      !Number.isSafeInteger(row.activation_count)||Number(row.activation_count)<0||typeof row.state_token!=='string'||!row.state_token||row.state_token.length>256||
+      !Number.isSafeInteger(row.frame_nonce)||Number(row.frame_nonce)<0)return finish('blocked','control_state_unbound');
+    if(s.lastActionAt!==undefined){
+      const before=s.controlBefore;
+      if(!before||s.lastActionObservation===o.id||row.layout_id!==before.layout_id||Number(row.activation_count)!==before.activation_count+1||
+        row.state_token===before.state_token||Number(row.frame_nonce)<=before.frame_nonce)return finish('blocked','control_effect_not_new_or_unconfirmed');
+      return finish('completed','control_activation_confirmed',true);
+    }
+    if(!elements||!Array.isArray(elements.value)||!mode||mode.value!=='ui'||p.mode==='live'&&(elements.source!=='cv'||mode.source!=='cv'))return finish('blocked','control_elements_or_mode_unknown');
+    const matching=elements.value.filter(v=>v!==null&&!Array.isArray(v)&&typeof v==='object'&&v.id===spec.params.control_id);
+    if(matching.length!==1)return finish('blocked','control_element_missing_or_ambiguous');
+    const element=matching[0] as {[key:string]:JsonValue};
+    if(Object.keys(element).length!==5||element.enabled!==true||element.layout_id!==layout.value||!Number.isSafeInteger(element.x)||!Number.isSafeInteger(element.y)||
+      Number(element.x)<0||Number(element.y)<0||!o.window||Number(element.x)>=o.window.client_width||Number(element.y)>=o.window.client_height)return finish('blocked','control_element_unbound');
+    s.controlBefore={activation_count:Number(row.activation_count),state_token:row.state_token,frame_nonce:Number(row.frame_nonce),layout_id:layout.value};
+    return {action:{kind:'click',element_id:String(spec.params.control_id),button:'left',x:Number(element.x),y:Number(element.y),duration_ms:duration},
+      conditions:[condition('ui.layout_id',layout.value,p.maxAgeMs),condition('ui.elements',elements.value,p.maxAgeMs),condition('ui.control_state',row,p.maxAgeMs),condition('input.mouse_mode','ui',p.maxAgeMs)],state:'activating_control'};
   }
   private kill(spec: BehaviorSpec, o: Observation, p: FieldPolicy, s: State, duration: number): Decision {
     const dead = value(o, 'target.dead', p, true, s.killActionAt);

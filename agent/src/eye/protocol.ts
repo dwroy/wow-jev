@@ -1,3 +1,4 @@
+import type { ResidentMemorySample } from '../resident/protocol.js';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { RegionalBatch } from './regions/types.js';
@@ -71,4 +72,4 @@ export function assertEye(value: unknown, validator: EyeValidator): asserts valu
     if (failed && ['target_present', 'target_dead', 'target_signature', 'target_name', 'player_in_combat', 'npc_dialog_open', 'npc_in_interaction_range'].some((key) => value.detectors[key as keyof EyeSample['detectors']]?.status === 'known')) throw new Error('eye_combat_capture_unavailable');
   }
 }
-export interface SampleBracket { sample: EyeSample; started_at_ms: number; received_at_ms: number }
+export interface SampleBracket<T extends EyeSample | ResidentMemorySample = EyeSample | ResidentMemorySample> { sample: T; started_at_ms: number; received_at_ms: number }

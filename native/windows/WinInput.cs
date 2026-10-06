@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -55,6 +56,8 @@ static class WinInput
         public bool ReleaseAccounted;
         public volatile bool FocusClickStarted;
         public volatile bool FocusObserved;
+        public bool TimelineMousePointSet, TimelineMouseDownIssued;
+        public int TimelineMouseX, TimelineMouseY;
         public long FocusActivationDeadlineMs;
         public readonly object ReleaseSync = new object();
         public readonly ManualResetEvent Cancel = new ManualResetEvent(false);
@@ -271,6 +274,16 @@ static class WinInput
                 // before movement, ledger registration and the DOWN batch.
                 if (work.Kind == "mouse_click" && !Native.RecoveryPointOwnedByWindow(hwnd, work.X, work.Y))
                     throw new InputFailure("click_point_not_target", "Click point is no longer owned by the target window");
+                if (work.Kind == "timeline" && work.TimelineMouseDownIssued)
+                {
+                    if (work.TimelineMousePointSet && !Native.RecoveryPointOwnedByWindow(hwnd, work.TimelineMouseX, work.TimelineMouseY))
+                        throw new InputFailure("timeline_point_not_target", "Timeline mouse origin no longer belongs to target");
+                    // Own RMB may hide the cursor or establish capture. During
+                    // the hold only ownership/focus is checked, never treating
+                    // our registered button as new human input.
+                    if (!TimelineCursorSafety.CurrentPointOwned(hwnd))
+                        throw new InputFailure("timeline_cursor_not_target", "Current cursor point no longer belongs to target");
+                }
             }
         }
         void StartTimestamp(Work work)
@@ -371,7 +384,7 @@ static class WinInput
                     else if (item.Kind == "button_down") { downMouse |= item.Button; packets.Add(Native.MouseButton(item.Button, false)); }
                     else if (item.Kind == "button_up") { upMouse |= item.Button; packets.Add(Native.MouseButton(item.Button, true)); }
                     else if (item.Kind == "relative_mouse_move") packets.Add(Native.MouseRelative(item.Dx, item.Dy));
-                    else { CheckPoint(item.X, item.Y); packets.Add(Native.MouseAbsolute(hwnd, item.X, item.Y)); }
+                    else { CheckPoint(item.X, item.Y); work.TimelineMousePointSet=true;work.TimelineMouseX=item.X;work.TimelineMouseY=item.Y;packets.Add(Native.MouseAbsolute(hwnd, item.X, item.Y)); }
                 }
                 store.WithRegisteredInput(delegate(LeaseSnapshot state)
                 {
@@ -385,7 +398,17 @@ static class WinInput
                         TimelineEvent item = work.Events[i];
                         if (item.Kind == "key_down" && Native.IsKeyDown(item.Key)) throw new InputFailure("user_key_held", "Key already held: " + item.Key.Name);
                         if (item.Kind == "button_down" && Native.IsMouseDown(item.Button)) throw new InputFailure("user_button_held", "Mouse button is already held");
-                        if (item.Kind == "absolute_mouse_move") CheckPoint(item.X, item.Y);
+                        if (item.Kind == "absolute_mouse_move")
+                        { CheckPoint(item.X, item.Y); if (!Native.RecoveryPointOwnedByWindow(hwnd,item.X,item.Y)) throw new InputFailure("timeline_point_not_target","Timeline move point is outside target ownership"); }
+                    }
+                    if (downMouse != 0)
+                    {
+                        if (!work.TimelineMousePointSet && !TimelineCursorSafety.CurrentPointOwned(hwnd))
+                            throw new InputFailure("timeline_cursor_not_target","Timeline has no target-owned mouse origin");
+                        if (work.TimelineMousePointSet && !Native.RecoveryPointOwnedByWindow(hwnd,work.TimelineMouseX,work.TimelineMouseY))
+                            throw new InputFailure("timeline_point_not_target","Timeline DOWN point is no longer target-owned");
+                        if (!work.TimelineMouseDownIssued && !TimelineCursorSafety.FreeForFirstDown(hwnd))
+                            throw new InputFailure("timeline_cursor_not_free","First mouse DOWN requires known free cursor and no human buttons");
                     }
                     // Registration is persisted before DOWN. Keep all ownership after a partial batch.
                     state.HeldKeysMask |= downKeys; state.HeldMouseMask |= downMouse;
@@ -394,7 +417,16 @@ static class WinInput
                     StartTimestamp(work);
                 }, delegate(LeaseSnapshot state)
                 {
-                    CheckSafe(work, state); SendEvents(work, packets.ToArray());
+                    CheckSafe(work, state);
+                    if (downMouse != 0)
+                    {
+                        if (work.TimelineMousePointSet && !Native.RecoveryPointOwnedByWindow(hwnd,work.TimelineMouseX,work.TimelineMouseY))
+                            throw new InputFailure("timeline_point_not_target","Timeline point ownership changed before DOWN");
+                        if (!work.TimelineMouseDownIssued && !TimelineCursorSafety.FreeForFirstDown(hwnd))
+                            throw new InputFailure("timeline_cursor_not_free","Cursor ownership changed before DOWN");
+                        work.TimelineMouseDownIssued=true;
+                    }
+                    SendEvents(work, packets.ToArray());
                     state.HeldKeysMask &= ~upKeys; state.HeldMouseMask &= ~upMouse;
                     expectedKeys = state.HeldKeysMask; expectedMouse = state.HeldMouseMask;
                     if (state.HeldKeysMask == 0 && state.HeldMouseMask == 0)
@@ -951,5 +983,32 @@ static class WinInput
             if (ownsAdmission && admission != null) admission.ReleaseMutex();
             if (admission != null) admission.Dispose();
         }
+    }
+}
+
+// Native first-DOWN and holding checks. Kept outside perception and invoked by
+// the original executor under its lease registration lock.
+public static class TimelineCursorSafety
+{
+    [StructLayout(LayoutKind.Sequential)] struct Point {public int X,Y;}
+    [StructLayout(LayoutKind.Sequential)] struct Rect {public int Left,Top,Right,Bottom;}
+    [StructLayout(LayoutKind.Sequential)] struct Cursor {public uint Size,Flags;public IntPtr Handle;public Point Position;}
+    [StructLayout(LayoutKind.Sequential)] struct Gui {public uint Size,Flags;public IntPtr Active,Focus,Capture,Menu,MoveSize,Caret;public Rect CaretRect;}
+    [DllImport("user32.dll")] static extern bool GetCursorInfo(ref Cursor cursor);
+    [DllImport("user32.dll")] static extern bool GetGUIThreadInfo(uint thread,ref Gui gui);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd,out uint pid);
+    [DllImport("user32.dll")] static extern bool ScreenToClient(IntPtr hwnd,ref Point point);
+    public static bool EvaluateFirstDown(bool cursorKnown,bool cursorVisible,bool cursorHandleKnown,bool captureFree,bool anyUserButton)
+    {return cursorKnown&&cursorVisible&&cursorHandleKnown&&captureFree&&!anyUserButton;}
+    public static bool FreeForFirstDown(IntPtr hwnd)
+    {
+        uint pid;uint thread=GetWindowThreadProcessId(hwnd,out pid);var cursor=new Cursor{Size=(uint)Marshal.SizeOf(typeof(Cursor))};var gui=new Gui{Size=(uint)Marshal.SizeOf(typeof(Gui))};
+        bool known=thread>0&&GetCursorInfo(ref cursor)&&GetGUIThreadInfo(thread,ref gui);
+        return EvaluateFirstDown(known,(cursor.Flags&1)!=0,cursor.Handle!=IntPtr.Zero,gui.Capture==IntPtr.Zero,Native.IsMouseDown(1)||Native.IsMouseDown(2)||Native.IsMouseDown(4));
+    }
+    public static bool CurrentPointOwned(IntPtr hwnd)
+    {
+        var cursor=new Cursor{Size=(uint)Marshal.SizeOf(typeof(Cursor))};if(!GetCursorInfo(ref cursor))return false;var point=cursor.Position;
+        return ScreenToClient(hwnd,ref point)&&Native.RecoveryPointOwnedByWindow(hwnd,point.X,point.Y);
     }
 }

@@ -65,7 +65,15 @@ export interface BodyOutcome {
 }
 
 export type BehaviorKind = 'kill_target' | 'loot_target' | 'talk_to' | 'accept_quest' | 'turn_in_quest'
-  | 'move_to' | 'fly_to' | 'avoid_hazard' | 'recover_stuck';
+  | 'move_to' | 'fly_to' | 'avoid_hazard' | 'recover_stuck' | 'activate_control';
+export type TargetScope = 'retail_wow' | 'recording_fixture';
+/** Runtime capability from the authenticated native collector, never public task params. */
+export interface BoundTargetScope {
+  scope: TargetScope; source_observation_id: string;
+  window: { token: string; hwnd: string; pid: number };
+  native_target_id: string;
+}
+export type TargetScopeVerifier = (observation: Observation) => BoundTargetScope | null;
 export interface BehaviorSpec {
   id: string;
   kind: BehaviorKind;
@@ -82,6 +90,8 @@ export interface BehaviorResult {
   real_inputs: number;
   input_count_scope?: 'known' | 'lower_bound';
   game_effect: 'confirmed' | 'unverified';
+  /** Recorder control evidence is separate from a game effect. Legacy results may omit it. */
+  fixture_effect?: 'confirmed' | 'unverified';
   release: 'confirmed' | 'unconfirmed';
   evidence_observation_ids: string[];
 }
