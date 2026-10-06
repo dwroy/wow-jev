@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "urn:wow-input:protocol:native-v1",
-  "title": "Windows 原生输入协议 v1",
+  "title": "Windows \u539f\u751f\u8f93\u5165\u534f\u8bae v1",
   "oneOf": [
     {
       "$ref": "#/definitions/command"
@@ -708,6 +708,40 @@
               "$ref": "#/definitions/counter"
             }
           }
+        },
+        "input_timing": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "clock",
+                "first_send_started_ms",
+                "first_send_finished_ms",
+                "last_send_finished_ms"
+              ],
+              "properties": {
+                "clock": {
+                  "const": "windows_qpc"
+                },
+                "first_send_started_ms": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "first_send_finished_ms": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "last_send_finished_ms": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          ]
         }
       },
       "allOf": [

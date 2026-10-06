@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 用户新决定：联盟战士，离线动作基准与现场准备完整回归通过。** 客户端仍在安装，本轮没有 Windows 桌面取证授权；数据继续现有本地包，不增加来源、OAuth、大包或许可判断。教程未定，必须同时保留“流放者离岛未完成”和“已进入巨龙时代苏醒海岸”两条路径，现场只读核验后再选。官方现行新玩家流程 Exile's Reach→更新 Dragonflight 至70→The War Within 70–80 已查；旧联盟港口入口和 69933 profile 仅参考，不直接当新机器流程/客户端证据。联盟任务候选只取本地明确无冲突联盟记录，部落/unknown/冲突仅保留参考，typed identity、giver、规范目标及当前适用仍不得推定。
+
+本轮独立实施树`.worktrees/action-benchmark`，明确owner分别负责时钟/原生及旧运行时埋点、成对策略/模拟/严格回放、现场分步脚本、联盟战士数据准备；主checkout只集成验收。预注册及指标见`docs/action-benchmark.md`，现场入口/检查单`docs/action-benchmark-field.md`，任务准备`docs/warrior-dragon-isles-start.md`。single每一步视觉+brain，layered按代码/熟悉Jev/目标异常brain分流；相同有限候选/复采样/输入闸/效果确认。模型语义结果进入相同决策上下文，不能只调用后丢弃；critical CV条件保留。模拟固定seed/AB-BA，真实代码wall与显式注入virtual成本分列，零模型成本对照允许分层更慢。Windows QPC原始capture/CV/artifact/SendInput区间与WSL单调id分开；跨域只有带有效期的对时上下界，不直接相减。输入发出、完整输入、效果确认及释放分别计。
+
+全量Python收集695项：692passed/3原有strict xfail/0skip/失败；原始完整TS498/498、0fail/skip/cancel/todo；typecheck/diff-check通过。旧TS437/Python660保留，新增TS61/Python32；当前C#原生模块、JevCapture、NpcClassify构建与离屏回归通过，未做桌面/物理输入验收。重hash负wall反例、量化对时、源视觉摘要及无回复worker/无release ACK独立审查关闭，所有原始证据在主`out/acceptance/action-benchmark/`。固定提交主CLI验收另补下方；通过后普通push仅codex/agent-system，再停下。当前尚未进行真实动作/速度或Windows桌面验收；后续必须先客户端装好及用户只读授权，冻结只读原件/当前身份/校准，再由用户单独授权有限输入和模型。现场首轮有限v1可逆背包动作对照不冒称联盟战士苏醒海岸自动任务；v2世界任务入口仍阻塞。
+
 **2026-10-06 用户第3步，阶段B离线实现及完整回归通过：既有执行大脑→有限世界任务编排已接入。** `ExecutionBrain.runWorldQuest`与旧run互斥，取消转发、世界模式换目标拒绝；仅named custom:synthetic，真实v2入口未开放。独立coordinator根据新观察选择接取/独立ordinal/交付，child继续使用原L4→L3→L2及hand:null；独立episode协议/哈希日志重新编译固定世界、逐child严格回放，独立释放证据、实际代码字节及同钟域父审批→子执行→源效果顺序均绑定。独立审查的错误driver冻结与父时间整体后移反例已修复。全量Python660passed/3原有strict xfail/0skip；最终完整TS437/437、0fail/skip/cancel/todo，typecheck/diff-check通过。第一轮430项429通过/1旧Jev取消回放失败原件保留；持久审计检查点修复后，7项新增确定性取消测试及原CLI回放均通过，不跳过/放宽。固定提交后的主checkout CLI集成验收另记下方，验收记录见`docs/acceptance/world-task-planning.md`，原始证据在`out/acceptance/world-task-planning/stage-2/`。
 
 阶段B源提交`f072c0d`已ff-only合入主checkout，并在固定提交运行实际CLI：normal完成接取→ordinal0=2→ordinal1=1→交付四个child，parent严格回放complete=true；unknown和identity-change均blocked、0child，CLI预期exit1，独立parent回放exit0/complete=false。全部0真实输入、0模型、game_effect=unverified。共用初始化后的旧world-demo及四个独立layers回放仍exit0。完整结果`main-acceptance.json`/`main-legacy-world-acceptance.json`及原始日志保留在上述stage-2目录。A/B离线阶段已完成；后续C–F与历史正式服最终验收仍未完成。本阶段验收记录提交后仅普通push codex/agent-system，推送输出及所有远端head核对另留stage-2；bundle与原HANDOFF备份完整SHA未变。

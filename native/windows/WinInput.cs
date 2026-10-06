@@ -49,6 +49,7 @@ static class WinInput
         public long TimelineStart;
         public int Duration, Button, X, Y, Dx, Dy, Delta, FromX, FromY, ToX, ToY;
         public long StartedMs = -1;
+        public double FirstSendStartedMs = -1, FirstSendFinishedMs = -1, LastSendFinishedMs = -1;
         public long Requested, Inserted;
         public bool OwnedEver;
         public bool ReleaseAccounted;
@@ -229,7 +230,14 @@ static class WinInput
         void SendEvents(Work work, Native.InputPacket[] packets)
         {
             Interlocked.Add(ref work.Requested, packets.Length);
+            double sendStarted = Clock.PreciseMs;
             int inserted = Native.Send(packets); Interlocked.Add(ref work.Inserted, inserted);
+            double sendFinished = Clock.PreciseMs;
+            if (inserted > 0)
+            {
+                if (work.FirstSendStartedMs < 0) { work.FirstSendStartedMs = sendStarted; work.FirstSendFinishedMs = sendFinished; }
+                work.LastSendFinishedMs = sendFinished;
+            }
             if (inserted != packets.Length) throw new InputFailure("sendinput_partial", "Input was not fully inserted; Win32 error " + Native.LastError);
         }
         void SendUnowned(Work work, Func<Native.InputPacket[]> build)
@@ -438,6 +446,9 @@ static class WinInput
             if (reason == "external_release_unaccounted") inputStatus = "failed";
             Dictionary<string, object> reply = Reply(work.Command, status, inputStatus, work.Requested, work.Inserted,
                 release.Released, work.StartedMs, Clock.NowMs, reason, message);
+            reply.Add("input_timing", work.FirstSendStartedMs < 0 ? null : Obj("clock", "windows_qpc",
+                "first_send_started_ms", work.FirstSendStartedMs, "first_send_finished_ms", work.FirstSendFinishedMs,
+                "last_send_finished_ms", work.LastSendFinishedMs));
             lock (stateLock) if (active == work) active = null;
             SendReply(work.Command, reply);
         }

@@ -6,6 +6,8 @@ import type { BodyAction, BodyOutcome, ExecutionContext } from '../layers/contra
 import { evaluateGate } from '../play/gate.js';
 import { compileBodyAction } from './compiler.js';
 import { assertBodyConditions, bodyProfileSha256, parseBodyProfile, type BodyProfile } from './profile.js';
+import { traceAsync, type TraceRecorder } from '../benchmark/trace.js';
+import { nativeInputSpan } from '../benchmark/metrics.js';
 
 export interface BodyIdentity { task_id: string; task_revision: number; run_epoch: number }
 export type BodyHand = Pick<NativeInputClient, 'ready' | 'sessionId' | 'execute' | 'cancel' | 'releaseAll'>;
@@ -18,6 +20,8 @@ export interface BodyRuntimeOptions {
   maxObservationAgeMs?: number; observationTimeoutMs?: number;
   /** Offline tests may advance a deterministic coordinator clock. */
   sleep?: (duration_ms: number, signal: AbortSignal) => Promise<void>;
+  trace?: TraceRecorder;
+  windowsClockId?: string;
 }
 export interface DetailedBodyOutcome extends BodyOutcome { input_count_scope: 'known' | 'lower_bound' }
 class Stopped extends Error { }
@@ -98,10 +102,13 @@ export class BodyRuntime {
     const abort = (): void => requestCancel('cancelled'); context.signal.addEventListener('abort', abort, { once: true });
     const unchanged = (): boolean => this.unchanged(context) && JSON.stringify(suppliedAction) === actionText && JSON.stringify({ ...suppliedContext, signal: undefined }) === contextText;
     try {
-      const before = await abortable(bounded(this.options.collect(true), this.observeTimeout), context.signal);
+      const before = await traceAsync(this.options.trace, 'revalidate', context.command_id,
+        () => abortable(bounded(this.options.collect(true), this.observeTimeout), context.signal));
       outcome.before_observation_id = before.observation.id; outcome.evidence_observation_ids.push(before.observation.id);
       if (!unchanged()) throw new Stopped('task_epoch_or_profile_changed');
+      const compileTrace = this.options.trace?.span('code', context.command_id, {phase:'L2_compile'});
       const compiled = compileBodyAction(action, this.profile, before.observation);
+      compileTrace?.end(compiled.status === 'ready' ? 'ok' : 'blocked');
       if (compiled.status !== 'ready') { outcome.reason = `${compiled.status}:${compiled.reason}`; return outcome; }
       const conditions = [...context.conditions, ...compiled.conditions], now = this.options.now();
       const base = { protocol: 'wow-agent' as const, version: 1 as const, type: 'action_intent' as const,
@@ -141,7 +148,8 @@ export class BodyRuntime {
       };
       // A live wait has no native dispatch, but cannot accept simulated conditions.
       if (context.mode === 'live' && compiled.action === null && conditions.some((c) => before.observation.fields[c.field]?.source === 'simulated')) throw new Error('live_wait_simulated_evidence');
-      let checked = gate(); if (!checked.ok) { outcome.reason = checked.reason; return outcome; }
+      const measuredGate = () => { const span=this.options.trace?.span('gate',context.command_id);const result=gate();span?.end(result.ok?'ok':'blocked');return result; };
+      let checked = measuredGate(); if (!checked.ok) { outcome.reason = checked.reason; return outcome; }
       if (context.mode === 'live' && compiled.action !== null) {
         const hand = this.options.hand;
         if (!hand?.ready) { outcome.reason = 'native_hand_missing'; return outcome; }
@@ -151,7 +159,7 @@ export class BodyRuntime {
       await this.append('body_action_intent', { context: { ...context, signal: undefined }, action, profile_id: this.profile.id, profile_revision: this.profile.revision,
         profile_sha256: this.profile_sha256, bindings_sha256: this.profile.bindings_sha256, binding_artifact_sha256: this.profile.source.binding_artifact_sha256,
         intent, native_action: compiled.action, resources: compiled.resources });
-      checked = gate(); if (!checked.ok) { outcome.reason = checked.reason; return outcome; }
+      checked = measuredGate(); if (!checked.ok) { outcome.reason = checked.reason; return outcome; }
       monitor = setInterval(() => { if (!unchanged()) requestCancel('task_epoch_or_profile_changed'); }, 25);
       if (context.mode === 'simulated' || compiled.action === null) {
         await abortable(this.options.sleep ? this.options.sleep(compiled.duration_ms, context.signal) : delay(compiled.duration_ms, undefined, { signal: context.signal }), context.signal);
@@ -160,9 +168,17 @@ export class BodyRuntime {
       } else {
         dispatched = true; outcome.release = 'unconfirmed'; outcome.input_count_scope = 'lower_bound';
         const hand = this.options.hand!;
-        const receipt = await bounded(hand.execute(compiled.action, { id: context.command_id }), compiled.duration_ms + 2000);
+        this.options.trace?.mark('input_attempt',context.command_id,{mode:context.mode});
+        const receipt = await traceAsync(this.options.trace,'input_transport',context.command_id,
+          () => bounded(hand.execute(compiled.action!, { id: context.command_id }), compiled.duration_ms + 2000), {includes:'native_queue_input_duration_release'});
         if (receipt.id !== context.command_id || receipt.session_id !== hand.sessionId || receipt.op !== 'execute') throw new Error('body_receipt_identity_mismatch');
         outcome.receipt = receipt;
+        if(receipt.input_timing&&this.options.windowsClockId&&this.options.trace){
+          const t=receipt.input_timing;
+          this.options.trace.record(nativeInputSpan(this.options.trace.traceId,context.command_id,this.options.windowsClockId,t.first_send_started_ms,t.first_send_finished_ms));
+          this.options.trace.mark('input_issued',context.command_id,{events_inserted:receipt.input.events_inserted,effect_confirmed:false},
+            {domain:'windows-qpc',id:this.options.windowsClockId,ms:t.first_send_finished_ms});
+        }
         if (!unchanged() || context.signal.aborted) requestCancel(context.signal.aborted ? 'cancelled' : 'task_epoch_or_profile_changed');
         outcome.input_count_scope = 'known'; outcome.real_inputs = receipt.input.events_inserted > 0 ? 1 : 0;
         outcome.release = receipt.input.released ? 'confirmed' : 'unconfirmed';
@@ -177,7 +193,7 @@ export class BodyRuntime {
       }
       if (monitor) { clearInterval(monitor); monitor = null; }
       try {
-        const after = await bounded(this.options.collect(true), this.observeTimeout);
+        const after = await traceAsync(this.options.trace,'effect',context.command_id,() => bounded(this.options.collect(true), this.observeTimeout), {confirmation:'deferred_to_behavior'});
         if (after.observation.run_id !== this.options.runId || after.observation.id === before.observation.id) throw new Error('post_observation_binding_mismatch');
         outcome.after_observation_id = after.observation.id; outcome.evidence_observation_ids.push(after.observation.id);
       } catch (error) { afterFailure = detail(error); }

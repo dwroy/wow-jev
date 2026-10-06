@@ -193,7 +193,8 @@ static class WinEye
         {
             try
             {
-                long started = Clock.NowMs;
+                double captureStarted = Clock.PreciseMs;
+                long started = (long)captureStarted;
                 WindowInfo before = CheckWindow();
                 using (Bitmap image = new Bitmap(before.Width, before.Height, PixelFormat.Format24bppRgb))
                 {
@@ -206,7 +207,8 @@ static class WinEye
                         finally { graphics.ReleaseHdc(dc); }
                     }
                     WindowInfo after = CheckWindow();
-                    long finished = Clock.NowMs;
+                    double captureFinished = Clock.PreciseMs;
+                    long finished = (long)captureFinished;
                     string failure = !captured ? "printwindow_failed" : before.Width != after.Width || before.Height != after.Height ? "client_size_changed" : null;
                     FrameMetrics metrics = failure == null ? new FrameMetrics(image) : null;
                     if (metrics != null && metrics.Empty) failure = "empty_or_near_black_frame";
@@ -218,7 +220,11 @@ static class WinEye
                         calibration == null ? InventoryCalibration.Unsupported("calibration_unavailable") : calibration.Detect(image);
                     object metricJson = metrics == null ? EyeJson.Obj("mean_luma", null, "variance_luma", null, "frame_delta", null) :
                         metrics.Json(previousWidth == image.Width && previousHeight == image.Height ? previous : null);
+                    double cvBeforeArtifactFinished = Clock.PreciseMs;
+                    double artifactStarted = Clock.PreciseMs;
                     object artifact = failure == null && save && !ending ? Save(image, seq) : null;
+                    double artifactFinished = Clock.PreciseMs;
+                    double cvAfterArtifactStarted = Clock.PreciseMs;
                     if (failure == null) { previous = metrics.Thumbnail; previousWidth = image.Width; previousHeight = image.Height; }
                     else previous = null;
                     Dictionary<string, object> message = Envelope("sample");
@@ -228,6 +234,13 @@ static class WinEye
                     if (npc != null) foreach (KeyValuePair<string, object> pair in npc.Detect(image, detectors, failure)) detectors[pair.Key] = pair.Value;
                     detectors["inventory_open"] = detector; message["detectors"] = detectors; message["artifact"] = artifact;
                     if (regions != null) message["regions"] = regions.Detect(image, "frame-" + options.Session + "-" + seq, started, WindowDpi(options.Window), failure);
+                    double cvAfterArtifactFinished = Clock.PreciseMs;
+                    message["processing_timing"] = EyeJson.Obj("clock", "windows_qpc", "capture_started_ms", captureStarted,
+                        "capture_finished_ms", captureFinished, "cv_before_artifact_started_ms", captureFinished,
+                        "cv_before_artifact_finished_ms", cvBeforeArtifactFinished, "artifact_started_ms", artifactStarted,
+                        "artifact_finished_ms", artifactFinished, "cv_after_artifact_started_ms", cvAfterArtifactStarted,
+                        "cv_after_artifact_finished_ms", cvAfterArtifactFinished);
+                    message["local_clock"] = LocalClock();
                     lock (state) { if (!ending) Emit(message); }
                 }
             }

@@ -15,6 +15,7 @@
     "jev": "tsx src/jev/cli.ts",
     "system": "tsx src/system/cli.ts",
     "layers": "tsx src/layers/cli.ts",
+    "benchmark": "tsx src/benchmark/cli.ts",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

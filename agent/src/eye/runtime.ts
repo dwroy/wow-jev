@@ -10,8 +10,9 @@ import { EyeState, type SourceImage } from './state.js';
 import type { SeedClient } from './seed.js';
 import type { EyeRunStore } from './store.js';
 import type { SampleBracket } from './protocol.js';
+import { traceAsync, type TraceRecorder } from '../benchmark/trace.js';
 
-export interface EyeRuntimeOptions { now: () => number; seed?: SeedClient; seedIntervalMs?: number; cvMaxAgeMs?: number; seedMaxAgeMs?: number; artifactConvert?: (path: string) => Promise<string>; effectWaitMs?: number }
+export interface EyeRuntimeOptions { now: () => number; seed?: SeedClient; seedIntervalMs?: number; cvMaxAgeMs?: number; seedMaxAgeMs?: number; artifactConvert?: (path: string) => Promise<string>; effectWaitMs?: number; trace?: TraceRecorder; windowsClockId?: string }
 export interface Collected { observation: Observation; bracket: SampleBracket; artifact: Artifact | null }
 export class EyeRuntime {
   readonly state: EyeState;
@@ -33,21 +34,35 @@ export class EyeRuntime {
     await this.store.append('observation', observation, this.options.now());
   }
   async collect(save = false): Promise<Collected> {
-    const bracket = await this.native.sample(save);
+    const bracket = await traceAsync(this.options.trace, 'bridge', null, () => this.native.sample(save), {includes:'native_capture_cv_artifact_transport'});
+    const nativeTiming = bracket.sample.processing_timing, clockId = this.options.windowsClockId;
+    if (nativeTiming && clockId && this.options.trace) {
+      for (const [stage, start, end] of [['capture', nativeTiming.capture_started_ms, nativeTiming.capture_finished_ms],
+        ['cv', nativeTiming.cv_before_artifact_started_ms, nativeTiming.cv_before_artifact_finished_ms],
+        ['artifact', nativeTiming.artifact_started_ms, nativeTiming.artifact_finished_ms],
+        ['cv', nativeTiming.cv_after_artifact_started_ms, nativeTiming.cv_after_artifact_finished_ms]] as const) {
+        this.options.trace.record({kind:'span',trace_id:this.options.trace.traceId,action_id:null,timing_kind:'measured',stage,
+          start:{domain:'windows-qpc',id:clockId,ms:start},end:{domain:'windows-qpc',id:clockId,ms:end},outcome:'ok',
+          meta:{sample_id:bracket.sample.id,run_id:this.store.manifest.run_id,save,capture_status:bracket.sample.capture.status}});
+      }
+    }
     return this.commit(async () => {
     const id = this.observationId(this.seq);
     await this.store.append('sample_boundary', { native_id: bracket.sample.id, observation_id: id, started_at_ms: bracket.started_at_ms, received_at_ms: bracket.received_at_ms }, this.options.now());
     const ready = this.native.ready!;
-    const artifact = save ? await this.store.copyArtifact(bracket.sample, ready.artifact_root, this.options.artifactConvert,
-      ready.export_root ? { windowsRoot: ready.export_root, localRoot: join(this.store.dir, 'native-export') } : undefined) : null;
+    const artifact = save ? await traceAsync(this.options.trace, 'artifact', null, () => this.store.copyArtifact(bracket.sample, ready.artifact_root, this.options.artifactConvert,
+      ready.export_root ? { windowsRoot: ready.export_root, localRoot: join(this.store.dir, 'native-export') } : undefined), {location:'coordinator',sample_id:bracket.sample.id}) : null;
     if (artifact) await this.store.append('artifact', artifact, this.options.now());
+    const fusion = this.options.trace?.span('fusion', null, {observation_id:id});
     this.state.applySample(bracket, id, artifact ?? undefined);
     const observation = this.state.snapshot(id, this.seq++, this.options.now(), artifact ? [artifact] : []);
+    fusion?.end();
     await this.writeObservation(observation);
     if (!this.stopping && this.options.seed && artifact && bracket.sample.capture.status === 'ok' && !this.options.seed.busy && this.options.now() - this.lastSeed >= (this.options.seedIntervalMs ?? 3000)) {
       this.lastSeed = this.options.now();
       const source: SourceImage = { captured_at_ms: bracket.started_at_ms, received_at_ms: bracket.received_at_ms, source_observation_id: observation.id, artifact_id: artifact.id, source_qpc_ms: bracket.sample.capture.started_qpc_ms, ...this.state.seedSourceContext() };
-      const job = this.options.seed.look(join(this.store.dir, artifact.path)).then((raw) => this.commit(async () => {
+      const job = traceAsync(this.options.trace, 'visual_model', null, () => this.options.seed!.look(join(this.store.dir, artifact.path)),
+        {source_observation_id:observation.id,artifact_id:artifact.id,role:'visual',asynchronous:true}).then((raw) => this.commit(async () => {
         const adoptionAt = this.options.now();
         const adoption = this.state.applySeed(raw, source, adoptionAt);
         await this.store.append('seed_result', { raw, source, adoption, adoption_at_ms: adoptionAt }, this.options.now());

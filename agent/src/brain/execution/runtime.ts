@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { traceAsync } from '../../benchmark/trace.js';
 import type { Collected } from '../../eye/runtime.js';
 import type { PlayResult } from '../../play/types.js';
 import type { JevLoopResult } from '../../jev/types.js';
@@ -162,8 +163,9 @@ export class ExecutionBrain {
       evidence_observation_ids: evidence, decisions: structuredClone(this.journal) };
   }
   private async iterate(deadline: number, epoch: number): Promise<{ status: 'completed' | 'escalated'; reason: string; evidence: string[] } | null> {
-    const before = await this.active(this.ports.collect(true), epoch);
+    const before = await traceAsync(this.ports.trace,'revalidate',null,() => this.active(this.ports.collect(true), epoch), {phase:'initial_observation'});
     const decisionId = `brain-${randomUUID()}`, planId = `brain-plan-${decisionId}`;
+    this.ports.trace?.mark('observation',decisionId,{observation_id:before.observation.id,boundary:'observation_received'});
     const facts = this.facts(before), routes = this.routes(before, facts, planId), at = this.ports.now();
     const request: BrainRequest = { protocol: 'wow-brain', version: 1, type: 'planning_request', id: decisionId, goal: structuredClone(this.memory!.goal), epoch,
       plan: { id: planId, revision: this.memory!.goal.revision }, phase: this.memory!.phase,
@@ -179,15 +181,15 @@ export class ExecutionBrain {
     let reply: BrainChoiceResult;
     try {
       if (this.plannerUnavailable) reply = failedChoice(request, 'failed', 'planner_unavailable', 0, this.promptSha);
-      else reply = await this.active(this.bounded(this.ports.planner.plan(structuredClone(request), this.ports.imagePath?.(before) ?? before.artifact?.path ?? null),
-        Math.max(1, request.deadline_ms - this.ports.now()), 'brain_planner_timeout'), epoch);
+      else reply = await traceAsync(this.ports.trace,'brain',decisionId,() => this.active(this.bounded(this.ports.planner.plan(structuredClone(request), this.ports.imagePath?.(before) ?? before.artifact?.path ?? null),
+        Math.max(1, request.deadline_ms - this.ports.now()), 'brain_planner_timeout'), epoch), {role:'brain'});
       validateChoiceResult(reply, request, this.promptSha, this.options.mode);
     } catch (error) {
       if (error instanceof Stop || error instanceof Changed) throw error;
       this.ports.planner.close(); this.plannerUnavailable = true; reply = failedChoice(request, 'failed', detail(error), 0, this.promptSha);
     }
     await this.active(this.event('brain.response', { decision_id: decisionId, result: reply }), epoch);
-    const fresh = await this.active(this.ports.collect(true), epoch), rebuilt = this.routes(fresh, facts, planId), now = this.ports.now();
+    const fresh = await traceAsync(this.ports.trace,'revalidate',decisionId,() => this.active(this.ports.collect(true), epoch), {phase:'after_choice'}), rebuilt = this.routes(fresh, facts, planId), now = this.ports.now();
     const selected = reply.status === 'ok' ? validateModelReply(reply.raw_text, request).route_id : reply.status === 'disabled' ? routes[0]!.id : null;
     const original = routes.find((route) => route.id === selected), current = rebuilt.find((route) => route.id === selected);
     let why = reply.status === 'disabled' ? 'local_planner_disabled' : 'route_approved';
@@ -201,6 +203,7 @@ export class ExecutionBrain {
       consulted_fact_ids: request.consulted_fact_ids, inferred_fact_ids: facts.filter((fact) => fact.certainty === 'inferred').map((fact) => fact.id),
       knowledge_sha256: request.knowledge_sha256, at_ms: now }), epoch);
     if (this.stop) throw this.stop; if (this.memory!.epoch !== epoch || this.updateJob) throw new Changed();
+    this.ports.trace?.mark('decision',decisionId,{route:approved.control,approved_route_id:approved.id,reason:why,observation_id:fresh.observation.id});
     this.memory!.observations.push(fresh.observation.id); this.memory!.observations = this.memory!.observations.slice(-32);
     let execution: PlayResult | JevLoopResult | null = null;
     if (approved.control !== 'brain') {

@@ -62,6 +62,8 @@ export interface NativeReceipt {
   effect: { status: 'unknown' };
   reason?: { code: string; message?: string };
   timing: { clock: 'windows_qpc'; started_ms: number | null; finished_ms: number | null };
+  /** Original successful SendInput call bounds; absent with legacy native binaries. */
+  input_timing?: { clock: 'windows_qpc'; first_send_started_ms: number; first_send_finished_ms: number; last_send_finished_ms: number } | null;
   local_clock: { domain: 'windows-qpc'; at_ms: number };
   state?: { active_action_id: string | null; held_keys_mask: string; held_mouse_mask: number; watchdog_ready: boolean; stop_requested: boolean; stop_reason: string; lease_deadline_ms: number };
 }
@@ -90,4 +92,9 @@ export function assertNativeMessage(value: unknown, validate: NativeValidator): 
   if (start !== null && start > value.local_clock.at_ms || finish !== null && finish > value.local_clock.at_ms ||
       start !== null && finish !== null && finish < start) throw new Error('native_time: inconsistent Windows clock times');
   if (value.status === 'accepted' && value.op !== 'execute') throw new Error('native_state: only execute can be accepted');
+  const precise = value.input_timing;
+  if (precise && (value.op !== 'execute' || inserted < 1 || start === null || finish === null ||
+    precise.first_send_started_ms < start || precise.first_send_finished_ms < precise.first_send_started_ms ||
+    precise.last_send_finished_ms < precise.first_send_finished_ms || precise.last_send_finished_ms >= finish + 1 ||
+    precise.last_send_finished_ms >= value.local_clock.at_ms + 1)) throw new Error('native_input_timing_invalid');
 }

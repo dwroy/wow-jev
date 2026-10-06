@@ -29,6 +29,15 @@ namespace WowJev.Input
                 return value / Frequency * 1000 + value % Frequency * 1000 / Frequency;
             }
         }
+        public static double PreciseMs
+        {
+            get
+            {
+                long value;
+                if (!QueryPerformanceCounter(out value)) throw new InvalidOperationException("QPC unavailable");
+                return (double)value * 1000.0 / Frequency;
+            }
+        }
     }
 
     public sealed class KeySpec

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "scenario_id": "warrior-dragon-isles-start-v1",
+  "class_intent": "Warrior",
+  "faction_intent": "Alliance",
+  "branch_intent": "retail",
+  "evidence_scope": "offline_reference_preparation",
+  "automatic_action_eligible": false,
+  "world_pack_sha256": "5f762a251e9fb301ee3c8e50d9bbbc31fefc8bf2a67b686a60ef8360bb1c2774",
+  "world_sqlite_sha256": "a6bce3f92b7566824cd2267da90acae7d1048b805a6fb13b5e6f47700d185391",
+  "world_scope": "retail/dragon-isles/waking-shores-prologue-chapter-one",
+  "reference_quest_ids": [65439, 65444, 65451, 65452, 65453, 65760, 65989, 65990, 65991, 65992, 65993, 65995, 65996, 65997, 65998, 65999, 66000, 66001, 66596, 67700, 69910, 69911, 69912, 69914, 70122, 70123, 70124, 70125, 70197, 70198],
+  "faction_branches": {
+    "Alliance": {"legacy_transfer_reference": 67700, "arrival_group": [70122, 70124, 70123], "continuation_reference": [70125, 69911, 69912, 69914, 65760]},
+    "Horde": {"legacy_transfer_reference": 65444, "arrival_group": [65452, 65451, 65453], "continuation_reference": [69910, 69911, 69912, 69914, 65760]}
+  },
+  "tutorial_branches": [
+    {"id": "fresh_tutorial", "when": "new account or Exile's Reach still incomplete", "next": "observe current Exile's Reach quest log and transfer; specific current quest IDs are unknown in this local pack"},
+    {"id": "tutorial_complete", "when": "current Exile's Reach completion and Waking Shores arrival are evidenced", "next": "observe offered current arrival quests; compare both faction reference groups; do not require legacy capital/harbor quests"},
+    {"id": "veteran_or_existing", "when": "veteran/racial start, allied race, returning experience, or character already has progress", "next": "observe selected campaign and existing character progress; no automatic reset, teleport, tutorial skip, or expansion choice"},
+    {"id": "unknown", "when": "account/tutorial/character state lacks evidence", "next": "read-only identification before choosing a branch"}
+  ],
+  "required_start_paths": ["exiles_reach_unfinished", "waking_shores_entered"],
+  "assumptions": [
+    "The user selected Alliance Warrior and the Dragon Isles; race, level, tutorial completion, client version and key bindings remain unknown. Class and faction are user intent, not observed facts.",
+    "Both unfinished Exile's Reach and already-entered Dragonflight Waking Shores paths must remain prepared until the real character state is observed.",
+    "Official current new-player guidance describes Exile's Reach followed by Dragonflight to level 70. The installed regional client and offered quests are the final authority.",
+    "This fixed local Waking Shores pack records historical/reference prologue data; its quest IDs and names do not establish the current revised new-player handoff.",
+    "The three arrival quests are an unordered candidate group, not a required serial route; sourceQuests relations retain their original threshold/filter uncertainty."
+  ],
+  "official_research": [
+    {"id": "starter-guide", "checked_at": "2026-10-06", "url": "https://news.blizzard.com/en-gb/article/24266319/new-players-starter-guide-welcome-to-world-of-warcraft", "use": "current new-player flow; research citation only, no source import"},
+    {"id": "updated-new-player", "checked_at": "2026-10-06", "url": "https://news.blizzard.com/en-us/article/24226733/new-or-returning-take-your-character-to-the-next-level", "use": "11.2.7 new-player and returning-player distinctions; research citation only, no source import"}
+  ],
+  "required_observation_fields": ["client.version.six_dimensions", "character.identity", "character.class", "character.faction", "character.race", "character.level", "tutorial.state", "campaign.selected", "zone.typed_key_and_phase", "quest.offered_or_accepted.typed_key", "quest.objective.ordinal_and_assertion_ref", "quest.objective.current_and_required_counts", "quest.starter_or_finisher.typed_key_and_role", "target.typed_key_and_signature", "reward.identity_and_policy", "ability.spell_identity_and_available_state", "input.binding_and_client_geometry", "source.capture_id_and_artifact_sha256", "source.clock_domain_id_unit_and_observed_at", "source.parser_prompt_model_and_code_versions"]
+}

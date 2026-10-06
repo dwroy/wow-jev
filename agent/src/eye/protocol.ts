@@ -18,6 +18,9 @@ export interface EyeSample {
     target_name?: EyeDetector<string>; npc_dialog_open?: EyeDetector; npc_in_interaction_range?: EyeDetector };
   artifact: null | { id: string; windows_path: string; exported_windows_path?: string; sha256: string; width: number; height: number };
   local_clock: EyeClock; regions?: RegionalBatch;
+  processing_timing?: { clock: 'windows_qpc'; capture_started_ms: number; capture_finished_ms: number;
+    cv_before_artifact_started_ms: number; cv_before_artifact_finished_ms: number; artifact_started_ms: number;
+    artifact_finished_ms: number; cv_after_artifact_started_ms: number; cv_after_artifact_finished_ms: number };
 }
 export interface EyeStopped { protocol: 'wow-eye'; version: 1; type: 'stopped'; session_id: string; id: string; local_clock: EyeClock }
 export interface EyeError { protocol: 'wow-eye'; version: 1; type: 'error'; session_id?: string; id?: string; reason: EyeReason; local_clock: EyeClock }
@@ -34,6 +37,14 @@ export function assertEye(value: unknown, validator: EyeValidator): asserts valu
   if (!validator(value)) throw new Error(`eye_schema: ${(validator.errors ?? []).map((error) => `${error.instancePath} ${error.message}`).join('; ')}`);
   if (value.type === 'sample') {
     if (value.capture.started_qpc_ms > value.capture.finished_qpc_ms || value.capture.finished_qpc_ms > value.local_clock.at_ms) throw new Error('eye_windows_clock_order');
+    const t = value.processing_timing;
+    if (t) {
+      const points = [t.capture_started_ms, t.capture_finished_ms, t.cv_before_artifact_started_ms, t.cv_before_artifact_finished_ms,
+        t.artifact_started_ms, t.artifact_finished_ms, t.cv_after_artifact_started_ms, t.cv_after_artifact_finished_ms];
+      if (points.some((at, i) => i > 0 && at < points[i-1]!) || points.at(-1)! >= value.local_clock.at_ms + 1 ||
+        Math.abs(t.capture_started_ms - value.capture.started_qpc_ms) >= 1 ||
+        Math.abs(t.capture_finished_ms - value.capture.finished_qpc_ms) >= 1) throw new Error('eye_processing_timing_invalid');
+    }
   }
   if (value.type === 'sample' || value.type === 'offline_result') {
     if (value.regions) {

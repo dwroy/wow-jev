@@ -6,6 +6,7 @@ import type { KnowledgeFact, KnowledgeSnapshot, RuntimeVersion, WorldPackRef } f
 import type { GameVersion } from '../../game-data/types.js';
 import type { WorldQuestCandidateOptions } from '../../game-data/world-task-compiler.js';
 import type { WorldQuestCoordinatorPorts, WorldQuestStatus } from './world-quest.js';
+import type { TraceRecorder } from '../../benchmark/trace.js';
 
 interface GoalBase { id: string; revision: number; description: string }
 export type BrainGoal = GoalBase & (
@@ -49,6 +50,7 @@ export interface BrainExecuteContext {
   revalidated: Collected; conditions: ActionCondition[];
 }
 export interface BrainPorts {
+  trace?: TraceRecorder;
   now(): number; collect(save: boolean): Promise<Collected>;
   append(kind: 'event', data: unknown, at: number): Promise<void>;
   planner: BrainPlanner; imagePath?(collected: Collected): string | null;

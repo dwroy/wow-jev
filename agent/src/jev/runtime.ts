@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { traceAsync, type TraceRecorder } from '../benchmark/trace.js';
 import type { Collected } from '../eye/runtime.js';
 import type { LogKind } from '../eye/store.js';
 import type { PlayPlan, PlayResult, SkillBindings } from '../play/types.js';
@@ -6,6 +7,7 @@ import type { CandidateContext, JevCandidate, JevChooser, JevChoiceResult, JevEx
   JevIterationResult, JevLoopResult, JevRequest } from './types.js';
 
 export interface JevPorts {
+  trace?: TraceRecorder;
   now(): number;
   collect(save: boolean): Promise<Collected>;
   append(kind: LogKind, data: unknown, at: number): Promise<void>;
@@ -173,7 +175,8 @@ export class JevLoop {
     let auditedBefore: string | null = null; let auditedFresh: string | null = null;
     let plan: PlayPlan | null = null; let execution: PlayResult | null = null;
     try {
-      before = await this.active(this.ports.collect(true));
+      before = await traceAsync(this.ports.trace,'revalidate',decisionId,() => this.active(this.ports.collect(true)), {phase:'initial_observation'});
+      this.ports.trace?.mark('observation',decisionId,{observation_id:before.observation.id,boundary:'observation_received'});
       const at = this.ports.now();
       const candidates = this.candidates(before, goal, at);
       const request: JevRequest = { protocol: 'wow-jev', version: 1, type: 'selection_request', id: decisionId,
@@ -186,15 +189,15 @@ export class JevLoop {
       try {
         if (this.stop) throw this.stop;
         if (this.chooserUnavailable) throw new Error('jev_chooser_unavailable');
-        reply = await this.active(this.bounded(this.ports.chooser.choose(structuredClone(request), this.ports.imagePath?.(before) ?? before.artifact?.path ?? null),
-          Math.max(1, request.deadline_ms - this.ports.now()), 'jev_choice_timeout'));
+        reply = await traceAsync(this.ports.trace,'jev',decisionId,() => this.active(this.bounded(this.ports.chooser.choose(structuredClone(request), this.ports.imagePath?.(before!) ?? before!.artifact?.path ?? null),
+          Math.max(1, request.deadline_ms - this.ports.now()), 'jev_choice_timeout')), {role:'jev'});
       } catch (error) {
         if (error instanceof Stop) throw error;
         this.chooserUnavailable = true; this.ports.chooser.close(); reply = this.replyFailure(decisionId, detail(error));
       }
       await this.auditCheckpoint('jev.response', { decision_id: decisionId, request_id: request.id, result: reply },
         () => { selected = typeof reply.candidate_id === 'string' ? reply.candidate_id : null; });
-      fresh = await this.active(this.ports.collect(true));
+      fresh = await traceAsync(this.ports.trace,'revalidate',decisionId,() => this.active(this.ports.collect(true)), {phase:'after_choice'});
       const revalidationAt = this.ports.now();
       const rebuilt = this.candidates(fresh, goal, revalidationAt); const rebuiltHash = this.ports.candidatesHash(rebuilt);
       const original = candidates.find((candidate) => candidate.id === reply.candidate_id);
@@ -214,6 +217,7 @@ export class JevLoop {
         candidates: rebuilt, candidates_sha256: rebuiltHash, approved_candidate_id: approved.id, reason: why,
         at_ms: revalidationAt, goal_unchanged: unchanged() }, () => { auditedFresh = revalidatedObservationId; });
       if (this.stop) throw this.stop;
+      this.ports.trace?.mark('decision',decisionId,{route:'jev',approved_candidate_id:approved.id,reason:why,observation_id:fresh.observation.id});
       plan = decisionPlan(decisionId, goal.revision, approved);
       const running = this.ports.execute(plan, { decisionId, candidate: approved, revalidated: fresh });
       try { execution = await this.active(running); }
