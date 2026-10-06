@@ -4,6 +4,22 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 20:00，用户恢复原前台设计并授权一次性/IT交互任务；只读取图成功，焦点核验未通过，已停止。** 用户不做后台PostMessage/WGC方案，保留前台焦点规则，禁止抢前台。目标仍仅联盟战士流放者离岛第一个任务，完成或阻塞即停。允许当前登录用户的会话1执行端及任务完成删除，不允许注册表/组策略/服务/安装改动。未改AGENTS或原输入/截图设计。
+
+三次最低权限、无触发器、15秒上限的`WowJev-FirstQuest-Readonly-*`任务已创建后删除；完整名称/XML/SHA/删除回查在主`out/acceptance/exiles-first-task-20261006/`。第一轮winexe Console.OutputEncoding启动异常原件保留并修复；第二轮旧Gx类名假设拒绝，修为只读记录经PID/start/正式服路径验证的实际类，不提升输入授权。第三轮helper PID12036实际session1，Wow PID22072/start_ticks639268827443062278仍一致，HWND0x904a6，class=`waApplication Window`，2560×1440物理客户区，DPI144，未最小化；PrintWindow flags3保存有效客户区PNG。截图中1级角色“小啊”在联盟船上，教程提示与吉安娜·普罗德摩尔交谈，黄色可接图标；任务标题/ID/接取及键位尚未核实。
+
+第三轮采前/采后`GetForegroundWindow=0x0/focused=false`，无法确认目标在输入前台；按原闸门要求不发输入并停止，不把用户“已放前台”声明代替Win32检查，也不据0句柄断言用户窗口实际不在前台。输入执行器/看门狗未创建、命令/事件0、程序持有按键0，无物理释放ACK可报告。Seed调用0，助手原图复核1；未接取/完成任务、不继续下个任务。实测同Windows QPC capture76.636ms、整个只读观察764.976ms；协调器任务注册→执行→等待→删除2632.632ms，分域sidecar来自既有TraceRecorder，重叠跨度不相加；CV/模型/决策→输入/效果延迟均unknown。
+
+只读实现使用独立树`.worktrees/exiles-first-task`，新增InteractiveReadonlyProbe及固定payload/取消文件的一次性任务脚本，无输入API调用/无提权/密码。C#编译和3项非法参数/任意输出/路径穿越拒绝、8项Python离线生命周期/清理反例通过；本轮未重跑历史498TS/692Python套件，不将其当现场验收。原始失败、完整任务创建/删除、截图/时间与`resumed-summary.json`、`readonly-latency.jsonl`、`tasks-deletion-verified.json`均保留，详细`docs/acceptance/exiles-first-task.md`。本地提交/集成、不推送；当前停止边界是实际输入焦点未知，下一步需验证交互执行端能读到当前前台后重新只读，本轮没有任何游戏输入。
+
+**2026-10-06 19:42，联盟战士教程第一个任务现场尝试：前置会话隔离阻塞，已按用户要求停止。** 用户本轮明确授权Windows只读截图、低频视觉和有限输入；目标仅流放者离岛教程第一个任务，完成或阻塞就停，不继续下个任务。最新焦点约束：不通过就禁止输入，不能抢前台；遮挡/最小化如实记录。该授权更新下面安装中/尚无现场授权的历史状态。
+
+实际只读探针核实Wow.exe PID22072，Windows session1，2026-10-06T11:25:44.3062278Z（本地19:25:44）启动，start_ticks=`639268827443062278`，路径`C:\Program Files (x86)\World of Warcraft\_retail_\Wow.exe`，FileVersion12.1.0.69933。调用PowerShell PID32172/session0，身份XDWIN\XD；session1 Explorer PID12544。调用环境中的game/shell/foreground HWND均0x0，不能把这个结果当成游戏不存在、失焦、最小化或实际前台状态。
+
+仓库HostLaunchProbe固定只启动WslRestartAcceptance.exe的只读preflight，不是通用交互启动器；其Explorer路径也要求调用方GetShellWindow非零。当前仓库没有可信的session0→1 NativeEye/NativeInput transport，因此窗口、物理客户区、DPI、当前任务、键位及实际焦点尚未核实。未尝试新ScheduledTask/服务/身份权限调整，未修改旧Host限制；根据“遇阻塞停止”，本轮到此前置检查为止。
+
+截图0、模型调用0、输入命令/事件0，未创建输入执行器/未持有按键；不报告物理释放ACK或任务完成。实测协调器单调时钟元数据探针往返586.049ms；capture/CV/视觉/决策/观察→输入/效果延迟均unknown，未混减Windows/WSL时钟。原件`out/acceptance/exiles-first-task-20261006/{context-probe.json,context-probe.stdout,context-probe.stderr,summary.json,sha256.json}`；记录`docs/acceptance/exiles-first-task.md`。只提交本地验收文档、不推送；后续需先有session1执行入口/可信交互桥，再从只读核验开始，仍只处理用户批准的第一个任务。
+
 **2026-10-06 用户新决定：联盟战士，离线动作基准与现场准备完整回归通过。** 客户端仍在安装，本轮没有 Windows 桌面取证授权；数据继续现有本地包，不增加来源、OAuth、大包或许可判断。教程未定，必须同时保留“流放者离岛未完成”和“已进入巨龙时代苏醒海岸”两条路径，现场只读核验后再选。官方现行新玩家流程 Exile's Reach→更新 Dragonflight 至70→The War Within 70–80 已查；旧联盟港口入口和 69933 profile 仅参考，不直接当新机器流程/客户端证据。联盟任务候选只取本地明确无冲突联盟记录，部落/unknown/冲突仅保留参考，typed identity、giver、规范目标及当前适用仍不得推定。
 
 本轮独立实施树`.worktrees/action-benchmark`，明确owner分别负责时钟/原生及旧运行时埋点、成对策略/模拟/严格回放、现场分步脚本、联盟战士数据准备；主checkout只集成验收。预注册及指标见`docs/action-benchmark.md`，现场入口/检查单`docs/action-benchmark-field.md`，任务准备`docs/warrior-dragon-isles-start.md`。single每一步视觉+brain，layered按代码/熟悉Jev/目标异常brain分流；相同有限候选/复采样/输入闸/效果确认。模型语义结果进入相同决策上下文，不能只调用后丢弃；critical CV条件保留。模拟固定seed/AB-BA，真实代码wall与显式注入virtual成本分列，零模型成本对照允许分层更慢。Windows QPC原始capture/CV/artifact/SendInput区间与WSL单调id分开；跨域只有带有效期的对时上下界，不直接相减。输入发出、完整输入、效果确认及释放分别计。
