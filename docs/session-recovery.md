@@ -40,10 +40,12 @@ python3 tools/recover.py recover --recovery-authorized --target-character 小啊
 
 `launch`只恢复至独立确认的世界画面，绝不点击NPC；`recover`仅再尝试当前第一个吉安娜交谈，确认后停。默认总预算180s、单阶段30s、最多8个操作（包括启动请求）、点击100ms，均可调低不可扩成无限。Ctrl+C/SIGTERM触发串行取消及原生释放，允许最多额外6.5s的释放取证排空；没有release证据的结果仍unconfirmed。脚本不接受任意shell/executable/启动参数或凭据。
 
-输出`summary.json`、`events.jsonl`、`trace.jsonl`、source manifest/冻结源码、每阶段request/result、PNG、OCR/CV、完整任务注册/删除/回查与原生JSONL。未知帧时可返回当前source检查点；`--review-file`只接受精确同源同target审核，不能把旧frame变新、不能覆盖认证/协议/更新硬停止。常规已校准选角及初始交谈路径无需逐帧review文件。
+输出`summary.json`、`recovery.jsonl`（事件与分域trace）、`manifest.json`/冻结源码、每阶段request/result、PNG、OCR/CV、完整任务注册/删除/回查与原生JSONL；摘要的`trace`保留同份span/mark。未知帧时可返回当前source检查点；`--review-file`只接受精确同源同target审核，不能把旧frame变新、不能覆盖认证/协议/更新硬停止。常规已校准选角及初始交谈路径无需逐帧review文件。
 
 初版全量TS538/538、Python728passed+3原有strict xfail/0skip通过；live-01只读实际发现断线公告中的账号文字误触强认证阻塞，及零面积上方窗口误拒。这属于程序误判，不是用户需要输入凭据的证据；原件保留，输入0。修补后最终全量TS546/546、Python729passed+3原有strict xfail/0skip、typecheck/diff-check通过；C45项/桥27项、原生安全fixture42、窗口发现/延期心跳fixture50、真实保存图的CV正反例14检查通过，新增真实断线图的本地OCR回放。没有删改或跳过旧测试。
 
 账号/登录等泛词仅在中心成对表单上下文构成认证要求，密码/验证码/二次验证等强词仍即时停止。中心明确断线标记与当前确定框配对才可确认一次，重连需后图重新取证；通用“确定”没有输入资格。零面积窗口无可见区域，明确排除并记录；反向矩形/仍存在但API失败仍拒绝。可选QPC元数据拆截图API、PNG编码写盘、窗口安全复核、CV/OCR；旧capture envelope包含PNG，fallback API envelope还包含可见性复核，分别标注范围。
 
 窗口fixture在session0，只能验证纯候选规则/隐藏窗口拒绝/心跳序列，不冒充session1战网可见正样本；当前角色/教程校准未覆盖其它布局。现场冷启动、取消强杀和游戏效果各另报告，不能从上述软件数字外推。
+
+最新现场与完整延迟见[恢复验收](acceptance/session-recovery.md)：第二轮正确识别断线，但完整客户区检查发现上方窗口0x400ce区域相交，停止在恢复点击前。两轮均0游戏输入，首个交谈未完成；当前需要用户移开遮挡，再以新取证继续。四项临时任务已删除并独立回查，没有系统配置改动。

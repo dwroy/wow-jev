@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 A/B/C 已集成并全绿；第二轮现场正确识别断线，但客户区遮挡，输入前停止。** 525d712/f881b73/be99ab0/4844f61 分步实现焦点恢复、session1受限交互桥、recover/launch及实图修补。最终TS546/546、Python729passed+3原有strict xfail（收集732，0fail/skip）、typecheck通过；原件在主out/acceptance/session-recovery-20261006/software-fix-01。最新验收详见docs/acceptance/session-recovery.md，旧阶段记录作为历史保留。
+
+live-02基线4844f61，只读discover+observe，PID22072/start_ticks639268827443062278/HWND0x904a6/class waApplication Window/session1核验一致；物理客户区2560×1440/DPI144，visible/nonminimized但focused=false。当前断线WOW51900319中心确定识别正确；完整客户区核验发现上方0x400ce区域相交，reason client_occluded，协调器focus_recovery_safety_gate在任何点击前停止。目标第一个交谈未完成、goal_effect unverified；两轮总输入/效果/输入执行器/看门狗/云模型均0，abstract release confirmed仅未取得输入所有权，没有物理释放ACK。没有实际冷启动或游戏完成可报告。
+
+最新Windows QPC：截图API320.613ms、PNG394.943ms、窗口复核25.819ms、CV1274.770ms、OCR562.182ms、完整observe3246.147ms；协调器全轮12065.231ms，冷桥discover6337.612/observe5719.915ms。分域/嵌套不相减相加，观察→输入与效果延迟均unknown，没有single/layered现场跑分。四项WowJev-SessionRecovery一次性任务全部删除且独立GetTask回查80070002不存在；没有系统配置改动。汇总field-summary.json及250文件evidence-sha256.json留本地主out。当前停止，用户需移开覆盖WoW客户区的窗口、保持完整可见/未最小化并留>5s空闲；收到继续指示再新取证。仅按当前授权正常推送codex/agent-system，不force、不推其它分支。
+
 **2026-10-06 第一轮恢复实测无输入；断线公告误判及零面积窗口误拒已修并全量复验，准备重新取证。** A525d712/Bf881b73/Cbe99ab0已ff-only主集成。live-01约8.965s在只读后停credentials_or_authentication_required，实图实际上是“已从服务器断开（WOW51900319）”中心确定、背后重新连接，账号仅公告/创建账号文字；没有密码表单，不能称用户需输入凭据。Native可见性另误把上方成功读取的零宽/零高系统窗口当geometry unknown。原件未改，0输入/0native session/0模型，当前任务仍未完成；release abstract confirmed仅表示未取得输入所有权，不是物理释放ACK。
 
 实际图回放驱动修补：强认证词仍阻塞，泛账号/登录改中心表单成对上下文，公告/创建账号不单独触发；统一schema增加断开/确定/重新连接与错误码。只有中心明确断线marker与下方当前确定框几何配对才一次ACK，随后独立复采重连；focus点击若已关弹窗不再点击旧ACK。Native只排除确定零面积矩形，反向矩形/仍存在但读取失败继续deny，消失窗口最多重新枚举一次；occluder diagnostics只HWND/class/错误/rect，不读其它标题。新增截图API、PNG写盘、窗口复核QPC独立可选字段；旧capture区间仍含PNG，不与旧85ms API数据混同。
