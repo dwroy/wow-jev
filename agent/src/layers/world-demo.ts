@@ -10,6 +10,7 @@ import { layerKnowledgeScope, queryKnowledge } from '../knowledge/index.js';
 import { directoryHash, sourceHash } from '../learner/iteration/util.js';
 import { copyWorldPackage } from '../game-data/world-package.js';
 import { WorldTaskClient } from '../game-data/world-task.js';
+import { compileWorldQuestCandidates } from '../game-data/world-task-compiler.js';
 import type { WorldEntityKey } from '../game-data/world.js';
 import { bodyProfileSha256 } from '../actions/profile.js';
 import { objectiveCountField } from '../tasks/runtime.js';
@@ -26,26 +27,25 @@ export async function runWorldQuestDemo(options: { repository: string; directory
     manifestSha256: version.world.manifest_sha256, sqliteSha256: version.world.sqlite_sha256 });
   const hint = await client.planQuest(version.client_version, options.quest);
   if (hint.evidence_scope !== 'synthetic_fixture' || options.quest.namespace !== 'custom:synthetic' || hint.status !== 'ready_hint') throw new Error('world_demo_named_synthetic_fixture_required');
+  const starter = hint.givers.find(g => g.supported && g.role === 'starter'), finisher = hint.givers.find(g => g.supported && g.role === 'finisher');
+  if (!starter || !finisher) throw new Error('world_demo_typed_giver_missing');
+  const compiled = await compileWorldQuestCandidates({ client, version: version.client_version, quest: options.quest,
+    bindings: { world_pack_sha256: version.world.manifest_sha256, client_version: version.client_version, quest_key: options.quest,
+      starter: { entity: starter.entity, target_signature: 'synthetic-guide' }, finisher: { entity: finisher.entity, target_signature: 'synthetic-guide' },
+      objectives: hint.objectives.map(o => ({ ordinal: o.identity.ordinal, entity: o.target!, target_signature: 'synthetic-target', attack_ability: 'attack' })), reward_policy: 'none' },
+    budget: { task_max_duration_ms: 5000, task_max_behaviors: 2, behavior_max_duration_ms: 3000, behavior_max_actions: 8, action_duration_ms: 100 },
+    taskIdPrefix: 'synthetic' });
+  if (compiled.status !== 'ready_candidates' || canonicalJson(compiled.hint) !== canonicalJson(hint)) throw new Error('world_demo_candidate_binding');
   const root = resolve(options.directory); await mkdir(root, { recursive: false });
   await writeFile(join(root, 'world-task-plan.json'), canonicalJson(hint), { flag: 'wx', mode: 0o400 });
   const episode = `synthetic-episode-${randomUUID()}`, q = String(options.quest.native_id), profile = demoProfile();
   let clock = 0, sequence = 0, accepted = false, completed = false, turnedIn = false, reward = false;
   const progress = new Map<number, number>();
   const runs: { phase: string; directory: string; status: string; real_inputs: number }[] = [];
-  const base = { max_duration_ms: 3000, max_actions: 8 };
-  const tasks: { phase: 'accept' | 'objective' | 'deliver'; task: LayerTaskSpec; ref: WorldObjectiveRef | null }[] = [
-    { phase: 'accept', ref: null, task: { id: 'synthetic-accept', revision: 1, kind: 'sequence', params: {}, max_duration_ms: 5000, max_behaviors: 2,
-      behaviors: [{ ...base, id: 'accept', kind: 'accept_quest', params: { quest_id: q, target_signature: 'synthetic-guide', action_duration_ms: 100 } }] } },
-    ...hint.objectives.map(o => ({ phase: 'objective' as const, ref: o.identity, task: { id: `synthetic-objective-${o.identity.ordinal}`, revision: 1, kind: 'kill_count' as const,
-      params: { quest_id: q, count: o.required_count!, objective_ref: o.identity as unknown as JsonValue, objective_target: o.target as unknown as JsonValue }, max_duration_ms: 5000, max_behaviors: 2,
-      behaviors: [{ ...base, id: 'credit-target', kind: 'kill_target' as const, params: { target_signature: 'synthetic-target', attack_ability: 'attack', action_duration_ms: 100 } }] } })),
-    { phase: 'deliver', ref: null, task: { id: 'synthetic-deliver', revision: 1, kind: 'deliver_quest', params: { quest_id: q, reward_policy: 'none' }, max_duration_ms: 5000, max_behaviors: 2,
-      behaviors: [{ ...base, id: 'deliver', kind: 'turn_in_quest', params: { quest_id: q, target_signature: 'synthetic-guide', reward_policy: 'none', action_duration_ms: 100 } }] } },
-  ];
+  const tasks = compiled.candidates.map(candidate => ({ ...candidate, ref: candidate.objective_ref }));
   for (const [index, entry] of tasks.entries()) {
     const runId = `world-task-${randomUUID()}`, dir = join(root, `${index}-${entry.phase}`), task = entry.task;
-    const target = entry.ref ? hint.objectives.find(o => o.identity.ordinal === entry.ref!.ordinal)?.target :
-      hint.givers.find(g => g.supported && g.role === (entry.phase === 'accept' ? 'starter' : 'finisher'))?.entity;
+    const target = entry.target;
     if (!target) throw new Error('world_demo_typed_target_missing');
     let dead = false, casts = 0, activeAction: BodyAction | null = null;
     const manifest: LayerManifestV2 = { schema_version: 2, audit_version: 'layer-evidence-v2', mode: 'simulated', started_at: new Date().toISOString(),

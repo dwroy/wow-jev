@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 import type { GameVersion } from './types.js';
 import type { WorldValue, WorldNamespace } from './world.js';
 import { WorldTaskClient, buildSyntheticWorldTask, parseWorldTaskJson, type WorldTaskRuntimeContext } from './world-task.js';
+import { compileWorldQuestCandidates, type WorldQuestCandidateBindings, type WorldQuestCandidateBudget } from './world-task-compiler.js';
 
 const repository = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
-const allowed = new Set(['world-dir', 'manifest-sha256', 'sqlite-sha256', 'version', 'quest-id', 'namespace', 'context', 'runtime-db', 'runtime-context', 'python', 'output-root', 'references']);
+const allowed = new Set(['world-dir', 'manifest-sha256', 'sqlite-sha256', 'version', 'quest-id', 'namespace', 'context', 'runtime-db', 'runtime-context', 'python', 'output-root', 'references', 'bindings', 'budget', 'task-id-prefix']);
 function file(name: string): unknown {
   const path = resolve(name);
   if (!lstatSync(path).isFile() || lstatSync(path).isSymbolicLink() || realpathSync(path) !== path || lstatSync(path).size > 65536) throw new Error('world_task_cli_json_path_or_limit');
@@ -16,7 +17,7 @@ function file(name: string): unknown {
 export async function main(argv = process.argv.slice(2)): Promise<number> {
   const command = argv[0], options = new Map<string, string>();
   try {
-    if (command !== 'plan' && command !== 'synthetic-demo') throw new Error('usage: world-task-cli.ts plan|synthetic-demo (readonly hints, no game input)');
+    if (command !== 'plan' && command !== 'synthetic-demo' && command !== 'candidates') throw new Error('usage: world-task-cli.ts plan|candidates|synthetic-demo (readonly, no game input)');
     for (let i = 1; i < argv.length; i++) {
       const key = argv[i]!.slice(2);
       if (!argv[i]!.startsWith('--') || !allowed.has(key) || options.has(key)) throw new Error('world_task_cli_option_invalid');
@@ -36,6 +37,8 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return 0;
     }
     if (options.has('output-root')) throw new Error('world_task_cli_plan_is_readonly');
+    if (command === 'plan' && ['bindings', 'budget', 'task-id-prefix'].some(k => options.has(k))) throw new Error('world_task_cli_plan_candidate_option');
+    if (command === 'candidates' && ['context', 'runtime-db', 'runtime-context', 'references'].some(k => options.has(k))) throw new Error('world_task_cli_candidates_fixed_input_required');
     const version = file(required('version')) as GameVersion;
     const id = required('quest-id');
     if (!/^[1-9][0-9]*$/.test(id) || !Number.isSafeInteger(Number(id))) throw new Error('world_task_cli_quest_id_invalid');
@@ -48,7 +51,14 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     }
     const client = new WorldTaskClient({ repositoryDirectory: repository, worldDirectory: required('world-dir'),
       manifestSha256: required('manifest-sha256'), sqliteSha256: required('sqlite-sha256'), pythonExecutable: python });
-    const result = await client.planQuest(version, { namespace: (options.get('namespace') ?? version.branch) as WorldNamespace, kind: 'quest', native_id: Number(id) }, {
+    const quest = { namespace: (options.get('namespace') ?? version.branch) as WorldNamespace, kind: 'quest' as const, native_id: Number(id) };
+    if (command === 'candidates') {
+      const result = await compileWorldQuestCandidates({ client, version, quest,
+        bindings: file(required('bindings')) as WorldQuestCandidateBindings, budget: file(required('budget')) as WorldQuestCandidateBudget,
+        ...(options.has('task-id-prefix') ? { taskIdPrefix: required('task-id-prefix') } : {}) });
+      console.log(JSON.stringify(result, null, 2)); return 0;
+    }
+    const result = await client.planQuest(version, quest, {
       ...(options.has('context') ? { context: file(required('context')) as WorldValue } : {}), ...(runtime ? { runtime } : {}), includeReferences: options.has('references'),
     });
     console.log(JSON.stringify(result, null, 2));

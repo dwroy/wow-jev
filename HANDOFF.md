@@ -4,6 +4,10 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 用户第3步，后续阶段A：固定世界提示→L4候选已完成离线实施与全量回归。** 按`docs/four-layer-agent-design.md`尚未接通的大脑→L4接口补全，不重做已完成四个数据库里程碑。独立树`.worktrees/world-task-planning`新增实际包查询的候选编译器，要求world/client/quest、typed starter/finisher/目标ordinal与技能及有限预算显式匹配；输出深冻结且`executable=false/automatic_action_eligible=false`。原world-demo改用编译器，保留任务/行为身份与既有严格回放；新增只读`world-task-cli candidates`。全量Python660passed/3原有strict xfail/0skip，TS397/397（新增15项）/0skip，typecheck/diff-check通过。现存M2包70124当前版本示例实际仍not_found/blocked/0候选，原件不改、许可local_only不变。本阶段固定提交后主checkout四任务demo/回放证据留`out/acceptance/world-task-planning/stage-1/`，详细验收`docs/acceptance/world-task-planning.md`。
+
+剩余顺序：A可复用任务适配→B既有ExecutionBrain的有限世界任务编排/独立严格episode回放→C当前客户端/角色/任务的数据与原观察身份取证（必须先停下来请用户决定）→D v2只读/有限输入及取消释放现场验收→E真实学习消费/同条件收益对照→F导航/飞行/职业策略与新来源。当前只实施A/B离线部分，v2 live/observe继续拒绝。真实游戏/Windows桌面、OAuth、新大包或许可判断均不擅自执行；用户允许阶段完成后仅普通push codex/agent-system，不force、不推其它分支。
+
 **2026-10-06 用户第2步：PNG CLI mock路径已修复，完整回归通过。** 独立工作树`.worktrees/png-cli-portability`将两个mock的shebang改为`#!/usr/bin/env node`，全部原用例/断言保留。构建当前源码的JevCapture、WinEye、NpcClassify并显式配置Python原生离线测试路径后，全量Python收集663项：660passed、3项原有strict xfail（gamma1.1容差反例）、0skip、0失败；原始全量TS为382/382、0skip/0cancel/0todo；typecheck和diff-check通过，均exit0。先全绿再提交并本地集成；用户明确授权本步普通`git push -u origin codex/agent-system`，仅该分支，不推其它game-db-*分支、不force。推送结果及远端SHA核对记录保留在`out/acceptance/png-cli-portability/`，测试原始日志/JUnit/命令/源码SHA在其`worktree/`。完整说明见`docs/acceptance/ts-suite-audit.md`第2步；本步不继续其它规划。
 
 **2026-10-06 用户第1步：TS测试数量核查完成，仅做本步，后续等待指示。** 两个独立工作树保持快照源码不变，分别执行原始全量`npm test`：dcbf332为46文件/335项、333通过/2失败；核查开始时HEAD 7ccd361为52文件/382项、381通过/1失败；均0skip/0cancel/0todo，exit1。无测试删除、禁用或漏发现，旧335项全保留，新增47项。上次131仅为17文件定向回归（84旧+47新），未运行剩余35文件/251项，不能表示全量通过。旧版独有失败是已修正的/home/dai Python路径；两版共同失败是既存PNG CLI mock写死/usr/bin/node，本机该路径不存在，仍未修复。当前TS全量验收尚非全绿。详见`docs/acceptance/ts-suite-audit.md`；原始两版完整TAP、逐文件/逐用例比对、路径探针及SHA清单在`out/acceptance/ts-suite-audit/`。本步仅更正文档，不推送。
