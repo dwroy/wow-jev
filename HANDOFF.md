@@ -4,6 +4,10 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-07 第2阶段候选已专项验证，隔离提交用于Git快照全量验收；尚未主集成/现场。** 第1阶段4df54e6已正常推codex/agent-system。tutorial-layered独立树实现agent.sqlite同一RuntimeDatabase单writer连接的版本化局部断言扩展（base schema/world包零diff），源码与共享schema绑定原run/event、actor/session、六维client/world SHA、截图/校准字节、源clock，unknown/conflict/过期等不自动授权。新增tutorial plan/runtime经原createLayerExecution→L4→L3 talk_to→Body通用screen_interact→统一闸→hand；世界NPC不冒充UI，dialog absence未取得拒绝，post成对OCR仅效果。recovery两个入口都只停可玩世界，焦点恢复保留无遮挡/空闲>5s/有限单点击，空闲不足可预算内只读等待。
+
+专项TS110/110，新增教程21项；Python局部36/base runtime与CLI合计73/73，typecheck/diff通过。完整TS收集567，553pass/14同before-hook失败，原因Git冻结导出4df54e6不包含尚未跟踪的local-assertion-schema.sql而新source reader已枚举它。原失败保留，先在隔离分支提交全体新源形成可导出快照，再完整复跑，全绿前不主集成/推送。普通字段/输入闸750ms；仅已发talk_to后的独立只读effect字段5000ms且不能发第二动作。新collectEffect端口请求在Body返回后，避免旧图；阶段3需接memory proof及常驻driver，当前仍旧file证据硬闸。源码入口/未验边界见docs/tutorial-layered-runtime.md。仍无现场事实写入、游戏输入或模型调用；窗口并排就绪通知尚未收到。
+
 **2026-10-06 新指导第1阶段完成：客户区归一化/锚点/UI候选及常驻ROI接口，全量复验后提交。** 根据用户经Claude给出的新指导，顺序为1尺寸识别→2恢复/分层任务职责拆分+agent.sqlite局部实测断言→3session1常驻WGC/原hand与guardian/当前用户管道→4窗口就绪后仅第一个交谈及分层延迟。开发独立工作树resolution-aware/tutorial-layered/resident-session，模块单owner；当前后两阶段只读设计审计，未实施。游戏输入须等用户窗口并排无遮挡通知，保留空闲>5s与焦点恢复闸；不因用户打字抢鼠标。
 
 第1阶段取消2560×1440硬拒，字形保持等比UI候选、选角右侧中心/NPC归一化位置/提示底部中心独立锚点，未知缩放/布局/相机变化仍unverified。DescribeRegions/MatchRegions为后续WGC仅ROI staging接口；预载模板/hash/缩放缓存，warm LockBits/稀疏ink+积分图，不per-frame磁盘读取/GetPixel。115离屏检查（全部旧14保留）通过：1280×720/1920×1080整图缩放与1600×1200/1920×800/1713×956×UI因子.75/1/1.25/1.5；错误名字/职业/阵营/提示/变形/ROI原点等拒绝。不同宽高比重绘不是实际相机/FOV证明。两场景各100 warm CV合计p50 10.920/12.046ms、p95 15.178/16.360ms；仅CV，不是动作E2E。

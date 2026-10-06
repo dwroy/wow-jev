@@ -34,6 +34,7 @@ export type BodyAction =
   | { kind: 'fly'; axis: 'forward' | 'ascend' | 'descend' | 'brake'; duration_ms: number }
   | { kind: 'cast'; ability: string; duration_ms: number }
   | { kind: 'interact'; target_signature: string; duration_ms: number }
+  | { kind: 'screen_interact'; target_signature: string; element_id: string; x: number; y: number; duration_ms: number }
   | { kind: 'click'; element_id: string; button: 'left' | 'right'; x: number; y: number; duration_ms: number }
   | { kind: 'wait'; duration_ms: number };
 

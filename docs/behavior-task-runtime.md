@@ -105,3 +105,11 @@ npm run typecheck
 测试用例明确模拟：一次 chooser 对应多个施法；唯一行为零模型调用；防御→打断→输出；严格 JSON/hash/参数；目标死亡和同名切换；CV/Seed/模拟来源隔离；定位/飞行模式；对话/奖励/拾取；危险抢占/有限脱困；挂起端口取消、epoch变化、预算和释放；kill_count 新源进度；checkpoint 可信恢复及预算。真实缺口包括目标实体唯一性、职业资源与 GCD 数据、导航/飞行定位、对话任务/奖励检测、端口中断后的物理释放和正式服闭环效果。
 
 2026-10-05 本模块验收：TypeScript typecheck 通过；上述行为/任务专测 26/26 通过，包含明确模拟的多个身体动作与一次 Jev 选择；完整 agent 回归 292/292 通过。真实游戏输入 0 次，模型 API 调用 0 次，未读取凭据。正式服效果、强杀/WSL 重启释放及上述真实缺口仍未由本模块验收。
+
+## 2026-10-07 屏幕目标与独立效果扩展
+
+`talk_to` 可复用当前 `target.screen_interaction={id,signature,layout_id,x,y,enabled}` 的 CV 屏幕点。必须独立证明同帧 `dialog.open=false` 与 CV `dialog.absence_coverage_complete=true`；NPC标签或提示存在不等于对话不存在。缺屏幕点时既有已核验键位交互仍保留，不默认按键。
+
+新增通用 L2 `screen_interact`，右键交互世界目标，最长150ms。Body 要求当前 CV 目标/点位/布局、Windows `input.cursor_free=true` 与 `input.mouse_buttons_held=false`，再走既有统一闸/时间线/看门狗。不更改 `click` 的 UI 模式要求。窗口来源只有这两项鼠标状态可进入特殊 critical 白名单；模型结果不能冒充 CV/Windows 状态。
+
+已发交谈动作后的 `talk_to` 只读确认同 NPC 的新 `dialog.open=true`，不再生成重复交互。`BehaviorOptions.maxEffectFieldAgeMs` 仅用于这一终态分支，当前观察/进入/新输入的时效不放宽；live post 窗口焦点也须有本次输入后的当前 Windows 证据。`createLayerExecution.collectEffect()` 在 Body 返回后下一次 L3 观察取独立低频图，允许实际 PNG/OCR，原 capturetime保留。效果不明或焦点失败阻塞。详见[教程局部证据到四层执行](tutorial-layered-runtime.md)。

@@ -1,0 +1,251 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:wow-jev:local-assertion-v1",
+  "$ref": "#/definitions/assertion",
+  "definitions": {
+    "sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "domain",
+        "clock_id",
+        "ticks",
+        "unit"
+      ],
+      "properties": {
+        "domain": {
+          "$ref": "#/definitions/text"
+        },
+        "clock_id": {
+          "$ref": "#/definitions/text"
+        },
+        "ticks": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unit": {
+          "enum": [
+            "ns",
+            "us",
+            "ms",
+            "s",
+            "ticks"
+          ]
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "pid",
+        "start_ticks",
+        "hwnd",
+        "class",
+        "executable"
+      ],
+      "properties": {
+        "session_id": {
+          "const": 1
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "start_ticks": {
+          "type": "string",
+          "pattern": "^[0-9]{8,22}$"
+        },
+        "hwnd": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]+$"
+        },
+        "class": {
+          "$ref": "#/definitions/text"
+        },
+        "executable": {
+          "$ref": "#/definitions/text"
+        }
+      }
+    },
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch",
+        "expansion",
+        "patch",
+        "build",
+        "region",
+        "locale"
+      ],
+      "properties": {
+        "branch": {
+          "const": "retail"
+        },
+        "expansion": {
+          "$ref": "#/definitions/text"
+        },
+        "patch": {
+          "$ref": "#/definitions/text"
+        },
+        "build": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "region": {
+          "$ref": "#/definitions/text"
+        },
+        "locale": {
+          "$ref": "#/definitions/text"
+        }
+      }
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "local_key",
+        "kind",
+        "predicate",
+        "state",
+        "value"
+      ],
+      "properties": {
+        "local_key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9._:-]{0,127}$"
+        },
+        "kind": {
+          "enum": [
+            "tutorial_step",
+            "visible_npc"
+          ]
+        },
+        "predicate": {
+          "enum": [
+            "interaction_instruction",
+            "visible_name",
+            "conversation_open"
+          ]
+        },
+        "state": {
+          "enum": [
+            "known",
+            "unknown",
+            "unsupported",
+            "not_present"
+          ]
+        },
+        "value": {}
+      }
+    },
+    "source_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "seq",
+        "event_sha256"
+      ],
+      "properties": {
+        "run_id": {
+          "$ref": "#/definitions/text"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "event_sha256": {
+          "$ref": "#/definitions/sha"
+        }
+      }
+    },
+    "assertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "world_pack_sha256",
+        "world_sqlite_sha256",
+        "client_version",
+        "actor_id",
+        "session",
+        "fact",
+        "observation_id",
+        "source_event",
+        "source_clock",
+        "observed_at",
+        "capture_sha256",
+        "calibration_sha256",
+        "producer",
+        "rule_version"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "world_pack_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "client_version": {
+          "$ref": "#/definitions/version"
+        },
+        "actor_id": {
+          "$ref": "#/definitions/text"
+        },
+        "session": {
+          "$ref": "#/definitions/session"
+        },
+        "fact": {
+          "$ref": "#/definitions/fact"
+        },
+        "observation_id": {
+          "$ref": "#/definitions/text"
+        },
+        "source_event": {
+          "$ref": "#/definitions/source_event"
+        },
+        "source_clock": {
+          "$ref": "#/definitions/clock"
+        },
+        "observed_at": {
+          "$ref": "#/definitions/text"
+        },
+        "capture_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "calibration_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "producer": {
+          "enum": [
+            "calibrated_cv",
+            "paired_local_ocr",
+            "root_reviewed_same_capture"
+          ]
+        },
+        "rule_version": {
+          "const": "local-field-evidence-v1"
+        },
+        "world_sqlite_sha256": {
+          "$ref": "#/definitions/sha"
+        }
+      }
+    }
+  }
+}

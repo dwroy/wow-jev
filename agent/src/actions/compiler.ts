@@ -15,7 +15,7 @@ const condition = (field: string, value: JsonValue): ActionCondition => ({ field
 function validAction(action: BodyAction): boolean {
   if (!action || typeof action !== 'object' || !Number.isSafeInteger(action.duration_ms) || action.duration_ms < 1 || action.duration_ms > 5000) return false;
   const fields: Record<BodyAction['kind'], string[]> = {
-    move: ['axis'], turn: ['dx'], arc: ['dx'], jump: [], mount: [], dismount: [], fly: ['axis'], cast: ['ability'], interact: ['target_signature'], click: ['element_id', 'button', 'x', 'y'], wait: [],
+    move: ['axis'], turn: ['dx'], arc: ['dx'], jump: [], mount: [], dismount: [], fly: ['axis'], cast: ['ability'], interact: ['target_signature'], screen_interact: ['target_signature', 'element_id', 'x', 'y'], click: ['element_id', 'button', 'x', 'y'], wait: [],
   };
   if (!Object.hasOwn(fields, action.kind)) return false;
   const names = ['kind', 'duration_ms', ...fields[action.kind]];
@@ -25,6 +25,7 @@ function validAction(action: BodyAction): boolean {
   if (action.kind === 'turn' || action.kind === 'arc') return Number.isSafeInteger(action.dx) && Math.abs(action.dx) <= 32767;
   if (action.kind === 'cast') return typeof action.ability === 'string' && action.ability.length > 0 && action.ability.length <= 128;
   if (action.kind === 'interact') return typeof action.target_signature === 'string' && action.target_signature.length > 0 && action.target_signature.length <= 256;
+  if (action.kind === 'screen_interact') return typeof action.target_signature === 'string' && action.target_signature.length > 0 && action.target_signature.length <= 256 && typeof action.element_id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(action.element_id) && Number.isSafeInteger(action.x) && action.x >= 0 && Number.isSafeInteger(action.y) && action.y >= 0 && action.duration_ms <= 150;
   if (action.kind === 'click') return typeof action.element_id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(action.element_id) &&
     ['left', 'right'].includes(action.button) && Number.isSafeInteger(action.x) && action.x >= 0 && action.x <= 65535 && Number.isSafeInteger(action.y) && action.y >= 0 && action.y <= 65535;
   return true;
@@ -58,6 +59,20 @@ export function compileBodyAction(action: BodyAction, profile: BodyProfile, obse
   const conditions: ActionCondition[] = [];
   if (profile.character_id !== null) conditions.push(condition('player.character_id', profile.character_id));
   const capability = (cap: BodyCapability): BodyCompilation | null => profile.capabilities.includes(cap) ? null : reject('unsupported', `capability:${cap}`);
+  if (action.kind === 'screen_interact') {
+    const unavailable = capability('screen_interact'); if (unavailable) return unavailable;
+    const layout = observation.fields['ui.layout_id'], target = observation.fields['target.screen_interaction'];
+    if (layout?.status !== 'known' || layout.value !== profile.layout_id || layout.source_observation_id !== observation.id ||
+        target?.status !== 'known' || target.source_observation_id !== observation.id || target.captured_at_ms !== layout.captured_at_ms ||
+        !target.value || Array.isArray(target.value) || typeof target.value !== 'object') return reject('blocked', 'screen_target_or_layout_unknown');
+    const point = target.value;
+    if (Object.keys(point).length !== 6 || point.id !== action.element_id || point.signature !== action.target_signature || point.layout_id !== profile.layout_id || point.x !== action.x || point.y !== action.y || point.enabled !== true ||
+        known(observation, 'target.signature') !== action.target_signature) return reject('blocked', 'screen_target_unbound_or_changed');
+    if (known(observation, 'input.cursor_free') !== true || known(observation, 'input.mouse_buttons_held') !== false) return reject('blocked', 'screen_interaction_cursor_not_free');
+    if (!observation.window || action.x >= observation.window.client_width || action.y >= observation.window.client_height) return reject('blocked', 'screen_target_outside_client');
+    conditions.push(condition('target.signature', action.target_signature), condition('target.screen_interaction', point), condition('ui.layout_id', profile.layout_id), condition('input.cursor_free', true), condition('input.mouse_buttons_held', false));
+    return { status: 'ready', action: new TimelineBuilder(action.duration_ms).click('right', action.x, action.y, 0, action.duration_ms).build(), conditions, resources: ['mouse_world_interaction'], duration_ms: action.duration_ms };
+  }
   if (action.kind === 'click') {
     const unavailable = capability('ui_click'); if (unavailable) return unavailable;
     const layout = observation.fields['ui.layout_id'];

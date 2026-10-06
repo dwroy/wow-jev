@@ -4,7 +4,7 @@ import { RunLease, cleanupBound } from './lease.js';
 import { bindingError, conditionError, validateConditions, hash, observationError, readKnown, validateBehavior, value, type FieldPolicy } from './validation.js';
 
 export interface BehaviorExecutionResult extends BehaviorResult { input_count_scope: 'known' | 'lower_bound'; scenario_effect: 'confirmed' | 'unverified'; }
-export interface BehaviorOptions { maxFieldAgeMs?: number; maxObservationAgeMs?: number; trustedSources?: ReadonlyArray<string>; }
+export interface BehaviorOptions { maxFieldAgeMs?: number; maxObservationAgeMs?: number; trustedSources?: ReadonlyArray<string>; maxEffectFieldAgeMs?: number; }
 export interface BehaviorRunOptions { isCurrent?: () => boolean; }
 type Decision = { action: BodyAction; conditions: ActionCondition[]; state: string } | { status: BehaviorResult['status']; reason: string; effect?: boolean };
 interface State { initialAlive: boolean; killActionAt?: number; killActionObservation?: string; lastActionAt?: number; lastActionObservation?: string; initialProgress?: number; lastProgress?: number; noProgress: number; recoverAttempts: number; safeFrames: number; lastSafeId?: string; rewardSelected: boolean; }
@@ -17,7 +17,7 @@ export class BehaviorRuntime {
   private active = false;
   private runs = new Map<string, { hash: string; promise: Promise<BehaviorExecutionResult> }>();
   constructor(readonly ports: BehaviorPorts, readonly options: BehaviorOptions = {}) {
-    for (const n of [options.maxFieldAgeMs ?? 1000, options.maxObservationAgeMs ?? 1000]) if (!Number.isSafeInteger(n) || n < 1 || n > 10000) throw new Error('behavior_freshness_bounds');
+    for (const n of [options.maxFieldAgeMs ?? 1000, options.maxObservationAgeMs ?? 1000, options.maxEffectFieldAgeMs ?? options.maxFieldAgeMs ?? 1000]) if (!Number.isSafeInteger(n) || n < 1 || n > 10000) throw new Error('behavior_freshness_bounds');
   }
   run(spec: BehaviorSpec, context: ExecutionContext, options: BehaviorRunOptions = {}): Promise<BehaviorExecutionResult> {
     const frozen = structuredClone(spec); const frozenConditions = structuredClone(context.conditions);
@@ -54,7 +54,14 @@ export class BehaviorRuntime {
         const o = await lease.wait(() => this.ports.observe()); const policy = this.policy(context);
         if (!current()) { result.status = 'cancelled'; result.reason = 'cancelled_or_revision_changed'; break; }
         if (this.ports.now() - started >= spec.max_duration_ms) { result.status = 'blocked'; result.reason = 'behavior_deadline'; break; }
-        const invalid = observationError(o, { ...policy, maxAgeMs: this.options.maxObservationAgeMs ?? 1000 }, runId) ?? conditionError(o, context.conditions, policy) ?? bindingError(spec, o, policy);
+        const confirmingTalk = spec.kind === 'talk_to' && state.lastActionAt !== undefined;
+        // A slow, independently captured dialog result can only terminate talk_to.
+        // It never supplies a new action, hazard movement or a refreshed input frame.
+        const effectPolicy = { ...policy, maxAgeMs: this.options.maxEffectFieldAgeMs ?? policy.maxAgeMs };
+        const invalid = observationError(o, { ...policy, maxAgeMs: confirmingTalk ? effectPolicy.maxAgeMs : this.options.maxObservationAgeMs ?? 1000 }, runId) ??
+          (confirmingTalk && (o.at_ms > policy.now || policy.now - o.at_ms > (this.options.maxObservationAgeMs ?? 1000)) ? 'observation_stale_or_future' : null) ??
+          (confirmingTalk && context.mode === 'live' && (readKnown(o, 'window.focused', effectPolicy, true, state.lastActionAt)?.source !== 'window' || readKnown(o, 'window.focused', effectPolicy, true, state.lastActionAt)?.value !== true) ? 'post_effect_foreground_evidence_unknown' : null) ??
+          conditionError(o, context.conditions, policy) ?? (confirmingTalk ? null : bindingError(spec, o, policy));
         if (invalid) { result.status = 'blocked'; result.reason = invalid; break; }
         if (previous && (o.id === previous.id || o.observation_seq <= previous.observation_seq || o.at_ms < previous.at_ms)) { result.status = 'blocked'; result.reason = 'observation_not_new'; break; }
         const windowId = o.window ? `${o.window.token}:${o.window.hwnd}:${o.window.pid}:${o.window.client_width}:${o.window.client_height}` : undefined;
@@ -63,7 +70,14 @@ export class BehaviorRuntime {
         result.evidence_observation_ids.push(o.id);
         let decision: Decision;
         const hazardous = value(o, 'hazard.active', policy, true) === true;
-        if (hazardous && spec.kind !== 'avoid_hazard') {
+        if (confirmingTalk) {
+          const target = readKnown(o, 'target.signature', effectPolicy, true, state.lastActionAt);
+          const open = readKnown(o, 'dialog.open', effectPolicy, true, state.lastActionAt);
+          const dialogTarget = readKnown(o, 'dialog.target_signature', effectPolicy, true, state.lastActionAt);
+          if (hazardous) decision = finish('blocked', 'post_action_hazard_observed');
+          else if (target?.value !== spec.params.target_signature || open?.value !== true || dialogTarget?.value !== spec.params.target_signature) decision = finish('blocked', 'dialog_effect_not_new_or_unconfirmed');
+          else decision = finish('completed', 'dialog_open_confirmed', true);
+        } else if (hazardous && spec.kind !== 'avoid_hazard') {
           const released = await lease.wait(() => this.ports.release('hazard_preempt'));
           if (released !== 'confirmed') { outcomeUnconfirmed = true; result.status = 'blocked'; result.reason = 'hazard_release_unconfirmed'; break; }
           decision = this.avoid(o, policy, state, 200, 1, false);
@@ -168,7 +182,16 @@ export class BehaviorRuntime {
     }
     if (spec.kind === 'turn_in_quest' && value(o, `quest.${q}.completed`, p) !== true) return finish('blocked', 'quest_completion_unknown');
     const open = value(o, 'dialog.open', p, true);
-    if (open === false) return { action: { kind: 'interact', target_signature: String(spec.params.target_signature), duration_ms: duration }, conditions: [condition('dialog.open', false, p.maxAgeMs)], state: 'opening_dialog' };
+    if (open === false) {
+      const screen = value(o, 'target.screen_interaction', p, true);
+      if (screen !== undefined) {
+        if (!screen || Array.isArray(screen) || typeof screen !== 'object' || screen.signature !== spec.params.target_signature || screen.enabled !== true || typeof screen.id !== 'string' || !Number.isSafeInteger(screen.x) || !Number.isSafeInteger(screen.y)) return finish('blocked', 'screen_interaction_target_unknown');
+        const coverage = readKnown(o, 'dialog.absence_coverage_complete', p, true), absent = readKnown(o, 'dialog.open', p, true);
+        if (coverage?.value !== true || p.mode === 'live' && (coverage.source !== 'cv' || absent?.source !== 'cv')) return finish('blocked', 'dialog_absence_coverage_unknown');
+        return { action: { kind: 'screen_interact', target_signature: String(spec.params.target_signature), element_id: screen.id, x: Number(screen.x), y: Number(screen.y), duration_ms: Math.min(duration, 150) }, conditions: [condition('dialog.open', false, p.maxAgeMs), condition('dialog.absence_coverage_complete', true, p.maxAgeMs), condition('target.screen_interaction', screen, p.maxAgeMs)], state: 'opening_dialog_at_current_screen_target' };
+      }
+      return { action: { kind: 'interact', target_signature: String(spec.params.target_signature), duration_ms: duration }, conditions: [condition('dialog.open', false, p.maxAgeMs)], state: 'opening_dialog' };
+    }
     if (open !== true || value(o, 'dialog.target_signature', p, true) !== spec.params.target_signature) return finish('blocked', 'dialog_binding_unknown');
     if (spec.kind === 'talk_to') {
       if (after !== undefined && !readKnown(o, 'dialog.open', p, true, after)) return finish('blocked', 'dialog_effect_not_new');

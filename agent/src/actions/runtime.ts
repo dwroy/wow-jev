@@ -22,6 +22,11 @@ export interface BodyRuntimeOptions {
   sleep?: (duration_ms: number, signal: AbortSignal) => Promise<void>;
   trace?: TraceRecorder;
   windowsClockId?: string;
+  /** The resident adapter binds the already approved intent to its retained native frame.
+   * It cannot authorize an input or rewrite the action/conditions. */
+  bindSource?: (before: Collected, intent: ActionIntent, context: ExecutionContext) => Promise<void>;
+  /** Hot-path callers can avoid evidence encoding; default preserves existing tools. */
+  saveObservations?: boolean;
 }
 export interface DetailedBodyOutcome extends BodyOutcome { input_count_scope: 'known' | 'lower_bound' }
 class Stopped extends Error { }
@@ -103,7 +108,7 @@ export class BodyRuntime {
     const unchanged = (): boolean => this.unchanged(context) && JSON.stringify(suppliedAction) === actionText && JSON.stringify({ ...suppliedContext, signal: undefined }) === contextText;
     try {
       const before = await traceAsync(this.options.trace, 'revalidate', context.command_id,
-        () => abortable(bounded(this.options.collect(true), this.observeTimeout), context.signal));
+        () => abortable(bounded(this.options.collect(this.options.saveObservations ?? true), this.observeTimeout), context.signal));
       outcome.before_observation_id = before.observation.id; outcome.evidence_observation_ids.push(before.observation.id);
       if (!unchanged()) throw new Stopped('task_epoch_or_profile_changed');
       const compileTrace = this.options.trace?.span('code', context.command_id, {phase:'L2_compile'});
@@ -119,12 +124,13 @@ export class BodyRuntime {
         ? { ...base, mode: 'live', window_token: before.observation.window?.token ?? '', action: { name: 'native_input', args: compiled.action } }
         : { ...base, mode: 'simulated', window_token: before.observation.window?.token ?? null, action: { name: 'simulate_noop', args: {} } };
       const criticalFields = new Set<string>();
-      if (compiled.action !== null && action.kind !== 'click' && action.kind !== 'wait') criticalFields.add(this.profile.mode_field);
+      if (compiled.action !== null && action.kind !== 'click' && action.kind !== 'screen_interact' && action.kind !== 'wait') criticalFields.add(this.profile.mode_field);
       if (action.kind === 'turn' || action.kind === 'arc' || action.kind === 'click') criticalFields.add(this.profile.mouse_mode_field);
       if (action.kind === 'click') {
         criticalFields.add('ui.layout_id');
         for (const condition of compiled.conditions) if (condition.field === 'dialog.elements' || condition.field === 'ui.elements') criticalFields.add(condition.field);
       }
+      if (action.kind === 'screen_interact') for (const field of ['ui.layout_id', 'target.signature', 'target.screen_interaction', 'input.cursor_free', 'input.mouse_buttons_held']) criticalFields.add(field);
       if (action.kind === 'cast') {
         for (const condition of this.profile.abilities[action.ability]?.conditions ?? []) criticalFields.add(condition.field);
         if (this.profile.abilities[action.ability]?.movement === 'stationary') criticalFields.add('player.moving');
@@ -138,7 +144,8 @@ export class BodyRuntime {
         }
         if (context.mode === 'live') for (const path of criticalFields) {
           const field = before.observation.fields[path];
-          if (field?.status !== 'known' || field.source !== 'cv' || field.source_observation_id !== before.observation.id || field.captured_at_ms !== before.bracket.started_at_ms)
+          const sources = ['input.cursor_free', 'input.mouse_buttons_held'].includes(path) ? ['window'] : ['cv'];
+          if (field?.status !== 'known' || !sources.includes(field.source) || field.source_observation_id !== before.observation.id || field.captured_at_ms !== before.bracket.started_at_ms)
             return { ok: false as const, reason: `critical_source_not_current_cv:${path}` };
         }
         return evaluateGate(intent, before, {
@@ -160,6 +167,10 @@ export class BodyRuntime {
         profile_sha256: this.profile_sha256, bindings_sha256: this.profile.bindings_sha256, binding_artifact_sha256: this.profile.source.binding_artifact_sha256,
         intent, native_action: compiled.action, resources: compiled.resources });
       checked = measuredGate(); if (!checked.ok) { outcome.reason = checked.reason; return outcome; }
+      if (this.options.bindSource && context.mode === 'live' && compiled.action !== null) {
+        await abortable(bounded(this.options.bindSource(structuredClone(before), structuredClone(intent), { ...context, conditions: structuredClone(context.conditions) }), 1500), context.signal);
+        checked = measuredGate(); if (!checked.ok) { outcome.reason = checked.reason; return outcome; }
+      }
       monitor = setInterval(() => { if (!unchanged()) requestCancel('task_epoch_or_profile_changed'); }, 25);
       if (context.mode === 'simulated' || compiled.action === null) {
         await abortable(this.options.sleep ? this.options.sleep(compiled.duration_ms, context.signal) : delay(compiled.duration_ms, undefined, { signal: context.signal }), context.signal);
@@ -193,7 +204,7 @@ export class BodyRuntime {
       }
       if (monitor) { clearInterval(monitor); monitor = null; }
       try {
-        const after = await traceAsync(this.options.trace,'effect',context.command_id,() => bounded(this.options.collect(true), this.observeTimeout), {confirmation:'deferred_to_behavior'});
+        const after = await traceAsync(this.options.trace,'effect',context.command_id,() => bounded(this.options.collect(this.options.saveObservations ?? true), this.observeTimeout), {confirmation:'deferred_to_behavior'});
         if (after.observation.run_id !== this.options.runId || after.observation.id === before.observation.id) throw new Error('post_observation_binding_mismatch');
         outcome.after_observation_id = after.observation.id; outcome.evidence_observation_ids.push(after.observation.id);
       } catch (error) { afterFailure = detail(error); }

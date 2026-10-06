@@ -1,3 +1,4 @@
+import {calibratedWorldAnchor} from '../perception/world-scene.js';
 import {readFileSync} from 'node:fs';
 import {canonical} from '../behavior/validation.js';
 import type {RecoveryButton,RecoveryFrame,RecoveryInterpretation,RecoveryReview,RecoveryTarget,RecoverySource,RecoveryObservation} from './types.js';
@@ -32,7 +33,7 @@ function disconnectAck(frame:RecoveryFrame):RecoveryButton|null {
 }
 export function interpretRecovery(frame:RecoveryFrame,review?:RecoveryReview):RecoveryInterpretation {
   const texts=frame.observation.ocr.status==='available'?frame.observation.ocr.items.map(i=>i.text).join('\n'):'';
-  const base:RecoveryInterpretation={scene:'unknown',source_kind:'ocr',buttons:[],selected_character:null,safe_focus_point:null,first_objective_present:false,conversation_confirmed:false,tutorial_step_changed:false,reason:'fresh_scene_evidence_required'};
+  const base:RecoveryInterpretation={scene:'unknown',source_kind:'ocr',buttons:[],selected_character:null,safe_focus_point:null,reason:'fresh_scene_evidence_required'};
   // These stop signals outrank supplied reviews: no credentials/consent/install input.
   if(hasToken(texts,'blocked_auth')||credentialForm(frame))return{...base,scene:'blocked_auth',reason:'credentials_or_authentication_required'};
   if(hasToken(texts,'blocked_terms'))return{...base,scene:'blocked_terms',reason:'terms_or_license_decision_required'};
@@ -44,7 +45,7 @@ export function interpretRecovery(frame:RecoveryFrame,review?:RecoveryReview):Re
     const row=review.selected_row;let selected:RecoveryInterpretation['selected_character']=null;
     if(row){const r=row.rect;if(!r||![r.x,r.y,r.width,r.height].every(Number.isSafeInteger)||r.x<0||r.y<0||r.width<2||r.height<2||r.x+r.width>frame.source.width||r.y+r.height>frame.source.height||row.evidence!=='human_reviewed_same_capture')throw new Error('recovery_review_selected_row');if(row.gold_selected&&row.alliance_glyph&&row.class==='warrior'&&row.faction==='alliance')selected={name:row.character,class:'warrior',faction:'alliance'};}
     if(review.safe_focus_point&&(!Number.isSafeInteger(review.safe_focus_point.x)||!Number.isSafeInteger(review.safe_focus_point.y)||review.safe_focus_point.x<2||review.safe_focus_point.y<2||review.safe_focus_point.x>=frame.source.width-2||review.safe_focus_point.y>=frame.source.height-2))throw new Error('recovery_review_focus_bounds');
-    return{...base,scene:review.scene,source_kind:'human_reviewed',buttons:structuredClone(review.buttons),selected_character:selected,safe_focus_point:review.safe_focus_point?structuredClone(review.safe_focus_point):null,first_objective_present:review.first_objective==='与吉安娜·普罗德摩尔交谈',conversation_confirmed:review.conversation_confirmed===true,tutorial_step_changed:review.tutorial_step_changed===true,reason:'same_capture_human_reviewed'};
+    return{...base,scene:review.scene,source_kind:'human_reviewed',buttons:structuredClone(review.buttons.filter(b=>['enter_world','disconnect_ack','reconnect','launcher_play'].includes(b.id))),selected_character:selected,safe_focus_point:review.safe_focus_point?structuredClone(review.safe_focus_point):null,reason:'same_capture_human_reviewed'};
   }
   const acknowledgement=disconnectAck(frame);if(acknowledgement){const p=centre(acknowledgement);return{...base,scene:'disconnected',buttons:[acknowledgement],safe_focus_point:{x:Math.floor(p.x),y:Math.floor(p.y)},reason:'same_capture_center_disconnected_marker_and_acknowledgement'};}
   const reconnect=button(frame,'reconnect',/^(重新连接|重连|Reconnect)$/i);if(reconnect)return{...base,scene:'disconnected',buttons:[reconnect],reason:'reconnect_button_ocr'};
@@ -54,8 +55,6 @@ export function interpretRecovery(frame:RecoveryFrame,review?:RecoveryReview):Re
   const play=button(frame,'launcher_play',/^(进入游戏|开始游戏|Play)$/i);if(play)return{...base,scene:'launcher',buttons:[play],reason:'launcher_play_button_ocr'};
   if(/正在连接|连接中|载入中|读取中|加载|排队|Loading|Connecting/i.test(texts))return{...base,scene:'loading',reason:'loading_in_progress'};
   if(/登录|Login/i.test(texts))return{...base,scene:'login',reason:'login_unknown_do_not_enter_credentials'};
-  const tutorial=frame.observation.tutorial_cv;if(tutorial?.verified){if(tutorial.source!=='calibrated_cv'||tutorial.kind!=='talk_jaina'||tutorial.npc_name!=='吉安娜·普罗德摩尔'||!HASH.test(tutorial.calibration_sha256)||!HASH.test(tutorial.reference_sha256)||tutorial.observation_id!==frame.source.observation_id||tutorial.capture_sha256!==frame.source.capture_sha256||!tutorial.regions.length||tutorial.regions.some(r=>!r.matched))throw new Error('recovery_tutorial_cv_source_binding');const point=tutorial.action_point;if(!Number.isSafeInteger(point.x)||!Number.isSafeInteger(point.y)||point.x<4||point.y<4||point.x>=frame.source.width-4||point.y>=frame.source.height-4)throw new Error('recovery_tutorial_cv_point_bounds');return{...base,scene:'world',safe_focus_point:structuredClone(tutorial.safe_focus_point),first_objective_present:true,buttons:[{id:'npc_interact',text:'current calibrated Jaina body point',x:point.x-2,y:point.y-2,width:4,height:4}],reason:'same_capture_calibrated_npc_and_first_tutorial_instruction'};}
-  const dialogueTitle=frame.observation.ocr.items.find(i=>i.text==='吉安娜·普罗德摩尔'&&i.x+i.width<frame.source.width*.45&&i.y<frame.source.height*.35);const dialogueControl=frame.observation.ocr.items.find(i=>/^(接受|继续|再见|完成任务|关闭)$/.test(i.text)&&i.x+i.width<frame.source.width*.45);if(dialogueTitle&&dialogueControl)return{...base,scene:'world',conversation_confirmed:true,reason:'independent_left_dialogue_title_and_control_observed_stop_without_accepting_next_quest'};
-  if(/与吉安娜·普罗德摩尔交谈/.test(texts))return{...base,scene:'world',first_objective_present:true,reason:'objective_text_seen_target_and_dialogue_unknown'};
+  const worldAnchor=calibratedWorldAnchor(frame);if(worldAnchor)return{...base,scene:'world',safe_focus_point:worldAnchor,reason:'same_capture_calibrated_world_ui_anchor_only'};
   return base;
 }

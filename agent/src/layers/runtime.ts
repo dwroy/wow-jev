@@ -12,13 +12,17 @@ import type { BodyOutcome } from './contracts.js';
 export function createLayerExecution(options: BodyRuntimeOptions & {
   append: (kind: string, data: unknown) => Promise<void>;
   behaviorPolicy?: BehaviorOptions; chooser?: BehaviorChooser;
+  /** Optional low-frequency independent post-action evidence. Perception still has no input capability. */
+  collectEffect?: () => Promise<Collected>;
 }) {
   const retained = new Map<string, Collected>();
   let suppliedBefore: Collected | null = null;
   let active = false;
   let activeWork:Promise<BodyOutcome>|null=null;
+  let effectPending = false;
   const collect = async (): Promise<Collected> => {
-    const collected = await options.collect(true);
+    const effect = effectPending && options.collectEffect !== undefined; effectPending = false;
+    const collected = effect ? await options.collectEffect!() : await options.collect(options.saveObservations ?? true);
     retained.set(collected.observation.id, structuredClone(collected));
     while (retained.size > 64) retained.delete(retained.keys().next().value!);
     return collected;
@@ -39,7 +43,9 @@ export function createLayerExecution(options: BodyRuntimeOptions & {
       try {
         await options.append('layer_command_link', { parent_command_id: context.command_id, body_command_id: commandId, task_id: context.task_id, task_revision: context.task_revision, run_epoch: context.run_epoch, based_on_observation_id: basedOn.id });
         activeWork=body.execute(action, { ...context, command_id: commandId });
-        return await activeWork;
+        const outcome = await activeWork;
+        effectPending = options.collectEffect !== undefined && outcome.status === 'completed' && action.kind !== 'wait';
+        return outcome;
       }
       finally { suppliedBefore = null; active = false; activeWork=null; }
     },
