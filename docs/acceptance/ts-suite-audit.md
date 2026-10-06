@@ -2,7 +2,9 @@
 
 日期：2026-10-06。仅完成用户指定的第1步；没有继续数据库实施或推送。
 
-## 结论与实际运行
+后续第2步：用户已明确授权修复PNG CLI mock并在全量验收后提交、仅普通推送`codex/agent-system`。修复后TS 382/382、Python 660passed/3原有strict xfail/0skip、typecheck通过，均exit0；详见本文末尾第2步记录。下面保留第1步固定快照的原始结果。
+
+## 结论与实际运行（第1步固定快照）
 
 没有测试丢失。交接文档的335项是旧版全量，上次131项是17个文件的数据库定向回归，两者统计范围不同。此前最终汇报未明确这一区别，本记录更正；131通过不能表示全量通过。
 
@@ -106,3 +108,24 @@ npm --prefix .worktrees/ts-audit-head/agent test
 ```
 
 本次仅提交验收文档和HANDOFF更正，测试/生产代码未改，原未跟踪bundle及HANDOFF备份保留。核查开始时HEAD的实际测试结果始终指向`7ccd361`；后续文档提交不冒充已重跑过的代码快照。
+
+## 第2步：PNG CLI mock修复与全量回归
+
+2026-10-06，从`6fc618b`创建独立工作树`.worktrees/png-cli-portability`。`agent/tests/eye-artifact-cli.test.ts`生成WinEye.exe和WinInput.exe两个mock时，仅将shebang改为`#!/usr/bin/env node`，经PATH寻找Node；测试数量、名称、断言、时间限制及退出码要求全部保留。未创建/usr/bin/node软链接或修改系统环境，也未删除/跳过测试。原失败用例实际验证observe导出PNG与record-action到transport stub为止、0动作意图。
+
+按锁文件安装依赖，构建`capture/build.sh`、`native/windows/build.sh`、`tools/npc_fixture_build.sh`的当前源码，三项构建exit0；仅编译并运行离屏fixture，不操作游戏。Python显式设置`WOW_COMBAT_EYE_EXE`、`WOW_NPC_CLASSIFY_EXE`到该工作树实际构建的EXE，保证既有原生测试实际运行。
+
+在工作树根目录依次完成完整Python/TS测试，并完成typecheck：
+
+| 检查 | 原始命令 | 实际结果 | exit |
+| --- | --- | --- | ---: |
+| 完整Python | `.venv/bin/python -m pytest -q -ra --junitxml=证据目录/python-full.xml` | 收集663项，660passed、3xfailed、0skip、0failure/error | 0 |
+| 完整TS | `npm --prefix agent test` | 52文件、382/382passed，0fail/skip/cancel/todo | 0 |
+| typecheck | `npm --prefix agent run typecheck` | tsc --noEmit通过 | 0 |
+| diff检查 | `git diff --check` | 通过 | 0 |
+
+Python的3项xfailed是原有`test_gamma_110_expected_to_fail[0/1/2]`严格预期失败，验证gamma1.1超出协议±8容差的既知边界；本步没有新增或修改xfail标记。报告区分660通过与3预期失败，不声称663项全部通过。TS完整TAP的382个名称与第1步当前源码清单逐项、多重集匹配，全部旧用例仍在；PNG CLI原失败用例通过。
+
+原始证据在主checkout `out/acceptance/png-cli-portability/worktree/`：`python-full.log/xml/json`、`python-summary.json`、`ts-full.tap/json`、`ts-summary.json`、`typecheck.log/json`、三份原生构建log及`builds.json`。`tested-source-sha256.json`记录测试文件、锁文件及原生源码SHA，`sha256-manifest.json`逐文件保护所有本步证据。运行元数据记录测试时base commit及两行修复diff的SHA，提交在全量检查成功之后进行。
+
+用户授权普通推送的唯一目标为`refs/heads/codex/agent-system`；本地提交先按ff-only集成主checkout，再执行`git push -u origin codex/agent-system`，不使用force，不推其它分支或tag。实际推送输出、返回码与远端引用前后核对保留在`out/acceptance/png-cli-portability/`；本记录不把授权或计划冒称已成功推送，最终结果以原始push日志和远端SHA核对为准。原未跟踪bundle、旧HANDOFF备份及其它工作树保留。

@@ -4,6 +4,8 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 用户第2步：PNG CLI mock路径已修复，完整回归通过。** 独立工作树`.worktrees/png-cli-portability`将两个mock的shebang改为`#!/usr/bin/env node`，全部原用例/断言保留。构建当前源码的JevCapture、WinEye、NpcClassify并显式配置Python原生离线测试路径后，全量Python收集663项：660passed、3项原有strict xfail（gamma1.1容差反例）、0skip、0失败；原始全量TS为382/382、0skip/0cancel/0todo；typecheck和diff-check通过，均exit0。先全绿再提交并本地集成；用户明确授权本步普通`git push -u origin codex/agent-system`，仅该分支，不推其它game-db-*分支、不force。推送结果及远端SHA核对记录保留在`out/acceptance/png-cli-portability/`，测试原始日志/JUnit/命令/源码SHA在其`worktree/`。完整说明见`docs/acceptance/ts-suite-audit.md`第2步；本步不继续其它规划。
+
 **2026-10-06 用户第1步：TS测试数量核查完成，仅做本步，后续等待指示。** 两个独立工作树保持快照源码不变，分别执行原始全量`npm test`：dcbf332为46文件/335项、333通过/2失败；核查开始时HEAD 7ccd361为52文件/382项、381通过/1失败；均0skip/0cancel/0todo，exit1。无测试删除、禁用或漏发现，旧335项全保留，新增47项。上次131仅为17文件定向回归（84旧+47新），未运行剩余35文件/251项，不能表示全量通过。旧版独有失败是已修正的/home/dai Python路径；两版共同失败是既存PNG CLI mock写死/usr/bin/node，本机该路径不存在，仍未修复。当前TS全量验收尚非全绿。详见`docs/acceptance/ts-suite-audit.md`；原始两版完整TAP、逐文件/逐用例比对、路径探针及SHA清单在`out/acceptance/ts-suite-audit/`。本步仅更正文档，不推送。
 
 **2026-10-06 里程碑四完成离线闭环，四个里程碑已本地集成，完整TS验收状态以上述核查为准。** 实现提交a6f5cce已按ff-only合入主checkout，主目录185项Python和17文件/131项TS定向回归、typecheck通过，0skip；当时未运行完整TS套件。实际world-demo在固定提交执行接取→两独立目标→交付四任务，ordinal0=2/ordinal1=1，接受/交付/奖励scenario证据完整；game_effect=unverified，real_inputs=0。独立严格回放产生4条experience/4sources，重复来源去重；新知识版本实际召回4条，SQLite索引4候选+评估+注册，simulated_samples=4、actual_game_samples=0。136事件（原始108+28派生依赖）重复索引0新增，444个受保护SHA包含全冻结原件。

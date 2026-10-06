@@ -46,9 +46,9 @@ test('eye observe and record-action pass PNG to the native eye; record-action st
     for (const mode of ['observe', 'record-action']) {
       const dir = join(temp, mode), received = join(temp, `${mode}-eye-args.json`);
       const eye = join(bin, 'WinEye.exe');
-      await writeFile(eye, `#!/usr/bin/node\nconst {writeFileSync}=require('node:fs');writeFileSync(${JSON.stringify(received)},JSON.stringify(process.argv.slice(2)));process.argv.splice(2,0,'steady',${JSON.stringify(join(dir, 'native-export'))});import(${JSON.stringify(mock)});\n`); await chmod(eye, 0o700);
+      await writeFile(eye, `#!/usr/bin/env node\nconst {writeFileSync}=require('node:fs');writeFileSync(${JSON.stringify(received)},JSON.stringify(process.argv.slice(2)));process.argv.splice(2,0,'steady',${JSON.stringify(join(dir, 'native-export'))});import(${JSON.stringify(mock)});\n`); await chmod(eye, 0o700);
       const input = join(bin, 'WinInput.exe');
-      await writeFile(input, '#!/usr/bin/node\nprocess.exit(17);\n'); await chmod(input, 0o700);
+      await writeFile(input, '#!/usr/bin/env node\nprocess.exit(17);\n'); await chmod(input, 0o700);
       const extra = mode === 'observe' ? ['--save', '--duration-ms', '1'] : ['--live', '--wait-focus-ms', '0', '--action', '{"kind":"key","keys":["B"],"duration_ms":1}'];
       const result = await command('eye', [mode, '--window', '0xabc', '--pid', '42', '--native-root', temp, '--artifact-format', 'png', '--run-dir', dir, ...extra]);
       assert.equal(result.code, mode === 'observe' ? 0 : 2, result.stderr);
