@@ -4,6 +4,10 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 21:03，用户恢复WoW激活后继续第一个教程任务；只读复核焦点通过，但角色尚在选择界面，按遇阻塞停止。** 用户现场复查确认前台0x904a6/PID22072，并确认先前零前台来自“窗口在最上层但未激活”，不是RDP断开；先前RDP显示抑制仅为未证实候选，不再作为当前根因。本轮session1 helper PID18088再次实际核实采前/采后前台0x904a6、focused=true、同一正式服path/start_ticks，2560×1440客户区/DPI144，客户区屏幕原点已变为612,413。PrintWindow真实原图显示选中“小啊”、等级1战士、联盟图标及“进入魔兽世界”按钮，当前是角色选择界面，未见船上吉安娜、教程提示或任务窗口；不复用旧船上截图/NPC坐标，不从用户任务名称推定当前已在游戏内。当前任务/游戏内键位无法完成输入前只读核验，因此按用户“完成或遇阻塞停止”不进入有限输入；需要用户手动进入该角色的游戏世界并保持WoW激活后再继续。
+
+本轮唯一任务WowJev-FirstQuest-Readonly-52ed32a9cca246d5bac3ac437119209d创建/执行/删除，独立GetTask回查80070002不存在。没有创建输入执行器/看门狗、没有持有按键；真实输入0、外部Seed调用0、助手原图复核1，没有物理释放ACK或游戏任务完成可报告。Windows QPC capture85.461ms、完整只读观察697.609ms，协调器任务生命周期monotonic1895.437ms；按既有TraceRecorder分域记录，观察→输入、输入发出与效果确认均unknown/未开始，不混减时钟，不报告行动收益。原图/身份/生命周期/清理/sidecar/摘要及SHA在主`out/acceptance/exiles-first-task-20261006/foreground-restored-*`。仅独立树更新HANDOFF与验收记录，本地提交集成，不推送；源码不变，最新完整源码回归仍为309e858阶段的TS498/498、Python702passed+3strict xfail、0skip/typecheck通过，本轮只做diff-check，不重复软件套件冒充现场验收。
+
 **2026-10-06 20:25，按用户最新指示只读诊断 RDP/桌面；诊断后停止，游戏输入仍为0。** 两轮一次性最低权限/IT任务实际执行于session1（helper PID23028、15720），各三次间隔500ms采样。任务/游戏线程均为同一WinSta0\Default（各轮GetThreadDesktop借用句柄一致：第一轮0x120、第二轮0x11c；不跨进程比较句柄数值），OpenInputDesktop成功且名字Default，相关GetLastError=0；不是session0或另一个命名桌面的执行端。WoW HWND0x904a6/PID22072/线程18008/start_ticks仍一致，IsWindowVisible=true、IsIconic=false。session1=XDWIN\XD、RDP-Tcp#0、协议2、WTSActive；第二轮WTSSessionInfoEx返回232字节/level1/session1/flags1=unlocked（CIM核实实际Windows11 10.0.26300）。控制台session2=WTSConnected、无登录用户，active_console_session_id=2；不据控制台登录屏推断RDP会话锁定。
 
 六次GetForegroundWindow=0x0，GetGUIThreadInfo(0)=false/GetLastError0；游戏指定线程的GUI查询成功但Active/Focus均0。GetWindowThreadProcessId(前台0)=tid0/pid0/error1400，该错误属于查询空HWND而非GetForegroundWindow本身。线程桌面及第二轮OpenInputDesktop句柄UOI_IO均false。WTS成功返回时raw error1008不解释为API失败或权限拒绝。当前证据排除任务跑错会话/命名桌面、采样时RDP断连及WoW最小化；实际输入前台不可用，客户端最小化/显示抑制是候选原因而未被服务端API唯一证实，也不能从约1秒窗口外推全部历史状态。下一步需要用户恢复并保持本机RDP客户端可见、确认远程桌面未锁定/无安全提示、仅点WoW标题栏后告知；如一直如此，需客户端类型/是否嵌套RDP信息，再做恢复前后只读对照，当前不自动重试或继续任务。

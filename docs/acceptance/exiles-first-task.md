@@ -2,6 +2,26 @@
 
 2026-10-06。代码基线`1292d7f`。用户明确授权本次Windows桌面截图取证、低频视觉及有限输入；先只读确认窗口/物理客户区/DPI/当前任务/键位，再有限输入，只尝试教程第一个任务，完成或遇阻塞停止。最新限制是焦点失败禁止输入、不抢前台，遮挡/最小化状态如实记录。
 
+## 激活恢复后只读复核：角色选择界面阻塞（2026-10-06 21:01—21:03）
+
+用户明确要求立即继续第一个教程任务“与吉安娜·普罗德摩尔交谈”，并给出session1现场复查前台0x904a6/PID22072、Default、非锁屏/无屏保；用户确认旧零句柄根因是游戏窗口在最上层但未激活，非RDP断开。下面旧诊断中的RDP最小化/显示抑制仅属当时未证实候选；按新事实修正当前结论。焦点闸门和有限输入/取消/释放要求保持不变。
+
+本轮只读/IT helper PID18088确实在session1执行。采前/采后GetForegroundWindow均0x904a6，focused=true，Wow PID22072、start_ticks639268827443062278、正式服路径和window class均未变；物理客户区2560×1440、DPI144、未最小化，窗口移动后客户区屏幕原点612,413。PrintWindow flags3原图保存`out/acceptance/exiles-first-task-20261006/foreground-restored-readonly-01/client.png`，SHA2564390bfd2ac283781d678bb06a342f056b51d34cb87d181b717f463aab8995069。
+
+原图独立人工复核：当前是角色选择界面，已选“小啊”、等级1战士、联盟标记，底部“进入魔兽世界”按钮；未进入当前教程现场。画面没有吉安娜、船上教程提示或任务窗口，当前任务与游戏内键位仍unknown。不能把之前船上的旧图或用户的目标名作为当前观察，不能套用旧NPC/任务按钮坐标，也不能将客户端前台恢复说成任务完成。按用户“完成或遇阻塞停止”，本轮停在只读核验，不自动发送登录/进入世界输入或继续教程。后续需要用户手动进入“小啊”的游戏世界并保持WoW激活，再重新确认当前任务和交互方式。
+
+唯一临时任务`WowJev-FirstQuest-Readonly-52ed32a9cca246d5bac3ac437119209d`创建、执行、删除，生命周期deleted=true/LastTaskResult0；独立回查GetTask HRESULT80070002不存在，清理原件`foreground-restored-cleanup.json`。未创建输入执行器/看门狗、未持有按键/按钮，没有物理释放ACK可报告；真实输入0、Seed云调用0、助手原图复核1，无AGENTS/系统配置/原焦点或输入设计改动。
+
+| 本轮实测 | 时间及边界 |
+| --- | --- |
+| PrintWindow捕获 | 85.461ms，Windows QPC |
+| 完整只读观察 | 697.609ms，同一Windows QPC，包含身份检查及PNG保存 |
+| /IT任务注册/执行/等待/删除 | 1895.437ms，同一协调器monotonic往返 |
+| CV/Seed/Jev/执行大脑决策→输入、观察→输入 | unknown，未启动，不能填0ms |
+| 输入已发出 / 游戏效果已确认 | 都没有样本；角色选择图是独立只读证据，不是程序输入效果 |
+
+使用原TraceRecorder生成`foreground-restored-latency.jsonl`/summary；Windows捕获及run与协调器bridge保持不同domain/id，嵌套跨度不相加，未尝试对时或跨域相减。摘要/源码版本/原件SHA在`foreground-restored-summary.json`与`foreground-restored-sha256.json`。本轮仅更新交接/验收文件，git diff --check通过；未重跑源码不变的旧套件（最近309e858源码验收TS498/498、Python702passed+3原有strict xfail、0skip、typecheck通过），不把旧数字冒充本轮现场输入验收。本地提交并ff-only集成，不推送，阻塞后等待用户。
+
 ## RDP与输入桌面只读诊断（2026-10-06 20:21—20:25）
 
 用户补充quser显示XD经RDP登录session1，控制台session2停在LogonUI，要求只读诊断后停止。本节是最新结论，下面恢复截图与session0阻塞作为历史保留。本轮没有截图、模型调用、游戏输入、抢前台、切换/附着桌面或修改系统配置，也没有改AGENTS及焦点规则。
