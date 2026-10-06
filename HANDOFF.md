@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 20:25，按用户最新指示只读诊断 RDP/桌面；诊断后停止，游戏输入仍为0。** 两轮一次性最低权限/IT任务实际执行于session1（helper PID23028、15720），各三次间隔500ms采样。任务/游戏线程均为同一WinSta0\Default（各轮GetThreadDesktop借用句柄一致：第一轮0x120、第二轮0x11c；不跨进程比较句柄数值），OpenInputDesktop成功且名字Default，相关GetLastError=0；不是session0或另一个命名桌面的执行端。WoW HWND0x904a6/PID22072/线程18008/start_ticks仍一致，IsWindowVisible=true、IsIconic=false。session1=XDWIN\XD、RDP-Tcp#0、协议2、WTSActive；第二轮WTSSessionInfoEx返回232字节/level1/session1/flags1=unlocked（CIM核实实际Windows11 10.0.26300）。控制台session2=WTSConnected、无登录用户，active_console_session_id=2；不据控制台登录屏推断RDP会话锁定。
+
+六次GetForegroundWindow=0x0，GetGUIThreadInfo(0)=false/GetLastError0；游戏指定线程的GUI查询成功但Active/Focus均0。GetWindowThreadProcessId(前台0)=tid0/pid0/error1400，该错误属于查询空HWND而非GetForegroundWindow本身。线程桌面及第二轮OpenInputDesktop句柄UOI_IO均false。WTS成功返回时raw error1008不解释为API失败或权限拒绝。当前证据排除任务跑错会话/命名桌面、采样时RDP断连及WoW最小化；实际输入前台不可用，客户端最小化/显示抑制是候选原因而未被服务端API唯一证实，也不能从约1秒窗口外推全部历史状态。下一步需要用户恢复并保持本机RDP客户端可见、确认远程桌面未锁定/无安全提示、仅点WoW标题栏后告知；如一直如此，需客户端类型/是否嵌套RDP信息，再做恢复前后只读对照，当前不自动重试或继续任务。
+
+本轮任务WowJev-FirstQuest-Readonly-a9f5349c633842029fa0c8aa6e9682f7、WowJev-FirstQuest-Readonly-c787ab9325954a92b8be87661b13e82c均创建、执行并删除；独立GetTask回查均80070002不存在。未改变AGENTS、焦点闸门、Windows注册表/组策略/服务/安装/会话状态；没有抢前台、切换/附着桌面、截图、模型调用或输入。诊断模式仅API查询，保留默认只读截图路径；实施独立树`.worktrees/exiles-first-task`。原始数据/创建删除/XML/SHA位于主`out/acceptance/exiles-first-task-20261006/rdp-desktop-diagnostic-01/`、`02/`及`rdp-diagnostic-*`，第二轮实际源码/EXE归档SHA核对，分域延迟sidecar用既有TraceRecorder生成。Windows完整诊断1059.239/1059.751ms（各含1000ms主动采样等待），协调器往返2873.537/2872.410ms，不混减、不作为游戏动作延迟。全量Python收集705：702passed+3原有strict xfail、0skip；TS最终498/498，typecheck通过。TS首轮497/498为独立树缺少固定.venv路径的环境故障，补齐同主树环境后全量重跑全绿，首轮日志保留，未改/跳过测试。详情`docs/acceptance/exiles-first-task.md`最新节。本地提交集成，不推送，等待用户。
+
 **2026-10-06 20:00，用户恢复原前台设计并授权一次性/IT交互任务；只读取图成功，焦点核验未通过，已停止。** 用户不做后台PostMessage/WGC方案，保留前台焦点规则，禁止抢前台。目标仍仅联盟战士流放者离岛第一个任务，完成或阻塞即停。允许当前登录用户的会话1执行端及任务完成删除，不允许注册表/组策略/服务/安装改动。未改AGENTS或原输入/截图设计。
 
 三次最低权限、无触发器、15秒上限的`WowJev-FirstQuest-Readonly-*`任务已创建后删除；完整名称/XML/SHA/删除回查在主`out/acceptance/exiles-first-task-20261006/`。第一轮winexe Console.OutputEncoding启动异常原件保留并修复；第二轮旧Gx类名假设拒绝，修为只读记录经PID/start/正式服路径验证的实际类，不提升输入授权。第三轮helper PID12036实际session1，Wow PID22072/start_ticks639268827443062278仍一致，HWND0x904a6，class=`waApplication Window`，2560×1440物理客户区，DPI144，未最小化；PrintWindow flags3保存有效客户区PNG。截图中1级角色“小啊”在联盟船上，教程提示与吉安娜·普罗德摩尔交谈，黄色可接图标；任务标题/ID/接取及键位尚未核实。

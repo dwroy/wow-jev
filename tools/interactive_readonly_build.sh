@@ -9,5 +9,6 @@ mkdir -p out/interactive-readonly-tools
   /r:System.Drawing.dll /r:System.Web.Extensions.dll \
   /out:"$(wslpath -w out/interactive-readonly-tools/InteractiveReadonlyProbe.exe)" \
   "$(wslpath -w native/windows/InputCommon.cs)" \
-  "$(wslpath -w tools/InteractiveReadonlyProbe.cs)" </dev/null
+  "$(wslpath -w tools/InteractiveReadonlyProbe.cs)" \
+  "$(wslpath -w tools/ReadonlyDesktopDiagnostics.cs)" </dev/null
 chmod +x out/interactive-readonly-tools/InteractiveReadonlyProbe.exe

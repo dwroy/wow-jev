@@ -30,6 +30,8 @@ class InteractiveReadonlyProbe
     static void Need(bool good, string reason) { if (!good) throw new InvalidOperationException(reason); }
     static Dictionary<string, string> Parse(string[] args)
     {
+        bool diagnostic = args.Length == 7 && args[6] == "--diagnose-desktop";
+        if (diagnostic) Array.Resize(ref args, 6);
         Need(args.Length == 6, "exactly_three_readonly_options_required");
         var options = new Dictionary<string, string>(StringComparer.Ordinal);
         for (int i = 0; i < args.Length; i += 2)
@@ -47,6 +49,7 @@ class InteractiveReadonlyProbe
         Need(Regex.IsMatch(output, @"^\\\\(?:wsl\.localhost|wsl\$)\\[A-Za-z0-9_.-]+\\home\\dw\\Projects\\wow-jev\\out\\[A-Za-z0-9_.-]+(?:\\[A-Za-z0-9_.-]+)*$", RegexOptions.IgnoreCase), "explicit_project_output_unc_required");
         foreach (string component in output.Split('\\')) Need(component != "." && component != "..", "path_traversal_rejected");
         Need(String.Equals(Path.GetFullPath(output), output, StringComparison.OrdinalIgnoreCase), "canonical_output_required");
+        if (diagnostic) options.Add("diagnose-desktop", "true");
         return options;
     }
     static void NoReparse(string path)
@@ -129,6 +132,22 @@ class InteractiveReadonlyProbe
             result["dpi_awareness_attempt"] = "per-monitor-v2-with-system-aware-fallback";
             result["observation_started_windows_qpc_ms"] = Clock.PreciseMs;
             result["process_before"] = Identity(pid, ticks);
+            if (options.ContainsKey("diagnose-desktop"))
+            {
+                var samples = new List<object>();
+                for (int sample = 0; sample < 3; sample++)
+                {
+                    if (sample > 0) System.Threading.Thread.Sleep(500);
+                    samples.Add(ReadonlyDesktopDiagnostics.Snapshot(pid));
+                }
+                result["desktop_samples"] = samples;
+                result["process_after"] = Identity(pid, ticks);
+                result["observation_finished_windows_qpc_ms"] = Clock.PreciseMs;
+                result["status"] = "diagnosed";
+                result["capture_count"] = 0;
+                NewJson(Path.Combine(directory, "result.json"), result);
+                return 0;
+            }
             var windows = Native.ListCandidates().FindAll(delegate(WindowInfo item) { return item.Pid == pid; });
             Need(windows.Count == 1, "one_visible_nonminimized_wow_window_required");
             WindowInfo window = windows[0];

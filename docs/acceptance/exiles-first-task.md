@@ -2,6 +2,44 @@
 
 2026-10-06。代码基线`1292d7f`。用户明确授权本次Windows桌面截图取证、低频视觉及有限输入；先只读确认窗口/物理客户区/DPI/当前任务/键位，再有限输入，只尝试教程第一个任务，完成或遇阻塞停止。最新限制是焦点失败禁止输入、不抢前台，遮挡/最小化状态如实记录。
 
+## RDP与输入桌面只读诊断（2026-10-06 20:21—20:25）
+
+用户补充quser显示XD经RDP登录session1，控制台session2停在LogonUI，要求只读诊断后停止。本节是最新结论，下面恢复截图与session0阻塞作为历史保留。本轮没有截图、模型调用、游戏输入、抢前台、切换/附着桌面或修改系统配置，也没有改AGENTS及焦点规则。
+
+两轮固定只读payload、当前XDWIN\XD、最低权限、无触发器、15秒上限的/IT任务进入session1，各三次500ms间隔采样（两轮各约1秒，不能证明窗口外的全部历史状态）。第二轮补充WTSSessionInfoEx锁定状态及OpenInputDesktop句柄的UOI_IO；结构实际/预期均232字节、level1/session1/连接状态一致。CIM确认实际Windows11 10.0.26300，不将无新版manifest的.NET报告6.2.9200当真实版本。原始记录在主`out/acceptance/exiles-first-task-20261006/rdp-desktop-diagnostic-01/result.json`与`02/result.json`。
+
+| 检查项 | 六次采样一致结果（注明仅第二轮项） |
+| --- | --- |
+| 执行端 | session1；第一轮PID23028/thread27808，第二轮PID15720/thread23632 |
+| GetProcessWindowStation | WinSta0；GetLastError0 |
+| GetThreadDesktop(本线程/WoW线程) | Default，各轮内借用handle一致（第一轮0x120、第二轮0x11c，不跨进程比较句柄数值）；GetLastError0；UOI_IO=false |
+| OpenInputDesktop(0,false,DESKTOP_READOBJECTS) | 成功，Default，GetLastError0；所有新打开句柄CloseDesktop成功；第二轮UOI_IO=false |
+| GetForegroundWindow | 0x0；该API没有文档化的NULL扩展错误码 |
+| GetWindowThreadProcessId(前台0) | thread0、PID0、GetLastError1400；是空HWND的查询错误 |
+| GetGUIThreadInfo(0) | FALSE，cbSize72，GetLastError0；无Active/Focus句柄 |
+| GetGUIThreadInfo(WoW thread18008) | TRUE，GetLastError0；Active/Focus0，不能据此批准输入 |
+| WoW HWND0x904a6 | PID22072/thread18008/class=waApplication Window，IsWindowVisible=TRUE、IsIconic=FALSE；进程path/start_ticks不变 |
+| WTS session1 | XDWIN\XD，RDP-Tcp#0，ClientProtocolType2，WTSActive0 |
+| WTSSessionInfoEx session1（第二轮） | SessionFlags1=unlocked；last-input FILETIME134357623313472917，约本地20:12:11.347（仅同WTS FILETIME可比较，空闲不能证明最小化） |
+| WTS session0/2 | Services/WTSDisconnected；Console/WTSConnected且无登录用户；第二轮active-console=2 |
+
+原始GetLastError立即采集。WTS连接状态/用户等查询成功但raw error1008，不将成功调用后的错误槽值当作失败/权限拒绝；EnumWindows的成功raw error1400来自回调中的空HWND查询，同样不当失败。GUITHREADINFO的输出在FALSE时不解释为有效窗口信息，GetGUIThreadInfo指定游戏线程成功时的空Active/Focus才独立列出。
+
+结论：执行端与游戏的会话/命名桌面一致，采样时RDP连接且未锁定，WoW自身可见未最小化。已排除这几类直接原因；控制台session2登录屏不会使session1变成session0。实际障碍是RDP会话未提供可验证的输入桌面/前台（UOI_IO=false、前台0）。客户端最小化/显示抑制是候选，但无法仅凭这些服务端API唯一证明客户端窗口状态，也不假定错误出在用户操作。微软文档说明[UOI_IO](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getuserobjectinformationw)判断接收用户输入的桌面，[WTSActive](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/ne-wtsapi32-wts_connectstate_class)属于连接状态，[SessionFlags](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/ns-wtsapi32-wtsinfoex_level1_w)另行报告锁定；[RDP窗口最小化可能影响UI自动化](https://learn.microsoft.com/en-us/troubleshoot/power-platform/power-automate/desktop-flows/ui-automation/uipi-issues)，是候选解释的资料依据，并非本场景最小化已实测。未执行资料中的任何注册表/UAC建议。
+
+需要用户：恢复本机的RDP客户端窗口并保持可见、不最小化/断开，确认远程桌面未锁定/无安全提示，在远程桌面仅点WoW标题栏后告知；若本来如此，补充客户端类型和有无嵌套RDP。后续经用户回复再进行恢复前后只读对照，前台可验证之前禁止输入。本轮诊断完成后停止，不自动恢复教程任务。
+
+| 本轮创建并删除的完整任务名称 | 清理证据 |
+| --- | --- |
+| WowJev-FirstQuest-Readonly-a9f5349c633842029fa0c8aa6e9682f7 | 生命周期deleted=true；独立GetTask回查HRESULT80070002不存在 |
+| WowJev-FirstQuest-Readonly-c787ab9325954a92b8be87661b13e82c | 同上 |
+
+两轮Windows QPC完整只读过程分别1059.239/1059.751ms（包含主动500ms×2采样间隔）；协调器monotonic任务注册→运行→等待→删除分别2873.537/2872.410ms，不能与Windows QPC起点直接相减或相加嵌套区间。没有观察→输入、输入发出或效果确认样本。`rdp-diagnostic-latency.jsonl`/summary以既有TraceRecorder从原始数据生成，采样API为revalidate，完整run和协调器bridge分域记录；归一化协调器0点仅表示往返耗时，不代表与QPC对时。
+
+C#只读工具编译通过；Python全量收集705项：702passed、3原有strict xfail（gamma1.1反例）、0skip/失败，新增10项只读参数/清理/捕获与诊断status不混报检查纳入。Windows WinEye/NpcClassify与旧解码器均由当前树源码编译，完整原生离屏测试实际执行，未取现场图。TS首轮497passed/1failed/0skip，为固定`.venv/bin/python`在新树缺失导致的运行环境故障（brain-planner真实串行worker测试），补上主树同一Python环境后重跑全部498/498passed，0fail/skip/cancel/todo；没有改、删或跳过测试。typecheck exit0、git diff --check通过。首轮/重跑原始日志、Python XML及完整测试数字保留在`rdp-diagnostic-*`，第二轮实际源码/EXE归档`rdp-diagnostic-source/manifest.json`并核对任务SHA；第一轮EXE只保留SHA，不声称已归档旧二进制。本地提交并ff-only集成，不推送。
+
+可重跑只读诊断入口：在独立工作树先`bash tools/interactive_readonly_build.sh`，再运行`python tools/interactive_readonly_once.py --pid <重新核实PID> --expected-start-ticks <重新核实ticks> --out /home/dw/Projects/wow-jev/out/<全新证据目录> --diagnose-desktop`。该标志只读取API，不拍图、不发输入；默认不加标志仍为原只读截图，两类status不会混报。每次临时任务自动删除并保留完整生命周期，不从正常清理外推强杀情况。
+
 ## 恢复后的最新结果
 
 用户明确不做后台方案，恢复原前台规则，并允许当前登录用户的一次性/IT任务启动session1执行端，任务用完删除。以下结果覆盖下方最初会话0阻塞历史；没有改AGENTS、PostMessage/WGC或原NativeInput焦点/释放设计。

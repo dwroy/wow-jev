@@ -17,7 +17,7 @@ MAIN = Path('/home/dw/Projects/wow-jev')
 def winpath(path: Path) -> str:
     return subprocess.check_output(['/usr/bin/wslpath', '-w', str(path)], text=True).strip()
 
-def run(pid: int, ticks: int, output: Path) -> dict:
+def run(pid: int, ticks: int, output: Path, *, diagnostic: bool = False) -> dict:
     if not 0 < pid < 2**31 or ticks <= 0:
         raise ValueError('specified_process_identity_required')
     output = output.resolve()
@@ -31,7 +31,8 @@ def run(pid: int, ticks: int, output: Path) -> dict:
     name = 'WowJev-FirstQuest-Readonly-' + uuid.uuid4().hex
     cancel_path = output.parent / (name + '.cancel')
     request = {'task_name': name, 'executable': winpath(executable), 'sha256': exe_hash,
-               'pid': pid, 'start_ticks': str(ticks), 'out': winpath(output), 'cancel': winpath(cancel_path)}
+               'pid': pid, 'start_ticks': str(ticks), 'out': winpath(output), 'cancel': winpath(cancel_path),
+               'diagnose_desktop': diagnostic}
     encoded_request = base64.b64encode(json.dumps(request).encode()).decode()
     script = r'''
 $ErrorActionPreference='Stop'
@@ -54,6 +55,7 @@ try {
   $definition.Settings.ExecutionTimeLimit='PT15S';$definition.Settings.DisallowStartIfOnBatteries=$false;$definition.Settings.StopIfGoingOnBatteries=$false
   $action=$definition.Actions.Create(0);$action.Path=$request.executable
   $action.Arguments='--pid '+$request.pid+' --expected-start-ticks '+$request.start_ticks+' --out "'+$request.out+'"'
+  if($request.diagnose_desktop){$action.Arguments+=' --diagnose-desktop'}
   if(Test-Path -LiteralPath $request.cancel){throw 'user_cancel_before_registration'}
   $task=$folder.RegisterTaskDefinition($request.task_name,$definition,2,$identity.Name,$null,3)
   $record.registered=$true;$record.principal=$identity.Name;$record.task_xml=$task.Xml
@@ -97,7 +99,7 @@ $record | ConvertTo-Json -Depth 5 -Compress
     if result['lifecycle'].get('error'):
         raise RuntimeError(result['lifecycle']['error'] + ':' + str(audit))
     evidence = json.loads((output/'result.json').read_text())
-    if evidence.get('probe_session_id') != 1 or evidence.get('status') != 'captured':
+    if evidence.get('probe_session_id') != 1 or evidence.get('status') != ('diagnosed' if diagnostic else 'captured'):
         raise RuntimeError('interactive_readonly_failed:' + str(output/'result.json'))
     return {'audit': str(audit), 'output': str(output), 'task_name': name,
             'task_deleted': True, 'evidence': evidence, 'input_events': 0}
@@ -107,8 +109,9 @@ if __name__ == '__main__':
     parser.add_argument('--pid',type=int,required=True)
     parser.add_argument('--expected-start-ticks',type=int,required=True)
     parser.add_argument('--out',type=Path,required=True)
+    parser.add_argument('--diagnose-desktop',action='store_true',help='Only inspect desktop/session/window APIs; no capture or input.')
     args=parser.parse_args()
-    try: print(json.dumps(run(args.pid,args.expected_start_ticks,args.out),ensure_ascii=False))
+    try: print(json.dumps(run(args.pid,args.expected_start_ticks,args.out,diagnostic=args.diagnose_desktop),ensure_ascii=False))
     except (OSError,ValueError,RuntimeError,subprocess.SubprocessError) as error:
         print(json.dumps({'status':'blocked','error':str(error),'input_events':0},ensure_ascii=False))
         raise SystemExit(1)

@@ -43,3 +43,16 @@ def test_fixed_least_privilege_task_and_cleanup_evidence(tmp_path,monkeypatch,de
     else:
         result=tool.run(22072,1,output);assert result['task_deleted'] and result['input_events']==0
     assert len(executions)==1
+
+@pytest.mark.parametrize('diagnostic,status',[(True,'captured'),(False,'diagnosed')])
+def test_capture_and_diagnosis_cannot_be_misreported(tmp_path,monkeypatch,diagnostic,status):
+    main,_=environment(tmp_path,monkeypatch);output=main/'out/probe'
+    def fake(command,**kwargs):
+        script=base64.b64decode(command[-1]).decode('utf-16-le')
+        request=script.split("FromBase64String('",1)[1].split("')",1)[0]
+        assert json.loads(base64.b64decode(request))['diagnose_desktop'] is diagnostic
+        output.mkdir();(output/'result.json').write_text(json.dumps({'probe_session_id':1,'status':status,'real_inputs':0}))
+        return SimpleNamespace(returncode=0,stdout=b'{"deleted":true}',stderr=b'')
+    monkeypatch.setattr(tool.subprocess,'run',fake)
+    with pytest.raises(RuntimeError,match='interactive_readonly_failed'):
+        tool.run(22072,1,output,diagnostic=diagnostic)
