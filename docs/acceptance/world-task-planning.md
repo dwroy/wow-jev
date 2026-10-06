@@ -61,4 +61,14 @@ bindings字段为world_pack_sha256/client_version/quest_key、starter/finisher�
 
 第一轮完整TS为429/430，原失败保存`ts-full-initial-failed.tap/json`：旧JevCLI取消时`iteration_observation_link`失败，不因旧代码未改而忽略。确定性原始Eye日志复现：response已持久记录wait，但取消result的selected为null。修复request/response/revalidated持久审计检查点，提交审计链接后再处理取消；不放宽严格回放、候选或输入闸。相同probe修复后selected为wait、cancelled且严格回放通过，前后均0执行；新增7项检查点反例保留原CLI用例，最终全量全绿。取消后不发新动作；首版parent cancelled/late/pending完整学习仍明确unsupported。
 
-体验入口将在固定提交验收：`npm --prefix agent run layers -- world-brain-demo`（纯模拟），父episode目录运行`world-brain-replay --run-dir EPISODE`；`--scenario unknown|identity-change`必须阻塞且0child，不能把这些结果称为游戏成功。所有`--live`/桌面选项在此入口拒绝；system v2 live/observe原拒绝条件保留。
+源提交`f072c0d`已ff-only合入主checkout，并实际验证：
+
+| 场景 | demo退出码 | child数 | 独立parent严格回放 |
+| --- | --- | --- | --- |
+| normal | 0 | 4 | exit0、completed、complete=true；逐child原件验证通过 |
+| unknown | 1（预期阻塞） | 0 | exit0、blocked、complete=false |
+| identity-change | 1（预期阻塞） | 0 | exit0、blocked、complete=false |
+
+normal独立ordinal0=2/ordinal1=1，accepted/completed/turned_in/reward_received均true；全部real_inputs=0、game_effect=unverified、models_enabled=false/input_enabled=false。同一固定提交的旧world-demo及四个独立layers回放仍exit0。原始`main-brain-*.log`、`main-brain-*-replay.log`、`main-acceptance.json`和`main-legacy-world-acceptance.json`留在stage-2；Jev确定性probe修复前后原始Eye日志也已归档，前者严格回放拒绝、后者正确cancelled且回放通过。只普通推送codex/agent-system，远端所有heads前后核对另留该目录。
+
+体验入口已在主checkout固定提交验收：`npm --prefix agent run layers -- world-brain-demo`（纯模拟），父episode目录运行`world-brain-replay --run-dir EPISODE`；`--scenario unknown|identity-change`必须阻塞且0child，不能把这些结果称为游戏成功。所有`--live`/桌面选项在此入口拒绝；system v2 live/observe原拒绝条件保留。A/B离线工作闭合，C–F未完成，按用户要求在当前客户端/角色/任务及Windows只读现场取证决定前停止。
