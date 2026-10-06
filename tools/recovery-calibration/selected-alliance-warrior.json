@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "id": "alliance-warrior-xiao-a-selected-2560x1440-v1",
+  "version": 2,
+  "id": "alliance-warrior-xiao-a-selected-anchored-v2",
   "layout": {
     "width": 2560,
     "height": 1440
@@ -74,9 +74,37 @@
     "reviewed_at": "2026-10-06",
     "scope": "selected character identity only; no character GUID, task progress or bindings inferred"
   },
-  "unknown_policy": "Any dimension or ROI comparison failure yields unverified; never matches another unselected row or faction by whole-frame text.",
+  "unknown_policy": "Any failed independent selected-card/name/class/alliance-glyph comparison, unsupported geometry or ambiguous UI scale is unverified. No full-frame text fallback; changed rendering requires reviewed evidence/calibration.",
   "safe_focus_point": {
     "x": 2240,
     "y": 678
+  },
+  "normalization": {
+    "id": "anchored-uniform-ui-v1",
+    "reference_client": {
+      "width": 2560,
+      "height": 1440
+    },
+    "ui_scale_factors": [
+      1.0,
+      0.75,
+      1.25,
+      1.5
+    ],
+    "ui_scale_policy": "Search bounded uniform font/glyph scales relative to client height. Only independent region matches confirm a scale; dimensions alone never verify identity.",
+    "client_bounds": {
+      "min_width": 640,
+      "min_height": 360,
+      "max_width": 7680,
+      "max_height": 4320,
+      "min_aspect": 1.0,
+      "max_aspect": 3.5
+    },
+    "anchors": {
+      "selected_card": "right client edge and vertical center; card offsets scale uniformly",
+      "name": "local selected-card coordinates",
+      "class": "local selected-card coordinates",
+      "alliance_glyph": "local selected-card coordinates"
+    }
   }
 }

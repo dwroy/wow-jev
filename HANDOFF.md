@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 新指导第1阶段完成：客户区归一化/锚点/UI候选及常驻ROI接口，全量复验后提交。** 根据用户经Claude给出的新指导，顺序为1尺寸识别→2恢复/分层任务职责拆分+agent.sqlite局部实测断言→3session1常驻WGC/原hand与guardian/当前用户管道→4窗口就绪后仅第一个交谈及分层延迟。开发独立工作树resolution-aware/tutorial-layered/resident-session，模块单owner；当前后两阶段只读设计审计，未实施。游戏输入须等用户窗口并排无遮挡通知，保留空闲>5s与焦点恢复闸；不因用户打字抢鼠标。
+
+第1阶段取消2560×1440硬拒，字形保持等比UI候选、选角右侧中心/NPC归一化位置/提示底部中心独立锚点，未知缩放/布局/相机变化仍unverified。DescribeRegions/MatchRegions为后续WGC仅ROI staging接口；预载模板/hash/缩放缓存，warm LockBits/稀疏ink+积分图，不per-frame磁盘读取/GetPixel。115离屏检查（全部旧14保留）通过：1280×720/1920×1080整图缩放与1600×1200/1920×800/1713×956×UI因子.75/1/1.25/1.5；错误名字/职业/阵营/提示/变形/ROI原点等拒绝。不同宽高比重绘不是实际相机/FOV证明。两场景各100 warm CV合计p50 10.920/12.046ms、p95 15.178/16.360ms；仅CV，不是动作E2E。
+
+新session1只读取证实测当前物理客户区仍2560×1440/DPI144，用户外框很可能是DPI虚拟化坐标（推断，不作为尺寸证据）。新代码observe在实际断线图中选角/教程均false，cold完整CV1064.062ms含初始化/文件读取，0游戏输入/模型；3项只读临时任务均删除且回查80070002。实际其它尺寸正样本尚无。全量最终TS546/546、Python729passed+3原有strict xfail、0fail/skip、typecheck通过。首次独立树缺.venv入口/capture原生二进制和可选原生测试绑定导致1worker失败/84→44→21环境skip，原件保留；补齐构建+显式WOW_COMBAT_EYE_EXE/WOW_NPC_CLASSIFY_EXE后真正零跳过复验，不删/skip用例。日志/源SHA在主out/acceptance/layered-tutorial-20261006/stage-1；验收docs/acceptance/resolution-aware.md。下一步先把交谈搬入既有L4→L3→Body→闸→hand，recovery只停可玩状态，冻结世界包不改。
+
 **2026-10-06 A/B/C 已集成并全绿；第二轮现场正确识别断线，但客户区遮挡，输入前停止。** 525d712/f881b73/be99ab0/4844f61 分步实现焦点恢复、session1受限交互桥、recover/launch及实图修补。最终TS546/546、Python729passed+3原有strict xfail（收集732，0fail/skip）、typecheck通过；原件在主out/acceptance/session-recovery-20261006/software-fix-01。最新验收详见docs/acceptance/session-recovery.md，旧阶段记录作为历史保留。
 
 live-02基线4844f61，只读discover+observe，PID22072/start_ticks639268827443062278/HWND0x904a6/class waApplication Window/session1核验一致；物理客户区2560×1440/DPI144，visible/nonminimized但focused=false。当前断线WOW51900319中心确定识别正确；完整客户区核验发现上方0x400ce区域相交，reason client_occluded，协调器focus_recovery_safety_gate在任何点击前停止。目标第一个交谈未完成、goal_effect unverified；两轮总输入/效果/输入执行器/看门狗/云模型均0，abstract release confirmed仅未取得输入所有权，没有物理释放ACK。没有实际冷启动或游戏完成可报告。

@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "id": "alliance-exiles-talk-jaina-initial-2560x1440-v1",
+  "version": 2,
+  "id": "alliance-exiles-talk-jaina-initial-anchored-v2",
   "layout": {
     "width": 2560,
     "height": 1440
@@ -51,5 +51,33 @@
     "review": "root original-image review: green NPC name label above highlighted Jaina and same named first tutorial prompt with right-mouse illustration; template is calibration, never fresh observation",
     "reviewed_at": "2026-10-06"
   },
-  "scope": "Current source frame must match both independent label and hint masks before a single finite right click. No quest accept/complete/next objective inferred."
+  "scope": "Current source frame must match both independent label and hint masks before a single finite right click. No quest accept/complete/next objective inferred.",
+  "normalization": {
+    "id": "anchored-uniform-ui-v1",
+    "reference_client": {
+      "width": 2560,
+      "height": 1440
+    },
+    "ui_scale_factors": [
+      1.0,
+      0.75,
+      1.25,
+      1.5
+    ],
+    "ui_scale_policy": "Search bounded uniform font/glyph scales relative to client height. Only independent region matches confirm a scale; dimensions alone never verify identity.",
+    "client_bounds": {
+      "min_width": 640,
+      "min_height": 360,
+      "max_width": 7680,
+      "max_height": 4320,
+      "min_aspect": 1.0,
+      "max_aspect": 3.5
+    },
+    "anchors": {
+      "npc_name": "normalized world-label center, glyph dimensions scale uniformly",
+      "tutorial_hint": "bottom-center UI anchor, glyph dimensions scale uniformly",
+      "action_point": "normalized world-client geometry plus independently matched NPC offset",
+      "safe_focus_point": "normalized world-client geometry"
+    }
+  }
 }
