@@ -119,8 +119,16 @@ def test_launch_request_cannot_claim_wow_effect(tmp_path,monkeypatch):
 def test_launch_block_tokens_are_shared_canonical_schema_definitions():
     definitions=json.loads(SCHEMA.read_bytes())['definitions']
     for name,tokens in {
-        'blocked_auth_token':['账号','帐号','密码','验证码','验证','身份验证','安全令牌','登录','登陆','Password','Authenticator','Verification'],
+        'blocked_auth_token':['密码','验证码','验证','身份验证','安全令牌','Password','Authenticator','Verification'],
         'blocked_terms_token':['协议','同意','许可','Agreement'],
         'blocked_update_token':['更新','安装','下载','修复','扫描','Update','Install','Download'],
     }.items():
         assert set(definitions[name]['enum'])==set(tokens)
+
+def test_account_notice_context_is_not_credentials_but_password_still_blocks():
+    definitions=json.loads(SCHEMA.read_bytes())['definitions']
+    strong=set(definitions['blocked_auth_token']['enum'])
+    assert not strong.intersection({'账号','帐号','账户','登录','登陆'})
+    assert {'账号','帐号','登录','登陆'}<=set(definitions['auth_context_token']['enum'])
+    assert {'密码','验证码','身份验证','安全令牌','Password','Authenticator','Verification'}<=strong
+    assert {'确定','断开','已从服务器断开','重新连接','WOW51900319'}<=set(definitions['reconnect_state_token']['enum'])

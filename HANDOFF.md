@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 第一轮恢复实测无输入；断线公告误判及零面积窗口误拒已修并全量复验，准备重新取证。** A525d712/Bf881b73/Cbe99ab0已ff-only主集成。live-01约8.965s在只读后停credentials_or_authentication_required，实图实际上是“已从服务器断开（WOW51900319）”中心确定、背后重新连接，账号仅公告/创建账号文字；没有密码表单，不能称用户需输入凭据。Native可见性另误把上方成功读取的零宽/零高系统窗口当geometry unknown。原件未改，0输入/0native session/0模型，当前任务仍未完成；release abstract confirmed仅表示未取得输入所有权，不是物理释放ACK。
+
+实际图回放驱动修补：强认证词仍阻塞，泛账号/登录改中心表单成对上下文，公告/创建账号不单独触发；统一schema增加断开/确定/重新连接与错误码。只有中心明确断线marker与下方当前确定框几何配对才一次ACK，随后独立复采重连；focus点击若已关弹窗不再点击旧ACK。Native只排除确定零面积矩形，反向矩形/仍存在但读取失败继续deny，消失窗口最多重新枚举一次；occluder diagnostics只HWND/class/错误/rect，不读其它标题。新增截图API、PNG写盘、窗口复核QPC独立可选字段；旧capture区间仍含PNG，不与旧85ms API数据混同。
+
+修补最终全量TS546/546、Python729passed+3原有strict xfail、0skip、typecheck/diff全绿；C状态机45/45，bridge27/27，native safety42、window/heartbeat50、calibration14检查通过，真实归档断线PNG的本地OCR也识别正确，均不发游戏输入。software-fix-01完整日志/原件主out/acceptance/session-recovery-20261006/，修补本地提交集成后重建固定payload再运行live-02；当前还未完成教程、没有真实输入/释放或冷启动成功可报告。
+
 **2026-10-06 B→C：恢复/启动编排及入口已完成软件验收，准备主集成现场。** TypeScript RecoveryOrchestrator统一预算/源观察/目标身份/按钮边界/前台例外闸，recover只到第一个交谈、launch只到世界，默认180s/阶段30s/8操作/100ms点击。真正现场class waApplication Window已精确纳入（不再误用旧Gx前缀）；已有无窗口进程不重复启动。战网冷窗口轮询、CLI仅请求后独立发现WoW；明确技术失败或限期无效果才在重新取证的健康战网执行唯一CV备用，auth/terms/update/unknown/权限拒绝不回退。进入世界的无字loading仅有限只读等候，不生成动作、不先计效果；中途危险词即时停止。
 
 C的37项状态机测试包括真实canonical危险词+背景Play全部0input、wa实际类、冷窗口、launched但无WoW后唯一fresh-CV fallback、错误/近似角色、无字loading/认证中断、取消/永不返回端口/源时效、独立effect与未知release；全树typecheck绿。恢复code状态机/root监督，Jev/Brain/Seed调用0，不虚构模型分层加速；当前输入首SendInput与后独立观察按QPC/协调器分域trace记录。可用python3 tools/recover.py launch|recover --recovery-authorized --target-character 小啊 --run-dir <全新主out目录>，见docs/session-recovery.md。A525d712、B受限交互桥已分步本地提交，C收尾提交后ff-only主集成；全绿后再运行现场recover，任务完成或实际用户处理阻塞后更新取证并停，不继续后续训练。

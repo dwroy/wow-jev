@@ -120,12 +120,15 @@ static class InteractiveSessionHost
         var target=Map(Field(request,"target"));WindowInfo before=Identity(target);Need(IsWindowVisible(before.Hwnd)&&!IsIconic(before.Hwnd),"visible_nonminimized_target_required");
         result["target"]=target;result["window"]=Window(before);double captureStart=Clock.PreciseMs;string path=Path.Combine(Output,"client.png");string method="PrintWindow-client-renderfullcontent";bool okay;
         using(var bitmap=new Bitmap(before.Width,before.Height,PixelFormat.Format32bppArgb)) {
-            using(Graphics graphics=Graphics.FromImage(bitmap)){IntPtr dc=graphics.GetHdc();try{okay=PrintWindow(before.Hwnd,dc,3);}finally{graphics.ReleaseHdc(dc);}}
+            using(Graphics graphics=Graphics.FromImage(bitmap)){IntPtr dc=graphics.GetHdc();try{result["capture_api_started_windows_qpc_ms"]=Clock.PreciseMs;okay=PrintWindow(before.Hwnd,dc,3);result["capture_api_finished_windows_qpc_ms"]=Clock.PreciseMs;}finally{graphics.ReleaseHdc(dc);}}
             if(!okay){var safety=Native.GetRecoverySafety(before.Hwnd);Need(Convert.ToBoolean(Field(safety,"client_fully_visible")),"capture_failed_client_occluded");var origin=new Native.Point();Need(ClientToScreen(before.Hwnd,ref origin),"client_origin_unavailable");using(Graphics graphics=Graphics.FromImage(bitmap))graphics.CopyFromScreen(origin.X,origin.Y,0,0,new Size(before.Width,before.Height),CopyPixelOperation.SourceCopy);method="CopyFromScreen-client-visible";}
+            if(!okay)result["capture_api_finished_windows_qpc_ms"]=Clock.PreciseMs;
+            result["png_write_started_windows_qpc_ms"]=Clock.PreciseMs;
             using(var stream=new FileStream(path,FileMode.CreateNew,FileAccess.Write,FileShare.Read))bitmap.Save(stream,ImageFormat.Png);
+            result["png_write_finished_windows_qpc_ms"]=Clock.PreciseMs;
         }
-        double captureEnd=Clock.PreciseMs;WindowInfo after=Identity(target);Need(before.Width==after.Width&&before.Height==after.Height,"capture_dimensions_changed");
-        result["window"]=Window(after);result["capture"]=Obj("file","client.png","sha256",Hash(path),"width",after.Width,"height",after.Height,"started_windows_qpc_ms",captureStart,"finished_windows_qpc_ms",captureEnd,"method",method);
+        double captureEnd=Clock.PreciseMs;result["window_revalidate_started_windows_qpc_ms"]=Clock.PreciseMs;WindowInfo after=Identity(target);Need(before.Width==after.Width&&before.Height==after.Height,"capture_dimensions_changed");
+        result["window"]=Window(after);result["window_revalidate_finished_windows_qpc_ms"]=Clock.PreciseMs;result["capture"]=Obj("file","client.png","sha256",Hash(path),"width",after.Width,"height",after.Height,"started_windows_qpc_ms",captureStart,"finished_windows_qpc_ms",captureEnd,"method",method);
         result["observation_id"]="session-observe-"+Guid.NewGuid().ToString("D");double cvStart=Clock.PreciseMs;
         using(var capturedImage=new Bitmap(path)){var selected=RecoveryCalibration.Match(capturedImage,AppDomain.CurrentDomain.BaseDirectory);selected["observation_id"]=result["observation_id"];selected["capture_sha256"]=Hash(path);result["selected_character"]=selected;var tutorial=RecoveryTutorialCv.Match(capturedImage,AppDomain.CurrentDomain.BaseDirectory);tutorial["observation_id"]=result["observation_id"];tutorial["capture_sha256"]=Hash(path);result["tutorial_cv"]=tutorial;}
         result["cv_started_windows_qpc_ms"]=cvStart;result["cv_finished_windows_qpc_ms"]=Clock.PreciseMs;

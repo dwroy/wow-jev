@@ -293,6 +293,13 @@ namespace WowJev.Input
     {
         public const uint IdleThresholdMs = 5000;
         public static bool WindowVisible(bool visible, bool minimized) { return visible && !minimized; }
+        public static string OccluderGeometry(bool succeeded, bool windowExists, RecoveryRect rect)
+        {
+            if (!succeeded) return windowExists ? "unknown" : "changed";
+            if (rect.Right < rect.Left || rect.Bottom < rect.Top) return "unknown";
+            if (rect.Right == rect.Left || rect.Bottom == rect.Top) return "empty";
+            return "valid";
+        }
         public static bool TryIdle(uint now, uint last, out uint idle)
         {
             idle = unchecked(now - last);
@@ -346,6 +353,7 @@ namespace WowJev.Input
         [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
         [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowCallback callback, IntPtr parameter);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int count);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern int GetClassName(IntPtr hwnd, StringBuilder text, int count);
         [DllImport("user32.dll")] static extern bool IsIconic(IntPtr hwnd);
         [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
         [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
@@ -401,14 +409,33 @@ namespace WowJev.Input
             if (!visited.SetEquals(enumerated)) throw new InvalidOperationException("window_order_changed");
             return order;
         }
-        static bool UpperWindowIntersectsClient(IntPtr window, RecoveryRect client)
+        static void RecordOccluderGeometry(List<object> diagnostics, IntPtr window, bool succeeded, int error, Rect raw, string disposition)
         {
-            if (!IsWindow(window)) throw new InvalidOperationException("window_order_changed");
+            StringBuilder className = new StringBuilder(256); SetLastError(0);
+            int count = GetClassName(window, className, className.Capacity), classError = Marshal.GetLastWin32Error();
+            // Only identity and geometry are diagnostic; no title or image from
+            // any other application is read or copied into the evidence.
+            diagnostics.Add(RecoveryObject("hwnd", "0x" + window.ToInt64().ToString("x"),
+                "class", count > 0 ? (object)className.ToString() : null, "class_error", count > 0 ? 0 : classError,
+                "rect_success", succeeded, "win32_error", succeeded ? 0 : error, "disposition", disposition,
+                "raw_rect", RecoveryObject("left", raw.Left, "top", raw.Top, "right", raw.Right, "bottom", raw.Bottom)));
+        }
+        static bool UpperWindowIntersectsClient(IntPtr window, RecoveryRect client, List<object> diagnostics)
+        {
+            if (!IsWindow(window))
+            { RecordOccluderGeometry(diagnostics, window, false, 1400, new Rect(), "changed"); throw new InvalidOperationException("window_order_changed"); }
             if (!IsWindowVisible(window) || IsIconic(window)) return false;
-            Rect outer;
-            if (!GetWindowRect(window, out outer)) throw new InvalidOperationException("occluder_geometry_unknown");
+            Rect outer; SetLastError(0);
+            bool read = GetWindowRect(window, out outer); int error = Marshal.GetLastWin32Error();
             RecoveryRect bounds = new RecoveryRect(outer.Left, outer.Top, outer.Right, outer.Bottom);
-            if (!bounds.Valid) throw new InvalidOperationException("occluder_geometry_unknown");
+            string disposition = RecoverySafety.OccluderGeometry(read, read || IsWindow(window), bounds);
+            if (disposition != "valid")
+            {
+                RecordOccluderGeometry(diagnostics, window, read, error, outer, disposition);
+                if (disposition == "empty") return false;
+                if (disposition == "changed") throw new InvalidOperationException("window_order_changed");
+                throw new InvalidOperationException("occluder_geometry_unknown");
+            }
             if (!bounds.Intersects(client)) return false;
             uint cloaked;
             if (DwmGetWindowAttribute(window, 14, out cloaked, sizeof(uint)) != 0)
@@ -442,7 +469,8 @@ namespace WowJev.Input
             Dictionary<string, object> result = RecoveryObject("allowed", false, "reason", "unverified", "hwnd", "0x" + hwnd.ToInt64().ToString("x"),
                 "checked_at_ms", Clock.PreciseMs, "visible", false, "minimized", false, "focused", false, "client_fully_visible", false,
                 "idle_threshold_ms", RecoverySafety.IdleThresholdMs, "user_idle_scope", "calling-session-only", "input_source_distinguishable", false,
-                "visibility_method", "monitor_union_and_upper_window_regions", "occluders", new List<string>());
+                "visibility_method", "monitor_union_and_upper_window_regions", "occluders", new List<string>(),
+                "occluder_diagnostics", new List<object>(), "enumeration_retries", 0);
             try
             {
                 if (hwnd == IntPtr.Zero || !IsWindow(hwnd) || GetAncestor(hwnd, 2) != hwnd) return RecoveryDenied(result, "invalid_window");
@@ -468,15 +496,32 @@ namespace WowJev.Input
                     { monitors.Add(new RecoveryRect(rect.Left, rect.Top, rect.Right, rect.Bottom)); return true; }, IntPtr.Zero))
                     return RecoveryDenied(result, "monitor_geometry_unknown");
                 if (!RecoverySafety.CoveredByMonitors(client, monitors)) return RecoveryDenied(result, "client_outside_monitors");
-                List<IntPtr> order = ReadWindowOrder(); int targetIndex = order.IndexOf(hwnd);
-                if (targetIndex < 0) return RecoveryDenied(result, "window_order_unverified");
                 List<string> occluders = (List<string>)result["occluders"];
-                for (int i = 0; i < targetIndex; i++)
-                    if (UpperWindowIntersectsClient(order[i], client)) occluders.Add("0x" + order[i].ToInt64().ToString("x"));
+                List<object> diagnostics = (List<object>)result["occluder_diagnostics"];
+                bool stable = false;
+                for (int attempt = 0; attempt < 2 && !stable; attempt++)
+                {
+                    occluders.Clear();
+                    try
+                    {
+                        List<IntPtr> order = ReadWindowOrder(); int targetIndex = order.IndexOf(hwnd);
+                        if (targetIndex < 0) return RecoveryDenied(result, "window_order_unverified");
+                        for (int i = 0; i < targetIndex; i++)
+                            if (UpperWindowIntersectsClient(order[i], client, diagnostics)) occluders.Add("0x" + order[i].ToInt64().ToString("x"));
+                        List<IntPtr> checkedOrder = ReadWindowOrder();
+                        if (order.Count != checkedOrder.Count) throw new InvalidOperationException("window_order_changed");
+                        for (int i = 0; i < order.Count; i++)
+                            if (order[i] != checkedOrder[i]) throw new InvalidOperationException("window_order_changed");
+                        stable = true;
+                    }
+                    catch (InvalidOperationException error)
+                    {
+                        if (error.Message != "window_order_changed" || attempt != 0) throw;
+                        result["enumeration_retries"] = 1;
+                    }
+                }
+                if (!stable) return RecoveryDenied(result, "window_order_changed");
                 if (occluders.Count > 0) return RecoveryDenied(result, "client_occluded");
-                List<IntPtr> checkedOrder = ReadWindowOrder();
-                if (order.Count != checkedOrder.Count) return RecoveryDenied(result, "window_order_changed");
-                for (int i = 0; i < order.Count; i++) if (order[i] != checkedOrder[i]) return RecoveryDenied(result, "window_order_changed");
                 // This is supplementary hit-testing, never a replacement for the
                 // whole-client region check above. Includes all four boundaries.
                 Point[] checks = { new Point { X = client.Left, Y = client.Top }, new Point { X = client.Right - 1, Y = client.Top },

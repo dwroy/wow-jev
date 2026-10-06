@@ -3,7 +3,9 @@
   "$id": "wow-jev/session-recovery-v1",
   "description": "Bounded Windows session-1 recovery bridge. Requests contain no shell, arbitrary launch path, launch arguments, credential text, or effect-success claim.",
   "definitions": {
-    "blocked_auth_token": {"type": "string", "enum": ["账号", "帐号", "密码", "验证码", "验证", "身份验证", "安全令牌", "登录", "登陆", "Password", "Authenticator", "Verification"]},
+    "blocked_auth_token": {"type": "string", "enum": ["密码", "验证码", "验证", "身份验证", "安全令牌", "Password", "Authenticator", "Verification"]},
+    "auth_context_token": {"type": "string", "enum": ["账号", "帐号", "账户", "登录", "登陆", "Login", "Account"]},
+    "reconnect_state_token": {"type": "string", "enum": ["确定", "断开", "已从服务器断开", "断开连接", "断线", "已断开", "连接丢失", "重连", "重新连接", "WOW51900319", "Reconnect", "Disconnected"]},
     "blocked_terms_token": {"type": "string", "enum": ["协议", "同意", "许可", "Agreement"]},
     "blocked_update_token": {"type": "string", "enum": ["更新", "安装", "下载", "修复", "扫描", "Update", "Install", "Download"]},
     "target": {

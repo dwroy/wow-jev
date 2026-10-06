@@ -29,6 +29,13 @@ static class NativeRecoverySafetyFixture
             Check(client.Intersects(Rect(30, 30, 31, 31)), "single-pixel occluder detected");
             Check(client.Intersects(Rect(89, 89, 100, 100)), "edge occluder detected");
             Check(!client.Intersects(Rect(90, 10, 100, 90)), "touching edge without overlap");
+            Check(RecoverySafety.OccluderGeometry(true, true, Rect(20, 20, 20, 60)) == "empty", "successful zero-width system window is not an occluder");
+            Check(RecoverySafety.OccluderGeometry(true, true, Rect(20, 20, 60, 20)) == "empty", "successful zero-height system window is not an occluder");
+            Check(RecoverySafety.OccluderGeometry(true, true, Rect(0, 0, 0, 0)) == "empty", "successful zero-area system window is not unknown");
+            Check(RecoverySafety.OccluderGeometry(true, true, Rect(60, 20, 20, 60)) == "unknown", "reversed coordinates remain refused");
+            Check(RecoverySafety.OccluderGeometry(false, true, Rect(0, 0, 0, 0)) == "unknown", "existing window API failure remains refused");
+            Check(RecoverySafety.OccluderGeometry(false, false, Rect(0, 0, 0, 0)) == "changed", "destroyed window API failure requests re-enumeration");
+            Check(RecoverySafety.OccluderGeometry(true, true, Rect(20, 20, 60, 60)) == "valid", "positive-area rectangle still requires intersection check");
             Check(!RecoverySafety.IdleAllowed(6000, 1000), "strict five-second boundary refused");
             Check(RecoverySafety.IdleAllowed(6001, 1000), "over-five-second idle accepted");
             Check(!RecoverySafety.IdleAllowed(100, 100), "recent input refused");

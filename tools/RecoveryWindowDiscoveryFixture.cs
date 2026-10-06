@@ -8,6 +8,8 @@ using System.Runtime.InteropServices;
 using System.Collections.Generic;
 using System.Threading;
 using System.Web.Script.Serialization;
+using System.Text.RegularExpressions;
+using System.Text;
 using WowJev.Input;
 
 static class RecoveryWindowDiscoveryFixture
@@ -18,13 +20,21 @@ static class RecoveryWindowDiscoveryFixture
     [DllImport("user32.dll")]static extern bool IsWindowVisible(IntPtr handle);
     [DllImport("user32.dll")]static extern bool IsIconic(IntPtr handle);
     static void Check(bool value,string reason){if(!value)throw new InvalidOperationException(reason);checks++;}
-    [STAThread] static int Main()
+    [STAThread] static int Main(string[] args)
     {
         try
         {
             using(Process self=Process.GetCurrentProcess())
             {
                 Check(self.SessionId==0,"fixture_must_never_run_on_interactive_desktop");Native.MakeDpiAware();
+                if(args.Length>0)
+                {
+                    Console.OutputEncoding=new UTF8Encoding(false);
+                    Check(args.Length==2&&args[0]=="--ocr-file","exact_offline_ocr_fixture_options_required");
+                    Check(Regex.IsMatch(args[1],@"^\\\\(?:wsl\.localhost|wsl\$)\\[A-Za-z0-9_.-]+\\home\\dw\\Projects\\wow-jev\\out\\[A-Za-z0-9_.-]+(?:\\[A-Za-z0-9_.-]+)*\\client\.png$",RegexOptions.IgnoreCase),"existing_project_capture_only");
+                    foreach(string part in args[1].Split('\\'))Check(part!="."&&part!="..","path_traversal_rejected");
+                    Console.WriteLine(new JavaScriptSerializer().Serialize(RecoveryOcr.Read(args[1])));return 0;
+                }
                 Check(RecoveryWindowDiscovery.Candidate(self.Id,(uint)self.Id,true,false,300,180),"visible_launcher_class_snapshot_accepted");
                 Check(!RecoveryWindowDiscovery.Candidate(self.Id,(uint)self.Id,false,false,300,180),"hidden_snapshot_refused");
                 Check(!RecoveryWindowDiscovery.Candidate(self.Id,(uint)self.Id,true,true,300,180),"minimized_snapshot_refused");

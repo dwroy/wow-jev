@@ -10,14 +10,14 @@ using Windows.Storage.Streams;
 
 // No model call and no OCR text dump. Only state/character allowlist terms leave
 // this method; account names, chat, passwords, and arbitrary recognized text do not.
-static class RecoveryOcr
+public static class RecoveryOcr
 {
     internal static readonly string[] Terms = {
         "小啊", "战士", "联盟", "进入魔兽世界", "进入游戏", "开始游戏", "魔兽世界",
         "与吉安娜·普罗德摩尔交谈", "吉安娜·普罗德摩尔", "吉安娜", "普罗德摩尔", "与吉安娜", "交谈", "接受", "完成任务", "继续", "再见", "关闭", "战斗训练", "重连", "重新连接", "断开连接", "断线", "已断开", "连接丢失", "登录", "登陆",
         "账号", "帐号", "密码", "验证码", "验证", "身份验证", "安全令牌", "协议", "同意", "许可", "更新", "安装", "下载", "修复", "扫描", "排队", "加载", "取消",
         "Play", "Reconnect", "Disconnected", "Password", "Authenticator", "Verification", "Agreement", "Update", "Install", "Download" };
-    internal static Dictionary<string, object> Read(string path)
+    public static Dictionary<string, object> Read(string path)
     {
         try { return ReadFile(path); }
         catch { return InteractiveSessionHost.Obj("status", "unknown", "reason", "windows_builtin_ocr_unavailable", "items", new object[0], "raw_text_retained", false); }
@@ -33,7 +33,7 @@ static class RecoveryOcr
         var allTerms=new HashSet<string>(Terms,StringComparer.OrdinalIgnoreCase);
         var protocol=MapProtocol(new System.Web.Script.Serialization.JavaScriptSerializer().DeserializeObject(System.IO.File.ReadAllText(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"session-recovery-v1.schema.json"))));
         var definitions=MapProtocol(protocol["definitions"]);
-        foreach(string name in new string[]{"blocked_auth_token","blocked_terms_token","blocked_update_token"})foreach(object token in (object[])MapProtocol(definitions[name])["enum"])allTerms.Add((string)token);
+        foreach(string name in new string[]{"blocked_auth_token","blocked_terms_token","blocked_update_token","auth_context_token","reconnect_state_token"})foreach(object token in (object[])MapProtocol(definitions[name])["enum"])allTerms.Add((string)token);
         OcrEngine engine = OcrEngine.TryCreateFromLanguage(new Language("zh-Hans"));
         if (engine == null) engine = OcrEngine.TryCreateFromUserProfileLanguages();
         if (engine == null) return InteractiveSessionHost.Obj("status", "unknown", "reason", "ocr_language_pack_unavailable", "items", new object[0], "raw_text_retained", false);
