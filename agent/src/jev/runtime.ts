@@ -109,6 +109,16 @@ export class JevLoop {
       await (final ? this.bounded(work, 1500, 'jev_log_timeout') : this.active(work));
     } catch (error) { if (!(error instanceof Stop)) this.latch('failed', 'log_failed'); throw this.stop ?? error; }
   }
+  /** Cancellation cannot undo an append already queued by the store. Commit the
+   * audit link after that bounded write settles, then honor the latched stop.
+   * This never permits a new checkpoint or execution after cancellation.
+   */
+  private async auditCheckpoint(code: string, data: object, committed: () => void): Promise<void> {
+    if (this.stop) throw this.stop;
+    await this.event(code, data, true);
+    committed();
+    if (this.stop) throw this.stop;
+  }
   private candidates(before: Collected, goal: JevGoal, at: number): JevCandidate[] {
     return structuredClone(this.ports.buildCandidates({ observation: before.observation, bindings: this.options.bindings,
       goal, mode: this.options.mode, now: at, maxAgeMs: this.maxAge }));
@@ -160,6 +170,7 @@ export class JevLoop {
   }
   private async iterate(decisionId: string, goal: JevGoal, unchanged: () => boolean, deadline: number): Promise<JevIterationResult> {
     let before: Collected | null = null; let fresh: Collected | null = null; let selected: string | null = null;
+    let auditedBefore: string | null = null; let auditedFresh: string | null = null;
     let plan: PlayPlan | null = null; let execution: PlayResult | null = null;
     try {
       before = await this.active(this.ports.collect(true));
@@ -169,8 +180,8 @@ export class JevLoop {
         plan: { id: `plan-${decisionId}`, revision: goal.revision }, goal, based_on_observation_id: before.observation.id,
         window_token: before.observation.window?.token ?? null, at_ms: at, deadline_ms: Math.min(deadline, at + this.choiceTimeout),
         candidates_sha256: this.ports.candidatesHash(candidates), candidates };
-      await this.event('jev.request', { decision_id: decisionId, request, image_artifact_id: before.artifact?.id ?? null,
-        image_sha256: before.artifact?.sha256 ?? null });
+      await this.auditCheckpoint('jev.request', { decision_id: decisionId, request, image_artifact_id: before.artifact?.id ?? null,
+        image_sha256: before.artifact?.sha256 ?? null }, () => { auditedBefore = request.based_on_observation_id; });
       let reply: JevChoiceResult;
       try {
         if (this.stop) throw this.stop;
@@ -181,13 +192,13 @@ export class JevLoop {
         if (error instanceof Stop) throw error;
         this.chooserUnavailable = true; this.ports.chooser.close(); reply = this.replyFailure(decisionId, detail(error));
       }
-      await this.event('jev.response', { decision_id: decisionId, request_id: request.id, result: reply });
+      await this.auditCheckpoint('jev.response', { decision_id: decisionId, request_id: request.id, result: reply },
+        () => { selected = typeof reply.candidate_id === 'string' ? reply.candidate_id : null; });
       fresh = await this.active(this.ports.collect(true));
       const revalidationAt = this.ports.now();
       const rebuilt = this.candidates(fresh, goal, revalidationAt); const rebuiltHash = this.ports.candidatesHash(rebuilt);
       const original = candidates.find((candidate) => candidate.id === reply.candidate_id);
       const current = rebuilt.find((candidate) => candidate.id === reply.candidate_id);
-      selected = typeof reply.candidate_id === 'string' ? reply.candidate_id : null;
       let why = 'candidate_approved';
       if (reply.id !== request.id) why = 'jev_reply_id_mismatch';
       else if (reply.status !== 'ok') why = reply.reason.code || 'jev_choice_failed';
@@ -198,9 +209,10 @@ export class JevLoop {
       else if (original.target_signature !== current.target_signature) why = 'jev_target_changed';
       else if (request.candidates_sha256 !== rebuiltHash || !equal(original, current)) why = 'jev_candidate_changed';
       const approved = why === 'candidate_approved' ? current! : waitCandidate(this.waitMs);
-      await this.event('jev.revalidated', { decision_id: decisionId, observation_id: fresh.observation.id,
+      const revalidatedObservationId = fresh.observation.id;
+      await this.auditCheckpoint('jev.revalidated', { decision_id: decisionId, observation_id: revalidatedObservationId,
         candidates: rebuilt, candidates_sha256: rebuiltHash, approved_candidate_id: approved.id, reason: why,
-        at_ms: revalidationAt, goal_unchanged: unchanged() });
+        at_ms: revalidationAt, goal_unchanged: unchanged() }, () => { auditedFresh = revalidatedObservationId; });
       if (this.stop) throw this.stop;
       plan = decisionPlan(decisionId, goal.revision, approved);
       const running = this.ports.execute(plan, { decisionId, candidate: approved, revalidated: fresh });
@@ -214,11 +226,11 @@ export class JevLoop {
       const outcome = execution.status === 'completed' ? approved.step.name === 'wait' ? 'waited' : 'executed' : execution.status;
       return { decision_id: decisionId, status: outcome, selected_candidate_id: selected, executed_candidate_id: approved.id,
         reason: execution.status === 'completed' ? why : execution.reason ?? 'jev_play_failed', plan, result: execution,
-        before_observation_id: before.observation.id, revalidated_observation_id: fresh.observation.id };
+        before_observation_id: auditedBefore, revalidated_observation_id: auditedFresh };
     } catch (error) {
       return { decision_id: decisionId, status: error instanceof Stop && error.status === 'cancelled' ? 'cancelled' : 'failed',
         selected_candidate_id: selected, executed_candidate_id: null, reason: detail(error), plan, result: execution,
-        before_observation_id: before?.observation.id ?? null, revalidated_observation_id: fresh?.observation.id ?? null };
+        before_observation_id: auditedBefore, revalidated_observation_id: auditedFresh };
     }
   }
 }

@@ -8,6 +8,8 @@ import { canonicalJson } from '../../reflex/candidates.js';
 import { BRAIN_PROMPT_SHA256, failedChoice, validateChoiceResult, validateModelReply, validateSelectionRequest } from './planner.js';
 import { buildBrainRoutes, initialPhase, parseBrainGoal, routesHash } from './routes.js';
 import type { BrainChoiceResult, BrainDecision, BrainExecuteContext, BrainGoal, BrainOptions, BrainPorts, BrainRequest, BrainResult, BrainRoute, BrainStatus, WorkingMemory } from './types.js';
+import { WorldQuestCoordinator, type WorldQuestGoal, type WorldQuestBrainResult } from './world-quest.js';
+import type { WorldRuntimeVersion } from '../../system/types.js';
 
 const same = (a: unknown, b: unknown): boolean => canonicalJson(a) === canonicalJson(b);
 const detail = (error: unknown): string => error instanceof Error ? error.message : 'brain_unknown_failure';
@@ -42,6 +44,7 @@ export class ExecutionBrain {
   private plannerUnavailable = false; private maxRun: number; private maxDecisions: number; private timeout: number; private maxAge: number; private wait: number;
   private lastRelease: 'confirmed' | 'unconfirmed' = 'unconfirmed'; private activeDecision: { id: string; epoch: number } | null = null;
   private promptSha: string; private journal: BrainDecision[] = [];
+  private worldRunner: WorldQuestCoordinator | null = null;
   constructor(private ports: BrainPorts, supplied: BrainOptions) {
     this.options = freezeCopy(supplied); parseBindings(supplied.bindings);
     this.maxRun = bound(supplied.maxRunMs, 60000, 120000); this.maxDecisions = bound(supplied.maxDecisions, 12, 50);
@@ -51,7 +54,21 @@ export class ExecutionBrain {
     this.promptSha = supplied.runtimeVersion.prompts.find((item) => item.id === 'brain-retail-v1')?.sha256 ?? BRAIN_PROMPT_SHA256;
     if (!/^[a-f0-9]{64}$/.test(this.promptSha)) throw new Error('brain_prompt_hash');
   }
-  status(): BrainStatus { return { state: this.state, cancelled: this.cancelled, control: this.control, memory: this.memory ? structuredClone(this.memory) : null }; }
+  status(): BrainStatus { return { state: this.state, cancelled: this.cancelled, control: this.control, memory: this.memory ? structuredClone(this.memory) : null,
+    ...(this.worldRunner ? { world_quest: this.worldRunner.status() } : {}) }; }
+  /** Named synthetic quest entry. It shares ownership with the legacy brain
+   * runner without changing the v1 model request or disguising L4 as CodePlay. */
+  async runWorldQuest(goal: WorldQuestGoal): Promise<WorldQuestBrainResult> {
+    if (this.state !== 'idle' || this.stop || this.worldRunner) throw new Error('brain_world_already_run');
+    const supplied = this.ports.worldQuest;
+    if (!supplied) throw new Error('brain_world_ports_required');
+    const runner = new WorldQuestCoordinator(supplied.ports, { runId: this.options.runId, mode: this.options.mode,
+      runtimeVersion: this.options.runtimeVersion as WorldRuntimeVersion, compileOptions: supplied.compileOptions,
+      maxDurationMs: this.maxRun, maxDecisions: this.maxDecisions, maxObservationAgeMs: this.maxAge });
+    this.worldRunner = runner; this.state = 'running';
+    try { return await runner.run(goal); }
+    finally { this.cancelled = runner.status().cancelled; this.state = 'stopped'; this.control = 'brain'; this.ports.planner.close(); }
+  }
   private latch(status: Stop['status'], reason: string): void {
     if (this.stop) return; this.stop = new Stop(status, reason); this.abort.abort(); this.ports.planner.close(); this.notifyStop(this.stop);
   }
@@ -79,11 +96,13 @@ export class ExecutionBrain {
     return this.releaseJob;
   }
   async cancel(reason = 'cancelled'): Promise<{ release: 'confirmed' | 'unconfirmed' }> {
+    if (this.worldRunner) { this.cancelled = true; return this.worldRunner.cancel(reason); }
     this.cancelled = true; this.latch('cancelled', reason);
     if (this.state === 'running') void this.event('brain.cancel_requested', { epoch: this.memory?.epoch, reason }).catch(() => {});
     return this.release(reason);
   }
   async updateGoal(supplied: BrainGoal): Promise<void> {
+    if (this.worldRunner) throw new Error('brain_world_goal_update_unsupported');
     const goal = freezeCopy(parseBrainGoal(supplied));
     if (this.state !== 'running' || this.stop || !this.memory) throw new Error('brain_goal_update_not_running');
     if (this.updateJob) throw new Error('brain_goal_update_in_progress');

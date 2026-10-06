@@ -19,6 +19,8 @@ npm run layers -- demo [--scenario normal|unknown|cancel|no-progress] [--run-dir
 npm run layers -- validate --task FILE --body-profile FILE
 npm run layers -- replay --run-dir DIR
 npm run layers -- world-demo [--run-dir DIR]
+npm run layers -- world-brain-demo [--scenario normal|unknown|identity-change] [--run-dir DIR]
+npm run layers -- world-brain-replay --run-dir EPISODE_DIR
 npm run layers -- live --window 0xHWND --pid PID --task FILE --body-profile FILE --client-profile FILE --region-profile FILE --region-context FILE --live --role-scene-confirmed
 npm run layers -- status|cancel --session-id UUID
 npm run layers -- combat-log --file /mnt/.../WoWCombatLog.txt --executable /.../WinCombatLog.exe [--duration-ms 30000] [--expected-patch 12.1.0]
@@ -39,9 +41,9 @@ async function main(): Promise<number> {
     'wait-focus-ms': { type: 'string' }, 'session-id': { type: 'string' },
   } });
   if (values.help) { process.stdout.write(HELP); return 0; }
-  const mode = positionals[0]; if (positionals.length !== 1 || !['demo', 'world-demo', 'validate', 'replay', 'combat-log', 'live', 'cancel', 'status'].includes(mode ?? '')) throw new Error('layer_mode_required');
+  const mode = positionals[0]; if (positionals.length !== 1 || !['demo', 'world-demo', 'world-brain-demo', 'world-brain-replay', 'validate', 'replay', 'combat-log', 'live', 'cancel', 'status'].includes(mode ?? '')) throw new Error('layer_mode_required');
   const allowed: Record<string,string[]> = {
-    demo:['scenario','run-dir'],'world-demo':['run-dir'],validate:['task','body-profile'],replay:['run-dir'],
+    demo:['scenario','run-dir'],'world-demo':['run-dir'],'world-brain-demo':['scenario','run-dir'],'world-brain-replay':['run-dir'],validate:['task','body-profile'],replay:['run-dir'],
     'combat-log':['executable','file','directory','duration-ms','expected-patch','from'],
     live:['window','pid','task','body-profile','client-profile','region-profile','region-context','live','role-scene-confirmed','run-dir','calibration','combat-calibration','npc-calibration','wait-focus-ms'],
     cancel:['session-id'],status:['session-id'],
@@ -49,6 +51,24 @@ async function main(): Promise<number> {
   if(Object.keys(values).some(key=>key!=='help'&&!allowed[mode!]?.includes(key)))throw new Error('layer_mode_option_mismatch');
   const repo = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
   if (mode === 'world-demo') { print(await (await import('./world-demo-cli.js')).worldDemoCommand(repo, values['run-dir'])); return 0; }
+  if (mode === 'world-brain-demo') {
+    const scenario = values.scenario ?? 'normal';
+    if (!['normal', 'unknown', 'identity-change'].includes(scenario)) throw new Error('world_brain_demo_scenario');
+    const controller = new AbortController(), stop = () => controller.abort('user_cancel');
+    process.once('SIGINT', stop); process.once('SIGTERM', stop);
+    try {
+      const report = await (await import('./world-demo-cli.js')).worldBrainDemoCommand(repo, values['run-dir'], scenario as import('./world-brain-demo.js').WorldBrainDemoScenario, controller.signal);
+      print(report);
+      if (!('result' in report)) throw new Error('world_brain_result_missing');
+      return report.result.status === 'completed' ? 0 : 1;
+    } finally { process.off('SIGINT', stop); process.off('SIGTERM', stop); }
+  }
+  if (mode === 'world-brain-replay') {
+    if (!values['run-dir']) throw new Error('world_brain_episode_dir_required');
+    const replay = await (await import('./world-brain-journal.js')).replayWorldQuestEpisode(values['run-dir']);
+    print({ directory: replay.directory, status: replay.result.status, complete: replay.complete, real_inputs: replay.real_inputs,
+      game_effect: replay.game_effect, source_verified: true }); return 0;
+  }
   if (mode === 'validate') {
     if (!values.task || !values['body-profile']) throw new Error('layer_task_profile_required');
     const task: unknown = JSON.parse(await readFile(resolve(values.task), 'utf8')); validateTask(task);

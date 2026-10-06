@@ -44,3 +44,21 @@
 bindings字段为world_pack_sha256/client_version/quest_key、starter/finisher（typed entity+target_signature或null）、objectives（ordinal/entity/target_signature/attack_ability）、reward_policy:none；budget明确task/behavior期限与次数、action_duration_ms。绑定配置是候选配方，不是当前目标/距离/焦点/对话/效果证明。现存M2示例配置在本阶段out中，运行仍blocked。
 
 阶段A源提交`b0cafb2`已ff-only合入主checkout，实际`world-demo`及四个独立严格回放均exit0：接取true、ordinal0=2/ordinal1=1、交付/奖励true，real_inputs=0、game_effect=unverified、scenario_effect=confirmed。`main-demo/summary.json`、`main-demo.log`、`main-replay-0..3.log`和`main-acceptance.json`保留原始结果。阶段A完成离线集成验收；阶段B和真实场景尚未据此宣称完成。
+
+## 阶段B：既有执行大脑与独立episode协议
+
+实施树`.worktrees/world-quest-brain`。既有`ExecutionBrain`新增`runWorldQuest`，与旧run共用idle/running/stopped所有权；世界取消交给coordinator，世界模式updateGoal明确unsupported。旧BrainGoal/BrainRequest/retail模型schema不改，L4不伪装成CodePlay。仅指定custom:synthetic及schema-v2固定世界可进入，新鲜类型实体、独立objective_ref/count、接取、completed、交付/奖励分别确认；原事实可跳过输入但记录preexisting，不报告本次动作导致成功。整个episode及每child有期限、取消和释放；未返回child保留lower_bound/unconfirmed。
+
+新增`protocol/world-quest-brain-v1.schema.json`及独立parent journal，已有child layers.jsonl格式保持。严格episode回放重新查询固定世界并编译候选，独立验证每个child原件、SHA、L4行为因果及parent身份/任务/时钟；拒绝只改摘要或重算hash伪造完成。unknown/身份漂移可语义重算blocked。首版不把cancelled/late/pending parent episode判为完整可学习；保留原日志和协调器取消反例，明确返回unsupported而非补造完成。
+
+两项独立实际复现已补强：当前执行代码与被冻结代码不一致时提前拒绝（driver/CLI及执行依赖都核字节），Python查询使用不可变code副本；同一simulation-monotonic domain/id下绑定父批准→子开始/终态→父after原观察，不能仅整体移动父时间而借早已完成的child。独立parent释放事件是原始证据，final摘要不能自行提升释放状态。
+
+全量验证（原始输出在主`out/acceptance/world-task-planning/stage-2/`）：
+
+- 全部Python收集663项：660passed、3原有strict xfail、0skip/失败，exit0；当前源码JevCapture、WinEye、NpcClassify构建并配置原生离屏测试路径，不操作桌面。
+- 完整`npm --prefix agent test`：437/437passed，0fail/skip/cancel/todo，exit0。保留阶段A的397项，新增15项coordinator、4项既有Brain入口、14项严格parent回放与7项Jev取消检查点测试。
+- `npm --prefix agent run typecheck`及`git diff --check`：exit0。
+
+第一轮完整TS为429/430，原失败保存`ts-full-initial-failed.tap/json`：旧JevCLI取消时`iteration_observation_link`失败，不因旧代码未改而忽略。确定性原始Eye日志复现：response已持久记录wait，但取消result的selected为null。修复request/response/revalidated持久审计检查点，提交审计链接后再处理取消；不放宽严格回放、候选或输入闸。相同probe修复后selected为wait、cancelled且严格回放通过，前后均0执行；新增7项检查点反例保留原CLI用例，最终全量全绿。取消后不发新动作；首版parent cancelled/late/pending完整学习仍明确unsupported。
+
+体验入口将在固定提交验收：`npm --prefix agent run layers -- world-brain-demo`（纯模拟），父episode目录运行`world-brain-replay --run-dir EPISODE`；`--scenario unknown|identity-change`必须阻塞且0child，不能把这些结果称为游戏成功。所有`--live`/桌面选项在此入口拒绝；system v2 live/observe原拒绝条件保留。

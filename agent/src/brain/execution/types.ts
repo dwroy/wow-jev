@@ -4,6 +4,8 @@ import type { JevGoal, JevLoopResult } from '../../jev/types.js';
 import type { PlayPlan, PlayResult, SkillBindings } from '../../play/types.js';
 import type { KnowledgeFact, KnowledgeSnapshot, RuntimeVersion, WorldPackRef } from '../../system/types.js';
 import type { GameVersion } from '../../game-data/types.js';
+import type { WorldQuestCandidateOptions } from '../../game-data/world-task-compiler.js';
+import type { WorldQuestCoordinatorPorts, WorldQuestStatus } from './world-quest.js';
 
 interface GoalBase { id: string; revision: number; description: string }
 export type BrainGoal = GoalBase & (
@@ -53,6 +55,7 @@ export interface BrainPorts {
   executeCode(plan: PlayPlan, context: BrainExecuteContext): Promise<PlayResult>;
   executeJev(goal: JevGoal, context: BrainExecuteContext): Promise<JevLoopResult>;
   release(reason: string): Promise<{ release: 'confirmed' | 'unconfirmed' }>;
+  worldQuest?: { compileOptions: WorldQuestCandidateOptions; ports: WorldQuestCoordinatorPorts };
 }
 export interface BrainOptions {
   runId: string; mode: 'live' | 'simulated'; bindings: SkillBindings;
@@ -70,4 +73,4 @@ export interface BrainResult {
   goal: { id: string; revision: number }; runtime_version_id: string; knowledge_sha256: string;
   release: 'confirmed' | 'unconfirmed'; game_effect: 'confirmed' | 'unverified'; evidence_observation_ids: string[]; decisions: BrainDecision[];
 }
-export interface BrainStatus { state: 'idle' | 'running' | 'stopped'; cancelled: boolean; control: BrainRoute['control']; memory: WorkingMemory | null }
+export interface BrainStatus { state: 'idle' | 'running' | 'stopped'; cancelled: boolean; control: BrainRoute['control']; memory: WorkingMemory | null; world_quest?: WorldQuestStatus }

@@ -1,0 +1,1159 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:wow-jev:world-quest-brain-v1",
+  "title": "Separate simulated execution-brain quest episodes; no input authorization",
+  "$ref": "#/$defs/record",
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "quest_key": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/entity_key"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "quest_key"
+      ]
+    },
+    "world": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "const": "world"
+        },
+        "manifest_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "sqlite_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "directory",
+        "manifest_sha256",
+        "sqlite_sha256"
+      ]
+    },
+    "ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "id",
+        "sha256"
+      ]
+    },
+    "runtime_version": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 2
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "parent_id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "code_commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$"
+        },
+        "knowledge": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "file": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            }
+          },
+          "required": [
+            "id",
+            "sha256",
+            "file"
+          ]
+        },
+        "prompts": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "file": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "id",
+              "sha256",
+              "file"
+            ]
+          }
+        },
+        "world": {
+          "$ref": "#/$defs/world"
+        },
+        "client_version": {
+          "$ref": "urn:wow-jev:game-data-v1#/$defs/version"
+        }
+      },
+      "required": [
+        "schema_version",
+        "id",
+        "parent_id",
+        "created_at",
+        "code_commit",
+        "knowledge",
+        "prompts",
+        "world",
+        "client_version"
+      ]
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "world_pack_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "client_version": {
+          "$ref": "urn:wow-jev:game-data-v1#/$defs/version"
+        },
+        "quest_key": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/entity_key"
+        },
+        "starter": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "entity": {
+                  "$ref": "urn:wow-jev:world-data-v2#/$defs/entity_key"
+                },
+                "target_signature": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                }
+              },
+              "required": [
+                "entity",
+                "target_signature"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finisher": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "entity": {
+                  "$ref": "urn:wow-jev:world-data-v2#/$defs/entity_key"
+                },
+                "target_signature": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                }
+              },
+              "required": [
+                "entity",
+                "target_signature"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "objectives": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "entity": {
+                "$ref": "urn:wow-jev:world-data-v2#/$defs/entity_key"
+              },
+              "target_signature": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "ordinal": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 255
+              },
+              "attack_ability": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            },
+            "required": [
+              "entity",
+              "target_signature",
+              "ordinal",
+              "attack_ability"
+            ]
+          }
+        },
+        "reward_policy": {
+          "const": "none"
+        }
+      },
+      "required": [
+        "world_pack_sha256",
+        "client_version",
+        "quest_key",
+        "starter",
+        "finisher",
+        "objectives",
+        "reward_policy"
+      ]
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task_max_duration_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600000
+        },
+        "task_max_behaviors": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512
+        },
+        "behavior_max_duration_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120000
+        },
+        "behavior_max_actions": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "action_duration_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      },
+      "required": [
+        "task_max_duration_ms",
+        "task_max_behaviors",
+        "behavior_max_duration_ms",
+        "behavior_max_actions",
+        "action_duration_ms"
+      ]
+    },
+    "compile_options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "world": {
+          "$ref": "urn:wow-jev:world-task-hints-v1#/$defs/world"
+        },
+        "version": {
+          "$ref": "urn:wow-jev:game-data-v1#/$defs/version"
+        },
+        "quest": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/entity_key"
+        },
+        "bindings": {
+          "$ref": "#/$defs/bindings"
+        },
+        "budget": {
+          "$ref": "#/$defs/budget"
+        },
+        "taskIdPrefix": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 220
+        }
+      },
+      "required": [
+        "world",
+        "version",
+        "quest",
+        "bindings",
+        "budget"
+      ]
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "phase": {
+          "enum": [
+            "accept",
+            "objective",
+            "deliver"
+          ]
+        },
+        "task": {
+          "oneOf": [
+            {
+              "$ref": "urn:wow-jev:layer-behavior-v1#/definitions/task"
+            },
+            {
+              "$ref": "urn:wow-jev:layer-task-world-v2"
+            }
+          ]
+        },
+        "objective_ref": {
+          "oneOf": [
+            {
+              "$ref": "urn:wow-jev:layer-log-v2#/$defs/objective"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target": {
+          "$ref": "urn:wow-jev:world-data-v2#/$defs/entity_key"
+        },
+        "executable": {
+          "const": false
+        },
+        "automatic_action_eligible": {
+          "const": false
+        }
+      },
+      "required": [
+        "phase",
+        "task",
+        "objective_ref",
+        "target",
+        "executable",
+        "automatic_action_eligible"
+      ]
+    },
+    "compiled": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "hint": {
+          "$ref": "urn:wow-jev:world-task-hints-v1#/$defs/plan"
+        },
+        "status": {
+          "enum": [
+            "ready_candidates",
+            "blocked"
+          ]
+        },
+        "candidates": {
+          "type": "array",
+          "maxItems": 258,
+          "items": {
+            "$ref": "#/$defs/candidate"
+          }
+        },
+        "blockers": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": {
+            "$ref": "urn:wow-jev:world-task-hints-v1#/$defs/blocker"
+          }
+        },
+        "executable": {
+          "const": false
+        },
+        "automatic_action_eligible": {
+          "const": false
+        }
+      },
+      "required": [
+        "hint",
+        "status",
+        "candidates",
+        "blockers",
+        "executable",
+        "automatic_action_eligible"
+      ]
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "mode": {
+          "const": "simulated"
+        },
+        "runtimeVersion": {
+          "$ref": "#/$defs/runtime_version"
+        },
+        "compileOptions": {
+          "$ref": "#/$defs/compile_options"
+        },
+        "maxDurationMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120000
+        },
+        "maxDecisions": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 258
+        },
+        "maxObservationAgeMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 750
+        }
+      },
+      "required": [
+        "runId",
+        "mode",
+        "runtimeVersion",
+        "compileOptions",
+        "maxDurationMs",
+        "maxDecisions",
+        "maxObservationAgeMs"
+      ]
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "candidate_index": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 257
+        },
+        "phase": {
+          "enum": [
+            "accept",
+            "objective",
+            "deliver"
+          ]
+        },
+        "task_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "before_observation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "fresh_observation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "outcome": {
+          "enum": [
+            "execute",
+            "preexisting"
+          ]
+        },
+        "evidence_observation_ids": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          }
+        }
+      },
+      "required": [
+        "candidate_index",
+        "phase",
+        "task_id",
+        "before_observation_id",
+        "fresh_observation_id",
+        "outcome",
+        "evidence_observation_ids"
+      ]
+    },
+    "child": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "directory": {
+          "type": "string",
+          "pattern": "^children/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "result": {
+          "$ref": "urn:wow-agent:protocol:agent-v1#/definitions/jsonValue"
+        },
+        "proof": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "manifest_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "events_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "manifest_sha256",
+            "events_sha256"
+          ]
+        }
+      },
+      "required": [
+        "directory",
+        "result",
+        "proof"
+      ]
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "completed",
+            "blocked",
+            "cancelled",
+            "failed"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "goal": {
+          "$ref": "#/$defs/goal"
+        },
+        "runtime_version_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "world_pack_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "knowledge_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "release": {
+          "enum": [
+            "confirmed",
+            "unconfirmed"
+          ]
+        },
+        "game_effect": {
+          "const": "unverified"
+        },
+        "scenario_effect": {
+          "enum": [
+            "confirmed",
+            "unverified"
+          ]
+        },
+        "real_inputs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "input_count_scope": {
+          "enum": [
+            "known",
+            "lower_bound"
+          ]
+        },
+        "decisions": {
+          "type": "array",
+          "maxItems": 258,
+          "items": {
+            "$ref": "#/$defs/decision"
+          }
+        },
+        "children": {
+          "type": "array",
+          "maxItems": 258,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "directory": {
+                "type": "string",
+                "pattern": "^children/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+              },
+              "result": {
+                "$ref": "urn:wow-agent:protocol:agent-v1#/definitions/jsonValue"
+              },
+              "proof": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "manifest_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "events_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "manifest_sha256",
+                  "events_sha256"
+                ]
+              },
+              "candidate_index": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 257
+              },
+              "late": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "directory",
+              "result",
+              "proof",
+              "candidate_index",
+              "late"
+            ]
+          }
+        },
+        "preexisting": {
+          "type": "array",
+          "maxItems": 258,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 257
+          }
+        },
+        "evidence_observation_ids": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          }
+        }
+      },
+      "required": [
+        "status",
+        "reason",
+        "goal",
+        "runtime_version_id",
+        "world_pack_sha256",
+        "knowledge_sha256",
+        "release",
+        "game_effect",
+        "scenario_effect",
+        "real_inputs",
+        "input_count_scope",
+        "decisions",
+        "children",
+        "preexisting",
+        "evidence_observation_ids"
+      ]
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "audit_version": {
+          "const": "world-quest-brain-v1"
+        },
+        "mode": {
+          "const": "simulated"
+        },
+        "run_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "goal": {
+          "$ref": "#/$defs/goal"
+        },
+        "world": {
+          "$ref": "#/$defs/world"
+        },
+        "client_version": {
+          "$ref": "urn:wow-jev:game-data-v1#/$defs/version"
+        },
+        "runtime": {
+          "$ref": "#/$defs/ref"
+        },
+        "knowledge": {
+          "$ref": "#/$defs/ref"
+        },
+        "code_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "prompts_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "body_profile_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "clock": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "domain": {
+              "const": "simulation-monotonic"
+            },
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            }
+          },
+          "required": [
+            "domain",
+            "id"
+          ]
+        },
+        "executable": {
+          "const": false
+        },
+        "automatic_action_eligible": {
+          "const": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "audit_version",
+        "mode",
+        "run_id",
+        "goal",
+        "world",
+        "client_version",
+        "runtime",
+        "knowledge",
+        "code_sha256",
+        "prompts_sha256",
+        "body_profile_sha256",
+        "clock",
+        "executable",
+        "automatic_action_eligible"
+      ]
+    },
+    "event": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "world_quest_started"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "goal": {
+              "$ref": "#/$defs/goal"
+            },
+            "options": {
+              "$ref": "#/$defs/options"
+            },
+            "compiled": {
+              "$ref": "#/$defs/compiled"
+            }
+          },
+          "required": [
+            "type",
+            "run_id",
+            "at_ms",
+            "goal",
+            "options",
+            "compiled"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "world_quest_observation"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "candidate_index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 257
+            },
+            "stage": {
+              "enum": [
+                "before",
+                "fresh",
+                "after"
+              ]
+            },
+            "observation": {
+              "$ref": "urn:wow-agent:protocol:agent-v1#/definitions/observation"
+            }
+          },
+          "required": [
+            "type",
+            "run_id",
+            "at_ms",
+            "candidate_index",
+            "stage",
+            "observation"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "world_quest_decision"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "decision": {
+              "$ref": "#/$defs/decision"
+            }
+          },
+          "required": [
+            "type",
+            "run_id",
+            "at_ms",
+            "decision"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "world_quest_child"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "candidate_index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 257
+            },
+            "child": {
+              "$ref": "#/$defs/child"
+            },
+            "late": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "run_id",
+            "at_ms",
+            "candidate_index",
+            "child",
+            "late"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "world_quest_control"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "action": {
+              "const": "cancel"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "required": [
+            "type",
+            "run_id",
+            "at_ms",
+            "action",
+            "reason"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "world_quest_release" },
+            "run_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+            "at_ms": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            "reason": { "type": "string", "minLength": 1, "maxLength": 512 },
+            "release": { "enum": ["confirmed", "unconfirmed"] }
+          },
+          "required": ["type", "run_id", "at_ms", "reason", "release"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "world_quest_finished"
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "result": {
+              "$ref": "#/$defs/result"
+            }
+          },
+          "required": [
+            "type",
+            "run_id",
+            "at_ms",
+            "result"
+          ]
+        }
+      ]
+    },
+    "record": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "wow-world-quest-log"
+            },
+            "version": {
+              "const": 1
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 49999
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "previous_sha256": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "const": "manifest"
+            },
+            "data": {
+              "$ref": "#/$defs/manifest"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "protocol",
+            "version",
+            "run_id",
+            "seq",
+            "at_ms",
+            "previous_sha256",
+            "kind",
+            "data",
+            "sha256"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "const": "wow-world-quest-log"
+            },
+            "version": {
+              "const": 1
+            },
+            "run_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "seq": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 49999
+            },
+            "at_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "previous_sha256": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "const": "event"
+            },
+            "data": {
+              "$ref": "#/$defs/event"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "protocol",
+            "version",
+            "run_id",
+            "seq",
+            "at_ms",
+            "previous_sha256",
+            "kind",
+            "data",
+            "sha256"
+          ]
+        }
+      ]
+    }
+  }
+}
