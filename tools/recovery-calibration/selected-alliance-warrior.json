@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "id": "alliance-warrior-xiao-a-selected-2560x1440-v1",
+  "layout": {
+    "width": 2560,
+    "height": 1440
+  },
+  "character": {
+    "name": "小啊",
+    "class": "warrior",
+    "faction": "alliance",
+    "level_reference": 1
+  },
+  "reference": {
+    "file": "selected-alliance-warrior.png",
+    "sha256": "9934e40f21548023ff0e3b0d32a752b07f81e4459d3de5bdde25effedc3c8537",
+    "rect": {
+      "x": 2014,
+      "y": 598,
+      "width": 483,
+      "height": 148
+    }
+  },
+  "regions": [
+    {
+      "id": "selected_card",
+      "rect": {
+        "x": 2014,
+        "y": 598,
+        "width": 483,
+        "height": 148
+      },
+      "max_mean_abs_error": 8.0,
+      "max_fraction_above_24": 0.05
+    },
+    {
+      "id": "name",
+      "rect": {
+        "x": 2037,
+        "y": 614,
+        "width": 110,
+        "height": 45
+      },
+      "max_mean_abs_error": 0.8,
+      "max_fraction_above_24": 0.002
+    },
+    {
+      "id": "class",
+      "rect": {
+        "x": 2119,
+        "y": 657,
+        "width": 66,
+        "height": 43
+      },
+      "max_mean_abs_error": 0.8,
+      "max_fraction_above_24": 0.002
+    },
+    {
+      "id": "alliance_glyph",
+      "rect": {
+        "x": 2390,
+        "y": 625,
+        "width": 101,
+        "height": 112
+      },
+      "max_mean_abs_error": 2.0,
+      "max_fraction_above_24": 0.01
+    }
+  ],
+  "source": {
+    "original_capture_sha256": "4390bfd2ac283781d678bb06a342f056b51d34cb87d181b717f463aab8995069",
+    "original_capture": "out/acceptance/exiles-first-task-20261006/foreground-restored-readonly-01/client.png",
+    "review": "root assistant original-image review: selected gold row 小啊, level1 warrior, Alliance insignia; user specified Alliance warrior 小啊",
+    "reviewed_at": "2026-10-06",
+    "scope": "selected character identity only; no character GUID, task progress or bindings inferred"
+  },
+  "unknown_policy": "Any dimension or ROI comparison failure yields unverified; never matches another unselected row or faction by whole-frame text.",
+  "safe_focus_point": {
+    "x": 2240,
+    "y": 678
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "wow-jev/session-recovery-v1",
+  "description": "Bounded Windows session-1 recovery bridge. Requests contain no shell, arbitrary launch path, launch arguments, credential text, or effect-success claim.",
+  "definitions": {
+    "blocked_auth_token": {"type": "string", "enum": ["账号", "帐号", "密码", "验证码", "验证", "身份验证", "安全令牌", "登录", "登陆", "Password", "Authenticator", "Verification"]},
+    "blocked_terms_token": {"type": "string", "enum": ["协议", "同意", "许可", "Agreement"]},
+    "blocked_update_token": {"type": "string", "enum": ["更新", "安装", "下载", "修复", "扫描", "Update", "Install", "Download"]},
+    "target": {
+      "type": "object", "additionalProperties": false,
+      "required": ["pid", "start_ticks", "hwnd", "class", "executable"],
+      "properties": {
+        "pid": {"type": "integer", "minimum": 1, "maximum": 2147483647},
+        "start_ticks": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "hwnd": {"type": "string", "pattern": "^0x[0-9a-fA-F]{1,16}$"},
+        "class": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "executable": {"type": "string", "minLength": 1, "maxLength": 1024}
+      }
+    },
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["observation_id", "capture_sha256", "width", "height", "observation_path"],
+      "properties": {
+        "observation_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+        "capture_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "width": {"type": "integer", "minimum": 1, "maximum": 65536},
+        "height": {"type": "integer", "minimum": 1, "maximum": 65536},
+        "observation_path": {"type": "string", "minLength": 1}
+      }
+    },
+    "action": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["kind", "keys", "duration_ms"], "properties": {"kind": {"const": "key"}, "keys": {"type": "array", "minItems": 1, "maxItems": 60, "uniqueItems": true, "items": {"type": "string", "pattern": "^(?:[A-Z0-9]|F(?:[1-9]|1[0-2])|SPACE|SHIFT|CTRL|ALT|ESC|TAB|ENTER|BACKSPACE|UP|DOWN|LEFT|RIGHT)$"}}, "duration_ms": {"type": "integer", "minimum": 1, "maximum": 150}}},
+        {"type": "object", "additionalProperties": false, "required": ["kind", "button", "x", "y", "duration_ms"], "properties": {"kind": {"const": "mouse_click"}, "button": {"enum": ["left", "right", "middle"]}, "x": {"type": "integer", "minimum": 0, "maximum": 65535}, "y": {"type": "integer", "minimum": 0, "maximum": 65535}, "duration_ms": {"type": "integer", "minimum": 1, "maximum": 150}}},
+        {"type": "object", "additionalProperties": false, "required": ["kind", "x", "y", "duration_ms"], "properties": {"kind": {"const": "focus_click"}, "x": {"type": "integer", "minimum": 0, "maximum": 65535}, "y": {"type": "integer", "minimum": 0, "maximum": 65535}, "duration_ms": {"type": "integer", "minimum": 1, "maximum": 150}}}
+      ]
+    },
+    "request": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["version", "op"], "properties": {"version": {"const": 1}, "op": {"enum": ["discover", "launch_battlenet"]}}},
+        {"type": "object", "additionalProperties": false, "required": ["version", "op", "target"], "properties": {"version": {"const": 1}, "op": {"const": "observe"}, "target": {"$ref": "#/definitions/target"}}},
+        {"type": "object", "additionalProperties": false, "required": ["version", "op", "target", "source", "action"], "properties": {"version": {"const": 1}, "op": {"const": "input"}, "target": {"$ref": "#/definitions/target"}, "source": {"$ref": "#/definitions/source"}, "action": {"$ref": "#/definitions/action"}}},
+        {"type": "object", "additionalProperties": false, "required": ["version", "op", "target", "source"], "properties": {"version": {"const": 1}, "op": {"const": "launch_wow"}, "target": {"$ref": "#/definitions/target"}, "source": {"$ref": "#/definitions/source"}}}
+      ]
+    },
+    "capture": {
+      "type": "object", "additionalProperties": false,
+      "required": ["file", "sha256", "width", "height", "started_windows_qpc_ms", "finished_windows_qpc_ms", "method"],
+      "properties": {
+        "file": {"const": "client.png"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "width": {"type": "integer", "minimum": 1}, "height": {"type": "integer", "minimum": 1},
+        "started_windows_qpc_ms": {"type": "number", "minimum": 0}, "finished_windows_qpc_ms": {"type": "number", "minimum": 0},
+        "method": {"enum": ["PrintWindow-client-renderfullcontent", "CopyFromScreen-client-visible"]}
+      }
+    },
+    "ocr": {
+      "type": "object", "required": ["status", "items", "raw_text_retained"],
+      "properties": {
+        "status": {"enum": ["available", "unknown"]}, "raw_text_retained": {"const": false},
+        "items": {"type": "array", "items": {"type": "object", "required": ["text", "x", "y", "width", "height"], "properties": {"text": {"type": "string", "minLength": 1, "maxLength": 64}, "x": {"type": "integer", "minimum": 0}, "y": {"type": "integer", "minimum": 0}, "width": {"type": "integer", "minimum": 1}, "height": {"type": "integer", "minimum": 1}}}}
+      }
+    },
+    "result": {
+      "type": "object", "required": ["schema_version", "status", "session_id", "input_sent", "release_confirmed", "effect_status"],
+      "properties": {
+        "schema_version": {"const": 1}, "session_id": {"const": 1},
+        "status": {"enum": ["discovered", "observed", "input_released", "launched", "blocked", "cancelled"]},
+        "reason": {"type": "string"}, "input_sent": {"type": "boolean"}, "release_confirmed": {"type": "boolean"},
+        "effect_status": {"const": "unknown"}, "target": {"$ref": "#/definitions/target"}, "capture": {"$ref": "#/definitions/capture"}, "ocr": {"$ref": "#/definitions/ocr"},
+        "launch_requested": {"type": "boolean"}, "launch_effect": {"const": "unknown"}, "wow_process_started_confirmed": {"const": false}, "world_entered": {"const": false},
+        "started_windows_qpc_ms": {"type": "number", "minimum": 0}, "finished_windows_qpc_ms": {"type": "number", "minimum": 0},
+        "observation_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+        "selected_character": {"type": "object", "required": ["verified", "source", "reason"], "properties": {"verified": {"type": "boolean"}, "source": {"const": "calibrated_cv"}, "reason": {"type": "string"}, "name": {"const": "小啊"}, "class": {"const": "warrior"}, "faction": {"const": "alliance"}, "calibration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "reference_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
+      }
+    }
+  }
+}

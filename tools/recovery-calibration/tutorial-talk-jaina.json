@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "id": "alliance-exiles-talk-jaina-initial-2560x1440-v1",
+  "layout": {
+    "width": 2560,
+    "height": 1440
+  },
+  "npc_name": "吉安娜·普罗德摩尔",
+  "tutorial_step": "与吉安娜·普罗德摩尔交谈",
+  "action_point": {
+    "x": 1340,
+    "y": 550
+  },
+  "safe_focus_point": {
+    "x": 1800,
+    "y": 1080
+  },
+  "regions": [
+    {
+      "id": "npc_name",
+      "file": "tutorial-npc-name.png",
+      "mask": "green",
+      "rect": {
+        "x": 1194,
+        "y": 332,
+        "width": 309,
+        "height": 44
+      },
+      "min_iou": 0.9,
+      "max_shift_px": 3,
+      "sha256": "e0caa70929a790ecf9ced68b0dea7e90cf8f21dd25046e0662c1dd0289a5a0a6"
+    },
+    {
+      "id": "tutorial_hint",
+      "file": "tutorial-talk-hint.png",
+      "mask": "gray",
+      "rect": {
+        "x": 1114,
+        "y": 921,
+        "width": 446,
+        "height": 65
+      },
+      "min_iou": 0.9,
+      "max_shift_px": 3,
+      "sha256": "61681e59b0936f001f85bdc1e78a2f736e4412d866794bd0d115f27facbf2fd5"
+    }
+  ],
+  "source": {
+    "original_capture": "out/acceptance/exiles-first-task-20261006/interactive-readonly-03/client.png",
+    "original_capture_sha256": "a38066a414ee46e31f9f4b6cbe18bab59a19e227bb60160578a33f53000e4a6f",
+    "review": "root original-image review: green NPC name label above highlighted Jaina and same named first tutorial prompt with right-mouse illustration; template is calibration, never fresh observation",
+    "reviewed_at": "2026-10-06"
+  },
+  "scope": "Current source frame must match both independent label and hint masks before a single finite right click. No quest accept/complete/next objective inferred."
+}

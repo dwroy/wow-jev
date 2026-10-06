@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 A→B：会话1受限交互桥及当前选角/教程CV已完成，仍未现场输入。** A提交525d712；B支持discover/observe/input/launch_battlenet/launch_wow，当前登录用户、最低权限、无trigger、固定payload/源码与校准/schema SHA、一次性/IT+RunEx1、30s上限、取消文件及精确删除回查。C#只在session1做捕获/OCR/CV和原WinInput通信；普通输入/恢复点击都复用A闸与原guardian/ledger，ready即200ms独立心跳、stdin写锁，签名/UNC复核不会饿1000mslease。源观察hash/身份/尺寸/DPI/15s时效严格匹配。unsafe KILL_ON_JOB_CLOSE拒绝输入；记录nested_parent_jobs_checked=false及整树强杀未验证。AllowHardTerminate=false，不Stop/强杀输入树；release必须原回执+空账本+executor退出证据。
+
+Battle.net按验签的path/session/PID独立EnumWindows发现，不扩展旧Native游戏list；注册表/已知安装位置只读，固定--exec launch WoW只记请求/effect unknown，不把Process.Start当客户端成功。认证/协议/更新危险关键词跨OCR、Native launch和TS共用session-recovery schema枚举，不得用CV回退绕过requires_user拒绝。OCR只输出白名单状态词及line框，credential/raw text不留日志。选中小啊金色行/name/战士/联盟徽记独立小ROI，名字/职业阈值收严至fraction .002/mean .8，30像素改名反例拒绝；当前名字和交谈提示掩码同新帧匹配才给一次吉安娜右键候选，旧图只作校准。
+
+B当前Windows编译、26Python mock全绿，窗口/心跳原生fixture50检查（session0没有visible launcher正例，诚实记录未验session1实际战网）、真实保存图离屏CV14检查全过，均0游戏输入/模型/现场图。全量工作树软件验收仍538TS/728Python+3strict xfail/0skip/typecheck通过，A最新35fixture/21专项也通过。源码/原件主out/acceptance/session-recovery-20261006/software/；尚未验证冷客户端缺失启动或物理游戏效果，后续C编排本地提交后集成再现场。
+
 **2026-10-06 22:15，最新用户授权A/B/C恢复链；A原生焦点安全已完成，尚未现场输入。** 本轮授权覆盖旧“不抢前台/失焦只停止”：普通动作仍前台，唯专门focus_click可在同session1正式服目标身份、完整客户区无遮挡/显示器覆盖/落点归属、空闲严格>5000ms、用户未持按钮时单次短点击；不得SetForegroundWindow/后台消息/系统改动。首次点击后至多75ms等激活，聚焦后再失焦停止，释放后复核；其它动作焦点不放宽。普通mouse_click另外在移动/登记/DOWN前及持有期间核对落点，并同一SendInput数组move+DOWN，账本UP，总3事件，避免两批之间鼠标交错。复用既有Input调度/账本/独立watchdog，不只靠finally；capability未声明focus_click的旧executor在TS前置拒绝。AGENTS/native协议同步更新。
 
 独立`.worktrees/session-recovery`并行明确模块owner，root集成；A原生纯fixture35检查、相关TS21/21、4原生编译/typecheck/diff通过（均0游戏输入）。本轮全量软件回归TS538/538、Python728passed+3原有strict xfail、0skip/typecheck通过；最后原生点击批次修补另以35/21与编译复验，未改TS/Python旧用例。B/C实现及真实字段/冷启动/危险词交叉审查也已完成，分步提交随后记录；当前尚未运行真实recover，任务完成/现场释放/客户端缺失启动效果不得从软件测试外推。原始software日志和离屏fixture在主`out/acceptance/session-recovery-20261006/software/`，后续从已选“小啊”进入世界并仅与吉安娜交谈，遇用户处理的阻塞即停。
