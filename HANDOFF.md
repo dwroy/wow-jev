@@ -4,6 +4,8 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-07 第2阶段完整Git快照复验全绿，准备ff-only集成后实施第3阶段。** 9208675隔离候选形成完整归档后，全量TS567/567（546旧+21新增）、Python765passed+3原有strict xfail（729旧+36新增，收集768），失败/跳过均0，typecheck通过。14个初始化失败确为新schema未入旧Git快照，提交后同一完整套件恢复；全部首次日志保留，未删除/跳过测试。28文件候选含源/文档与AGENTS边界；root仅追加此验收记录。当前仍无现场事实、输入、模型或目标完成；hotmemory/常驻宿主/当前现场driver属于下一阶段，窗口就绪通知仍待用户。主日志out/acceptance/layered-tutorial-20261006/stage-2，API入口docs/tutorial-layered-runtime.md。
+
 **2026-10-07 第2阶段候选已专项验证，隔离提交用于Git快照全量验收；尚未主集成/现场。** 第1阶段4df54e6已正常推codex/agent-system。tutorial-layered独立树实现agent.sqlite同一RuntimeDatabase单writer连接的版本化局部断言扩展（base schema/world包零diff），源码与共享schema绑定原run/event、actor/session、六维client/world SHA、截图/校准字节、源clock，unknown/conflict/过期等不自动授权。新增tutorial plan/runtime经原createLayerExecution→L4→L3 talk_to→Body通用screen_interact→统一闸→hand；世界NPC不冒充UI，dialog absence未取得拒绝，post成对OCR仅效果。recovery两个入口都只停可玩世界，焦点恢复保留无遮挡/空闲>5s/有限单点击，空闲不足可预算内只读等待。
 
 专项TS110/110，新增教程21项；Python局部36/base runtime与CLI合计73/73，typecheck/diff通过。完整TS收集567，553pass/14同before-hook失败，原因Git冻结导出4df54e6不包含尚未跟踪的local-assertion-schema.sql而新source reader已枚举它。原失败保留，先在隔离分支提交全体新源形成可导出快照，再完整复跑，全绿前不主集成/推送。普通字段/输入闸750ms；仅已发talk_to后的独立只读effect字段5000ms且不能发第二动作。新collectEffect端口请求在Body返回后，避免旧图；阶段3需接memory proof及常驻driver，当前仍旧file证据硬闸。源码入口/未验边界见docs/tutorial-layered-runtime.md。仍无现场事实写入、游戏输入或模型调用；窗口并排就绪通知尚未收到。

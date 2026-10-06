@@ -61,3 +61,7 @@ cd ..
 ```
 
 阶段二新增21项 TS 教程测试与36项 Python 局部断言测试。专项 TS 合计110/110通过，包含原45项恢复测试，未删除/跳过测试。跨 Python→TS 用真实只读进程验原件篡改、SQL行/源 run/角色/原事实变动、版本/会话隔离和时钟不匹配；执行端为明确 fixture，不能当游戏效果或速度实测。typecheck通过。完整回归及集成提交由主 checkout 记录。
+
+## 完整Git快照验收（2026-10-07）
+
+候选9208675提交后完整回归：TS567/567（旧546+新增21），Python765passed+3原有strict xfail（旧729+新增36，收集768，失败/跳过0），typecheck通过。首次未提交schema导致14项共享Git归档before-hook失败，原始日志保留；专项110TS/73Python并不替代上述完整运行。主证据out/acceptance/layered-tutorial-20261006/stage-2。实际Windows执行/内存frame统一闸/无PNG热输入与现场局部断言写入尚待下一阶段，不报告第一个任务成功。
