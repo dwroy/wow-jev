@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-07 第3阶段全部离线实现与完整回归通过，按用户要求仅推codex/agent-system后停止。** 隔离组合候选bbf43fe含72文件，TS644/644、Python820passed+3原有strict xfail（收集823），0失败/普通skip，typecheck通过；相对第2阶段新增77TS/55Python，原用例全保留。JUnit三项skipped节点均为pytest.xfail的gamma1.1反例。完整原生构建及71/71纯策略/schema/合成ROI检查通过；两个新入口help和控件prepare实跑0桌面/输入/模型。离线六场景×四重复single/layered共48trial（8完成/32预期阻塞/8取消/0失败），严格语义回放verified；模拟成本/模型次数与实际性能分开，不报告150ms目标达成。最后审计修正cold已发输入丢失/unknown终态伪零、Python独立注册遗漏完整Native schema，以及真实知识原件SHA与全部artifact读回；全量基于已提交共同Git快照，一次完整套件全绿后只补文档。
+
+体验入口`python3 tools/layered_tutorial.py --help`、`python3 tools/resident_readonly.py --help`、`python3 tools/resident_fixture_benchmark.py prepare --run-dir <全新目录>`；现场readonly/run/bootstrap/cancel及recording窗口/基准入口见docs/tutorial-layered-runtime.md和docs/resident-session.md，完整验收docs/acceptance/resident-session-integration.md。root原件在out/acceptance/layered-tutorial-20261006/stage-3-integration及stage-3-native；源/失败/模块专项均保留。主集成只ff-only，推送不force、不推其它game-db分支；原wow-jev.bundle与原HANDOFF备份SHA未变。
+
+当前仍为RDP session1断开；用户明确先全部离线、全绿推送后停，不轮询RDP、不启动现场任务或发输入。首交谈未完成、WGC成功采样/本轮游戏输入/云模型均0；六项只读临时任务全部删除且回查，06正常退出仅no_executor_acquired，不冒称持键释放。记录窗n>=30、真实持键EOF/强杀、实际同域延迟/单层只读模型比较、当前初始事实及动态场景可靠dialog缺席校准均待用户另行通知窗口就绪，不能虚报游戏效果。
+
 **2026-10-07 第3阶段离线组合候选，完整Git快照回归待执行；现场按用户最新要求停止。** 第1阶段归一化ROI和第2阶段局部事实/L4/L3路径已全绿正常推送至ebed98b。第3阶段在独立session-integration树组合常驻session1 WGC/ROI、会话0固定relay/本地JSON通道、私有来源登记与统一Body执行闸、原hand/watchdog、完整Native协议、取消/心跳/独立释放与任务删除，以及教程readonly/run/bootstrap/cancel和专用控件基准入口。控件走通用L3 activate_control、fixture_effect独立于game_effect；recovery仍只到可玩世界，教程仍只做首交谈，不接下一任务。数据原件包括实际知识使用清单/代码prompt配置与六维client证明，冻结世界包不改，临时模板不能伪装当前事实。模块专项全绿后形成隔离候选供Git快照完整套件验证，不以专项数字代替全量数字。
 
 本轮root六次只读宿主验证，未取得输入所有权、游戏输入/模型/成功WGC采样均0。05身份链已通过；06确认同用户的session1 medium宿主与session0 high relay，双方PID/start/path/SHA及pipe session/SID校验，relay只为自身进程补当前用户0x1000查询ACE、不改全局。06实际WTS状态4(Disconnected)、Default线程桌面/OpenInputDesktop错误5/FG0、WGC零回调/零帧；同Wow PID22072/start639268827443062278/HWND0x904a6仍visible/nonminimized，物理2560×1440/DPI144。06正常shutdown收到同session ACK/capture_disposed，release_scope仅no_executor_acquired；六个WowJev-Resident临时任务均删除且GetTask80070002回查。源/原件/失败与清理见out/acceptance/layered-tutorial-20261006/stage-3-native和docs/acceptance/resident-session-integration.md，不把只读退出外推持键强杀释放。

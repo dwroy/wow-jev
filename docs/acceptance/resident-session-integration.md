@@ -2,6 +2,18 @@
 
 2026-10-07。阶段一的归一化ROI和阶段二的教程L4/L3路径已完成完整验收并推送；本文件记录阶段三常驻宿主的实际验证。当前没有成功导出的WGC帧，没有游戏输入，没有首个任务完成或端到端速度结论。离线模块检查与真实Windows结果分别记录。
 
+## 最终离线验收
+
+独立树组合候选bbf43fe（72文件），完整Git快照测试：TS644/644、Python820passed+3项原有strict xfail（收集823）、typecheck通过，失败和普通跳过均0。相较阶段二567TS/765Python，新增77TS/55Python，无删除或跳过旧用例。JUnit以3个skipped节点表示pytest.xfail，全部为原gamma1.1容差反例，不是环境缺失的skip。捕获/WinEye/NPC原生fixture已构建并显式绑定，原全部套件实跑；组合原生纯检查71/71，桌面窗口/捕获/真实输入均0。
+
+冷恢复阻塞或取消后保留原结果，冷/热/总输入计数分别报告，缺终态为lower_bound；Python独立注册也经固定只读Node/Ajv入口完整复用Native唯一schema，缺字段、错类型及额外字段在落库前拒绝。知识SHA来自本轮实际知识使用清单原件，世界参考与局部规则明确不冒充已注册学习快照；局部断言读回核验原event的全部artifact字节。
+
+完整日志、JUnit、构建、CLI help/无桌面prepare和validation-summary.json在主`out/acceptance/layered-tutorial-20261006/stage-3-integration/`。真实源码未在全量通过后修改；后续提交仅补最终文档。入口为`python3 tools/layered_tutorial.py --help`、`python3 tools/resident_readonly.py --help`和`python3 tools/resident_fixture_benchmark.py prepare --run-dir <全新目录>`，均已离线实际运行。
+
+离线对照采用seed42、六种场景各四次重复、平衡single/layered顺序，共48个trial：8completed、32预期blocked、8cancelled、0failed；严格语义重执行回放verified=true。全部真实输入/云模型/游戏效果为0。默认注入capture8/CV4/fusion1/visual180/brain120/Jev60/code1/dispatch2/effect10/release1ms、动作100ms；它验证声明成本下的控制流，不证明现场速度。
+
+normal首对同工作量11次模拟动作，single注入观察→模拟发送p50/p95=341/341ms，layered=42/341ms；注入全程5105/2584ms。single模拟visual/brain各11次，layered模拟visual/brain/Jev各2次，代码/Jev/大脑选中7/2/2；实际云请求0。各环节、命中分母、动作率和独立模拟效果原件保留在paired-simulation，不能将这些数用于Windows QPC的150ms目标，也不能把模拟确认算游戏完成。
+
 ## 实际会话验证
 
 所有运行都使用`authorized_input=false`、`focus_recovery_authorized=false`、`max_actions=0`，不创建输入执行器或释放看门狗，不调用模型。当前用户的一次性交互任务将固定宿主运行于会话1；本地管道relay运行于会话0。没有修改注册表、组策略、服务或安装软件。
