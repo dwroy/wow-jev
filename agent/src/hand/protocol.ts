@@ -42,6 +42,7 @@ export type NativeAction =
   | { kind: 'mouse_move'; mode: 'absolute'; x: number; y: number }
   | { kind: 'mouse_move'; mode: 'relative'; dx: number; dy: number }
   | { kind: 'mouse_click'; button: 'left' | 'right' | 'middle'; x: number; y: number; duration_ms: number }
+  | { kind: 'focus_click'; x: number; y: number; duration_ms: number }
   | { kind: 'mouse_wheel'; delta: number }
   | { kind: 'mouse_drag'; button: 'left' | 'right' | 'middle'; from: { x: number; y: number }; to: { x: number; y: number }; duration_ms: number };
 export type NativeOp = 'execute' | 'heartbeat' | 'cancel' | 'release_all' | 'shutdown' | 'status';
@@ -52,7 +53,7 @@ export interface NativeReady {
   protocol: 'wow-input'; version: 1; type: 'ready'; session_id: string;
   executor_pid: number; watchdog_pid: number;
   window: { hwnd: string; pid: number; client_width: number; client_height: number; focused: boolean };
-  capabilities: { keys: string[]; max_duration_ms: 5000; heartbeat_lease_ms: 1000; timeline?: boolean };
+  capabilities: { keys: string[]; max_duration_ms: 5000; heartbeat_lease_ms: 1000; timeline?: boolean; focus_click?: boolean };
   local_clock: { domain: 'windows-qpc'; at_ms: number };
 }
 export interface NativeReceipt {

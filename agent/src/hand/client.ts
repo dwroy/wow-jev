@@ -186,6 +186,7 @@ export class NativeInputClient extends EventEmitter {
   async execute(action: NativeAction, options: { id?: string; timeoutMs?: number } = {}): Promise<NativeReceipt> {
     if (this.state !== 'ready') throw new Error(`native_not_ready: ${this.state}`);
     if (this.inFlight) throw new Error('action_in_flight');
+    if (action.kind === 'focus_click' && this.ready?.capabilities.focus_click !== true) throw new Error('native_focus_click_unsupported');
     if (action.kind === 'timeline') {
       if (this.ready?.capabilities.timeline !== true) throw new Error('native_timeline_unsupported');
       assertNativeTimeline(action);

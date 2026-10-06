@@ -279,9 +279,57 @@ namespace WowJev.Input
         public string Title;
     }
 
+    // Pure geometry/clock helpers are also used by the no-input acceptance fixture.
+    public struct RecoveryRect
+    {
+        public int Left, Top, Right, Bottom;
+        public RecoveryRect(int left, int top, int right, int bottom)
+        { Left = left; Top = top; Right = right; Bottom = bottom; }
+        public bool Valid { get { return Left < Right && Top < Bottom; } }
+        public bool Intersects(RecoveryRect other)
+        { return Valid && other.Valid && Left < other.Right && Right > other.Left && Top < other.Bottom && Bottom > other.Top; }
+    }
+    public static class RecoverySafety
+    {
+        public const uint IdleThresholdMs = 5000;
+        public static bool WindowVisible(bool visible, bool minimized) { return visible && !minimized; }
+        public static bool TryIdle(uint now, uint last, out uint idle)
+        {
+            idle = unchecked(now - last);
+            // Handle the DWORD wrap; reject a future/ambiguous half-cycle value.
+            return idle <= Int32.MaxValue;
+        }
+        public static bool IdleAllowed(uint now, uint last)
+        { uint idle; return TryIdle(now, last, out idle) && idle > IdleThresholdMs; }
+        public static bool CoveredByMonitors(RecoveryRect client, IList<RecoveryRect> monitors)
+        {
+            if (!client.Valid || monitors == null || monitors.Count == 0) return false;
+            List<RecoveryRect> uncovered = new List<RecoveryRect>(); uncovered.Add(client);
+            foreach (RecoveryRect monitor in monitors)
+            {
+                if (!monitor.Valid) return false;
+                List<RecoveryRect> next = new List<RecoveryRect>();
+                foreach (RecoveryRect part in uncovered)
+                {
+                    if (!part.Intersects(monitor)) { next.Add(part); continue; }
+                    int left = Math.Max(part.Left, monitor.Left), right = Math.Min(part.Right, monitor.Right);
+                    int top = Math.Max(part.Top, monitor.Top), bottom = Math.Min(part.Bottom, monitor.Bottom);
+                    if (part.Top < top) next.Add(new RecoveryRect(part.Left, part.Top, part.Right, top));
+                    if (bottom < part.Bottom) next.Add(new RecoveryRect(part.Left, bottom, part.Right, part.Bottom));
+                    if (part.Left < left) next.Add(new RecoveryRect(part.Left, top, left, bottom));
+                    if (right < part.Right) next.Add(new RecoveryRect(right, top, part.Right, bottom));
+                }
+                uncovered = next;
+                if (uncovered.Count == 0) return true;
+            }
+            return uncovered.Count == 0;
+        }
+    }
+
     public static class Native
     {
         delegate bool EnumWindowCallback(IntPtr hwnd, IntPtr parameter);
+        delegate bool MonitorCallback(IntPtr monitor, IntPtr dc, ref Rect rect, IntPtr parameter);
         [StructLayout(LayoutKind.Sequential)] public struct Point { public int X; public int Y; }
         [StructLayout(LayoutKind.Sequential)] struct Rect { public int Left, Top, Right, Bottom; }
         [StructLayout(LayoutKind.Sequential)] public struct KeyboardPacket
@@ -308,6 +356,150 @@ namespace WowJev.Input
         [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
         [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr context);
         [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
+        [StructLayout(LayoutKind.Sequential)] struct LastInput { public uint Size, Tick; }
+        [DllImport("user32.dll", SetLastError = true)] static extern bool GetLastInputInfo(ref LastInput value);
+        [DllImport("kernel32.dll")] static extern uint GetTickCount();
+        [DllImport("kernel32.dll")] static extern void SetLastError(uint code);
+        [DllImport("user32.dll", SetLastError = true)] static extern IntPtr GetTopWindow(IntPtr hwnd);
+        [DllImport("user32.dll", EntryPoint = "GetWindow", SetLastError = true)] static extern IntPtr GetRelatedWindow(IntPtr hwnd, uint command);
+        [DllImport("user32.dll", SetLastError = true)] static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
+        [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+        [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(Point point);
+        [DllImport("user32.dll", SetLastError = true)] static extern bool EnumDisplayMonitors(IntPtr dc, IntPtr clip, MonitorCallback callback, IntPtr parameter);
+        [DllImport("user32.dll")] static extern int GetWindowRgn(IntPtr hwnd, IntPtr region);
+        [DllImport("gdi32.dll")] static extern IntPtr CreateRectRgn(int left, int top, int right, int bottom);
+        [DllImport("gdi32.dll")] static extern int OffsetRgn(IntPtr region, int x, int y);
+        [DllImport("gdi32.dll")] static extern int CombineRgn(IntPtr dest, IntPtr one, IntPtr two, int mode);
+        [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr value);
+        [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out uint value, int size);
+
+        static Dictionary<string, object> RecoveryObject(params object[] values)
+        {
+            Dictionary<string, object> result = new Dictionary<string, object>();
+            for (int i = 0; i < values.Length; i += 2) result.Add((string)values[i], values[i + 1]);
+            return result;
+        }
+        static Dictionary<string, object> RecoveryDenied(Dictionary<string, object> value, string reason)
+        { value["allowed"] = false; value["reason"] = reason; return value; }
+        static List<IntPtr> ReadWindowOrder()
+        {
+            HashSet<IntPtr> enumerated = new HashSet<IntPtr>();
+            if (!EnumWindows(delegate(IntPtr window, IntPtr unused) { enumerated.Add(window); return true; }, IntPtr.Zero))
+                throw new InvalidOperationException("window_enumeration_failed");
+            List<IntPtr> order = new List<IntPtr>(); HashSet<IntPtr> visited = new HashSet<IntPtr>();
+            SetLastError(0); IntPtr cursor = GetTopWindow(IntPtr.Zero);
+            if (cursor == IntPtr.Zero && (Marshal.GetLastWin32Error() != 0 || enumerated.Count != 0))
+                throw new InvalidOperationException("window_order_unverified");
+            while (cursor != IntPtr.Zero)
+            {
+                if (order.Count >= 4096 || !visited.Add(cursor) || !IsWindow(cursor))
+                    throw new InvalidOperationException("window_order_changed");
+                order.Add(cursor); SetLastError(0); cursor = GetRelatedWindow(cursor, 2);
+                if (cursor == IntPtr.Zero && Marshal.GetLastWin32Error() != 0)
+                    throw new InvalidOperationException("window_order_failed");
+            }
+            if (!visited.SetEquals(enumerated)) throw new InvalidOperationException("window_order_changed");
+            return order;
+        }
+        static bool UpperWindowIntersectsClient(IntPtr window, RecoveryRect client)
+        {
+            if (!IsWindow(window)) throw new InvalidOperationException("window_order_changed");
+            if (!IsWindowVisible(window) || IsIconic(window)) return false;
+            Rect outer;
+            if (!GetWindowRect(window, out outer)) throw new InvalidOperationException("occluder_geometry_unknown");
+            RecoveryRect bounds = new RecoveryRect(outer.Left, outer.Top, outer.Right, outer.Bottom);
+            if (!bounds.Valid) throw new InvalidOperationException("occluder_geometry_unknown");
+            if (!bounds.Intersects(client)) return false;
+            uint cloaked;
+            if (DwmGetWindowAttribute(window, 14, out cloaked, sizeof(uint)) != 0)
+                throw new InvalidOperationException("occluder_cloak_unknown");
+            if (cloaked != 0) return false;
+            IntPtr region = CreateRectRgn(0, 0, 0, 0), clientRegion = IntPtr.Zero, overlap = IntPtr.Zero;
+            if (region == IntPtr.Zero) throw new InvalidOperationException("occluder_region_unknown");
+            try
+            {
+                int kind = GetWindowRgn(window, region);
+                // ERROR means either no explicitly-set region or failure. Treat its
+                // complete bounding rectangle as an occluder instead of allowing it.
+                if (kind == 0) return true;
+                if (kind == 1) return false;
+                if (kind != 2 && kind != 3 || OffsetRgn(region, outer.Left, outer.Top) == 0)
+                    throw new InvalidOperationException("occluder_region_unknown");
+                clientRegion = CreateRectRgn(client.Left, client.Top, client.Right, client.Bottom);
+                overlap = CreateRectRgn(0, 0, 0, 0);
+                if (clientRegion == IntPtr.Zero || overlap == IntPtr.Zero) throw new InvalidOperationException("occluder_region_unknown");
+                int intersection = CombineRgn(overlap, region, clientRegion, 1);
+                if (intersection == 0) throw new InvalidOperationException("occluder_region_unknown");
+                return intersection != 1;
+            }
+            finally
+            { if (region != IntPtr.Zero) DeleteObject(region); if (clientRegion != IntPtr.Zero) DeleteObject(clientRegion); if (overlap != IntPtr.Zero) DeleteObject(overlap); }
+        }
+        // Read-only. This is an observation, never permission for a later input;
+        // the executor calls it again while holding its lease mutex before DOWN.
+        public static Dictionary<string, object> GetRecoverySafety(IntPtr hwnd)
+        {
+            Dictionary<string, object> result = RecoveryObject("allowed", false, "reason", "unverified", "hwnd", "0x" + hwnd.ToInt64().ToString("x"),
+                "checked_at_ms", Clock.PreciseMs, "visible", false, "minimized", false, "focused", false, "client_fully_visible", false,
+                "idle_threshold_ms", RecoverySafety.IdleThresholdMs, "user_idle_scope", "calling-session-only", "input_source_distinguishable", false,
+                "visibility_method", "monitor_union_and_upper_window_regions", "occluders", new List<string>());
+            try
+            {
+                if (hwnd == IntPtr.Zero || !IsWindow(hwnd) || GetAncestor(hwnd, 2) != hwnd) return RecoveryDenied(result, "invalid_window");
+                result["visible"] = IsWindowVisible(hwnd); result["minimized"] = IsIconic(hwnd); result["focused"] = GetForegroundWindow() == hwnd;
+                if (!RecoverySafety.WindowVisible((bool)result["visible"], (bool)result["minimized"])) return RecoveryDenied(result, "window_not_visible");
+                uint pid;
+                if (GetWindowThreadProcessId(hwnd, out pid) == 0) return RecoveryDenied(result, "window_identity_unknown");
+                int currentSession = Process.GetCurrentProcess().SessionId;
+                using (Process process = Process.GetProcessById(checked((int)pid)))
+                {
+                    result["pid"] = pid; result["process_start_ticks"] = process.StartTime.ToUniversalTime().Ticks;
+                    result["session_id"] = process.SessionId; result["probe_session_id"] = currentSession;
+                    result["process_name"] = process.ProcessName;
+                    if (process.SessionId != 1 || currentSession != 1) return RecoveryDenied(result, "wrong_interactive_session");
+                }
+                Rect raw; Point origin = new Point();
+                if (!GetClientRect(hwnd, out raw) || !ClientToScreen(hwnd, ref origin) || raw.Right <= 0 || raw.Bottom <= 0)
+                    return RecoveryDenied(result, "client_geometry_unknown");
+                RecoveryRect client = new RecoveryRect(origin.X, origin.Y, checked(origin.X + raw.Right), checked(origin.Y + raw.Bottom));
+                result["client_screen_rect"] = RecoveryObject("left", client.Left, "top", client.Top, "right", client.Right, "bottom", client.Bottom);
+                List<RecoveryRect> monitors = new List<RecoveryRect>();
+                if (!EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, delegate(IntPtr monitor, IntPtr dc, ref Rect rect, IntPtr unused)
+                    { monitors.Add(new RecoveryRect(rect.Left, rect.Top, rect.Right, rect.Bottom)); return true; }, IntPtr.Zero))
+                    return RecoveryDenied(result, "monitor_geometry_unknown");
+                if (!RecoverySafety.CoveredByMonitors(client, monitors)) return RecoveryDenied(result, "client_outside_monitors");
+                List<IntPtr> order = ReadWindowOrder(); int targetIndex = order.IndexOf(hwnd);
+                if (targetIndex < 0) return RecoveryDenied(result, "window_order_unverified");
+                List<string> occluders = (List<string>)result["occluders"];
+                for (int i = 0; i < targetIndex; i++)
+                    if (UpperWindowIntersectsClient(order[i], client)) occluders.Add("0x" + order[i].ToInt64().ToString("x"));
+                if (occluders.Count > 0) return RecoveryDenied(result, "client_occluded");
+                List<IntPtr> checkedOrder = ReadWindowOrder();
+                if (order.Count != checkedOrder.Count) return RecoveryDenied(result, "window_order_changed");
+                for (int i = 0; i < order.Count; i++) if (order[i] != checkedOrder[i]) return RecoveryDenied(result, "window_order_changed");
+                // This is supplementary hit-testing, never a replacement for the
+                // whole-client region check above. Includes all four boundaries.
+                Point[] checks = { new Point { X = client.Left, Y = client.Top }, new Point { X = client.Right - 1, Y = client.Top },
+                    new Point { X = client.Left, Y = client.Bottom - 1 }, new Point { X = client.Right - 1, Y = client.Bottom - 1 },
+                    new Point { X = client.Left + raw.Right / 2, Y = client.Top + raw.Bottom / 2 } };
+                foreach (Point point in checks) if (GetAncestor(WindowFromPoint(point), 2) != hwnd) return RecoveryDenied(result, "client_hit_test_mismatch");
+                result["client_fully_visible"] = true;
+                LastInput input = new LastInput { Size = (uint)Marshal.SizeOf(typeof(LastInput)) };
+                if (!GetLastInputInfo(ref input)) return RecoveryDenied(result, "last_input_unknown");
+                uint now = GetTickCount(), idle;
+                result["last_input_tick"] = input.Tick; result["current_tick"] = now;
+                if (!RecoverySafety.TryIdle(now, input.Tick, out idle)) return RecoveryDenied(result, "last_input_clock_invalid");
+                result["user_idle_ms"] = idle;
+                if (idle <= RecoverySafety.IdleThresholdMs) return RecoveryDenied(result, "user_recent_input");
+                result["allowed"] = true; result["reason"] = "safe"; return result;
+            }
+            catch (Exception error) { result["failure_detail"] = error.Message; return RecoveryDenied(result, "recovery_safety_unverified"); }
+        }
+        public static bool RecoveryPointOwnedByWindow(IntPtr hwnd, int x, int y)
+        {
+            WindowInfo window = GetWindow(hwnd); Point point = new Point { X = x, Y = y };
+            return x >= 0 && y >= 0 && x < window.Width && y < window.Height && ClientToScreen(hwnd, ref point) && GetAncestor(WindowFromPoint(point), 2) == hwnd;
+        }
         public static int LastError { get; private set; }
         public static void MakeDpiAware()
         {
@@ -380,6 +572,17 @@ namespace WowJev.Input
             InputPacket input = new InputPacket(); input.Type = 0;
             input.Data.Mouse.Flags = buttonBit == 1 ? (up ? 4U : 2U) : buttonBit == 2 ? (up ? 16U : 8U) : (up ? 64U : 32U);
             return input;
+        }
+        public static InputPacket[] ClickBatch(InputPacket absoluteMove, int buttonBit)
+        {
+            // Pure construction: the caller has checked identity/point ownership
+            // and registered this button before sending the contiguous batch.
+            if (absoluteMove.Type != 0 || absoluteMove.Data.Mouse.Flags != (1U | 0x8000U | 0x4000U) ||
+                absoluteMove.Data.Mouse.Dx < 0 || absoluteMove.Data.Mouse.Dx > 65535 ||
+                absoluteMove.Data.Mouse.Dy < 0 || absoluteMove.Data.Mouse.Dy > 65535)
+                throw new ArgumentException("absolute_click_move_required");
+            if (buttonBit != 1 && buttonBit != 2 && buttonBit != 4) throw new ArgumentException("unsupported_click_button");
+            return new[] { absoluteMove, MouseButton(buttonBit, false) };
         }
         public static InputPacket MouseWheel(int delta)
         { InputPacket input = new InputPacket(); input.Data.Mouse.Flags = 0x0800; input.Data.Mouse.Data = unchecked((uint)delta); return input; }

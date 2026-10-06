@@ -53,6 +53,9 @@ static class WinInput
         public long Requested, Inserted;
         public bool OwnedEver;
         public bool ReleaseAccounted;
+        public volatile bool FocusClickStarted;
+        public volatile bool FocusObserved;
+        public long FocusActivationDeadlineMs;
         public readonly object ReleaseSync = new object();
         public readonly ManualResetEvent Cancel = new ManualResetEvent(false);
         public string CancelReason = "cancel_requested";
@@ -141,7 +144,7 @@ static class WinInput
             ready.Add("executor_pid", Process.GetCurrentProcess().Id); ready.Add("watchdog_pid", watchdogPid);
             ready.Add("window", Obj("hwnd", "0x" + hwnd.ToInt64().ToString("x", CultureInfo.InvariantCulture), "pid", info.Pid,
                 "client_width", info.Width, "client_height", info.Height, "focused", info.Focused));
-            ready.Add("capabilities", Obj("keys", names, "max_duration_ms", MaxDurationMs, "heartbeat_lease_ms", HeartbeatLeaseMs, "timeline", true));
+            ready.Add("capabilities", Obj("keys", names, "max_duration_ms", MaxDurationMs, "heartbeat_lease_ms", HeartbeatLeaseMs, "timeline", true, "focus_click", true));
             Emit(ready);
         }
         Dictionary<string, object> Reply(Command command, string status, string inputStatus, long requested, long inserted,
@@ -183,7 +186,15 @@ static class WinInput
                     if (reason == null && !Native.IsProcessAlive(expectedPid, targetStartTicks)) reason = "window_process_exited";
                     Work current;
                     lock (stateLock) current = active;
-                    if (reason == null && current != null && !Native.GetWindow(hwnd).Focused) reason = "window_unfocused";
+                    if (reason == null && current != null)
+                    {
+                        WindowInfo info = Native.GetWindow(hwnd);
+                        if (info.Pid != expectedPid) reason = "window_pid_mismatch";
+                        else if (!info.Focused && current.Kind != "focus_click") reason = "window_unfocused";
+                        else if (!info.Focused && current.Kind == "focus_click" && (current.FocusObserved ||
+                            current.FocusClickStarted && Clock.NowMs >= Interlocked.Read(ref current.FocusActivationDeadlineMs))) reason = "focus_recovery_failed";
+                        else if (info.Focused && current.Kind == "focus_click" && current.FocusClickStarted) current.FocusObserved = true;
+                    }
                     if (reason != null)
                     {
                         RequestStop(reason);
@@ -223,7 +234,44 @@ static class WinInput
             if (!Native.IsProcessAlive(expectedPid, targetStartTicks)) throw new InputFailure("window_process_exited", "Target process identity changed");
             WindowInfo info = Native.GetWindow(hwnd);
             if (info.Pid != expectedPid) throw new InputFailure("window_pid_mismatch", "Window process identity changed");
-            if (!info.Focused) throw new InputFailure("window_unfocused", "Target window is not foreground");
+            if (work.Kind == "focus_click")
+            {
+                if (work.FocusClickStarted)
+                {
+                    if (info.Focused) work.FocusObserved = true;
+                    else if (work.FocusObserved || Clock.NowMs >= Interlocked.Read(ref work.FocusActivationDeadlineMs))
+                        throw new InputFailure("focus_recovery_failed", "Focus did not activate promptly or was lost after activation");
+                }
+                Dictionary<string, object> safety = Native.GetRecoverySafety(hwnd);
+                if (!safety.ContainsKey("pid") || Convert.ToInt64(safety["pid"], CultureInfo.InvariantCulture) != expectedPid ||
+                    !safety.ContainsKey("process_start_ticks") || Convert.ToInt64(safety["process_start_ticks"], CultureInfo.InvariantCulture) != targetStartTicks)
+                    throw new InputFailure("window_identity_unknown", "Focus recovery target identity was not confirmed");
+                string reason = (string)safety["reason"];
+                // Our first SendInput updates this session's last-input timestamp.
+                // Afterwards visibility is still required; idle alone is not reused
+                // as a human-input classifier and is checked only before this batch.
+                if (!(bool)safety["allowed"] && !(work.FocusClickStarted && reason == "user_recent_input"))
+                    throw new InputFailure(reason, "Focus recovery safety checks failed");
+                if (!Native.RecoveryPointOwnedByWindow(hwnd, work.X, work.Y))
+                    throw new InputFailure("recovery_point_not_target", "Focus recovery point is not owned by target window");
+                if (!work.FocusClickStarted)
+                {
+                    using (Process process = Process.GetProcessById(expectedPid))
+                        if (!String.Equals(process.ProcessName, "Wow", StringComparison.OrdinalIgnoreCase))
+                            throw new InputFailure("focus_recovery_target_unsupported", "Focus recovery is limited to retail Wow.exe");
+                    if (Native.IsMouseDown(1) || Native.IsMouseDown(2) || Native.IsMouseDown(4))
+                        throw new InputFailure("user_button_held", "A mouse button is already held; no recovery input issued");
+                }
+            }
+            else
+            {
+                if (!info.Focused) throw new InputFailure("window_unfocused", "Target window is not foreground");
+                // A non-activating topmost overlay can appear after observation
+                // without changing foreground. Recheck the actual click point
+                // before movement, ledger registration and the DOWN batch.
+                if (work.Kind == "mouse_click" && !Native.RecoveryPointOwnedByWindow(hwnd, work.X, work.Y))
+                    throw new InputFailure("click_point_not_target", "Click point is no longer owned by the target window");
+            }
         }
         void StartTimestamp(Work work)
         { if (work.StartedMs < 0) work.StartedMs = Clock.NowMs; }
@@ -276,7 +324,11 @@ static class WinInput
                 CheckSafe(work, state);
                 List<Native.InputPacket> packets = new List<Native.InputPacket>();
                 if (work.Keys != null) foreach (KeySpec key in work.Keys) packets.Add(Native.KeyEvent(key, false));
-                if (work.Button != 0) packets.Add(Native.MouseButton(work.Button, false));
+                if (work.Kind == "focus_click" || work.Kind == "mouse_click")
+                    packets.AddRange(Native.ClickBatch(Native.MouseAbsolute(hwnd, work.X, work.Y), work.Button));
+                else if (work.Button != 0) packets.Add(Native.MouseButton(work.Button, false));
+                if (work.Kind == "focus_click")
+                { Interlocked.Exchange(ref work.FocusActivationDeadlineMs, Clock.NowMs + Math.Min(work.Duration, 75)); work.FocusClickStarted = true; }
                 SendEvents(work, packets.ToArray());
             });
         }
@@ -408,9 +460,9 @@ static class WinInput
                         if (!Native.CursorWithinClient(hwnd)) throw new InputFailure("cursor_outside_client", "Wheel requires cursor within the target client");
                         return new[] { Native.MouseWheel(work.Delta) };
                     });
+                else if (work.Kind == "focus_click") { PressOwned(work); WaitDuration(work); }
                 else if (work.Kind == "mouse_click")
                 {
-                    MoveBeforeButton(work, work.X, work.Y);
                     PressOwned(work); WaitDuration(work);
                 }
                 else if (work.Kind == "mouse_drag")
@@ -442,6 +494,18 @@ static class WinInput
             { status = "failed"; reason = "external_release_unaccounted"; message = "Ownership cleared externally; release event counts are unknown"; }
             else if (status == "completed" && work.Inserted != work.Requested)
             { status = "failed"; reason = "sendinput_partial"; message = "At least one input batch was only partly inserted"; }
+            if (work.Kind == "focus_click" && status == "completed")
+            {
+                try
+                {
+                    WindowInfo info = Native.GetWindow(hwnd);
+                    if (!Native.IsProcessAlive(expectedPid, targetStartTicks) || info.Pid != expectedPid || !info.Focused)
+                        throw new InputFailure("focus_recovery_failed", "Focus recovery click did not activate the expected target");
+                }
+                catch (Exception error)
+                { status = "failed"; reason = "focus_recovery_failed"; message = error.Message; RequestStop(reason); }
+            }
+            if (work.Kind == "focus_click" && status != "completed" && work.Requested > 0) RequestStop(reason ?? "focus_recovery_failed");
             string inputStatus = InputSummary(work.Requested, work.Inserted, release.Released, work.OwnedEver);
             if (reason == "external_release_unaccounted") inputStatus = "failed";
             Dictionary<string, object> reply = Reply(work.Command, status, inputStatus, work.Requested, work.Inserted,
@@ -507,6 +571,12 @@ static class WinInput
                 else if (work.Mode == "relative")
                 { Exact(action, "kind", "mode", "dx", "dy"); work.Dx = Integer(action, "dx", -32767, 32767); work.Dy = Integer(action, "dy", -32767, 32767); }
                 else throw new InputFailure("invalid_action", "mouse_move mode must be absolute or relative");
+            }
+            else if (work.Kind == "focus_click")
+            {
+                Exact(action, "kind", "x", "y", "duration_ms"); work.Button = 1;
+                work.X = Integer(action, "x", 0, 65535); work.Y = Integer(action, "y", 0, 65535); CheckPoint(work.X, work.Y);
+                work.Duration = Integer(action, "duration_ms", 1, 150);
             }
             else if (work.Kind == "mouse_click")
             {

@@ -42,6 +42,17 @@ test('heartbeats continue during a held action and effects remain unknown', asyn
   } finally { assert.equal((await client.close()).release, 'confirmed'); }
 });
 
+test('legacy executor cannot receive an undeclared focus activation and remains usable for normal input', async () => {
+  const client = await start();
+  let executeReceipts = 0;
+  client.on('receipt', receipt => { if (receipt.op === 'execute') executeReceipts++; });
+  try {
+    await assert.rejects(client.execute({ kind: 'focus_click', x: 10, y: 10, duration_ms: 100 }), /native_focus_click_unsupported/);
+    assert.equal(executeReceipts, 0);
+    assert.equal((await client.execute({ kind: 'key', keys: ['W'], duration_ms: 10 })).status, 'completed');
+  } finally { assert.equal((await client.close()).release, 'confirmed'); }
+});
+
 test('one action at a time, local duplicate IDs never send a second action', async () => {
   const client = await start();
   try {

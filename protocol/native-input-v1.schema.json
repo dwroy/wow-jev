@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "urn:wow-input:protocol:native-v1",
-  "title": "Windows \u539f\u751f\u8f93\u5165\u534f\u8bae v1",
+  "title": "Windows 原生输入协议 v1",
   "oneOf": [
     {
       "$ref": "#/definitions/command"
@@ -238,6 +238,32 @@
             },
             "duration_ms": {
               "$ref": "#/definitions/duration"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "x",
+            "y",
+            "duration_ms"
+          ],
+          "properties": {
+            "kind": {
+              "const": "focus_click"
+            },
+            "x": {
+              "$ref": "#/definitions/coordinate"
+            },
+            "y": {
+              "$ref": "#/definitions/coordinate"
+            },
+            "duration_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 150
             }
           }
         },
@@ -504,6 +530,9 @@
               "const": 1000
             },
             "timeline": {
+              "type": "boolean"
+            },
+            "focus_click": {
               "type": "boolean"
             }
           }

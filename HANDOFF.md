@@ -4,6 +4,10 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 22:15，最新用户授权A/B/C恢复链；A原生焦点安全已完成，尚未现场输入。** 本轮授权覆盖旧“不抢前台/失焦只停止”：普通动作仍前台，唯专门focus_click可在同session1正式服目标身份、完整客户区无遮挡/显示器覆盖/落点归属、空闲严格>5000ms、用户未持按钮时单次短点击；不得SetForegroundWindow/后台消息/系统改动。首次点击后至多75ms等激活，聚焦后再失焦停止，释放后复核；其它动作焦点不放宽。普通mouse_click另外在移动/登记/DOWN前及持有期间核对落点，并同一SendInput数组move+DOWN，账本UP，总3事件，避免两批之间鼠标交错。复用既有Input调度/账本/独立watchdog，不只靠finally；capability未声明focus_click的旧executor在TS前置拒绝。AGENTS/native协议同步更新。
+
+独立`.worktrees/session-recovery`并行明确模块owner，root集成；A原生纯fixture35检查、相关TS21/21、4原生编译/typecheck/diff通过（均0游戏输入）。本轮全量软件回归TS538/538、Python728passed+3原有strict xfail、0skip/typecheck通过；最后原生点击批次修补另以35/21与编译复验，未改TS/Python旧用例。B/C实现及真实字段/冷启动/危险词交叉审查也已完成，分步提交随后记录；当前尚未运行真实recover，任务完成/现场释放/客户端缺失启动效果不得从软件测试外推。原始software日志和离屏fixture在主`out/acceptance/session-recovery-20261006/software/`，后续从已选“小啊”进入世界并仅与吉安娜交谈，遇用户处理的阻塞即停。
+
 **2026-10-06 21:03，用户恢复WoW激活后继续第一个教程任务；只读复核焦点通过，但角色尚在选择界面，按遇阻塞停止。** 用户现场复查确认前台0x904a6/PID22072，并确认先前零前台来自“窗口在最上层但未激活”，不是RDP断开；先前RDP显示抑制仅为未证实候选，不再作为当前根因。本轮session1 helper PID18088再次实际核实采前/采后前台0x904a6、focused=true、同一正式服path/start_ticks，2560×1440客户区/DPI144，客户区屏幕原点已变为612,413。PrintWindow真实原图显示选中“小啊”、等级1战士、联盟图标及“进入魔兽世界”按钮，当前是角色选择界面，未见船上吉安娜、教程提示或任务窗口；不复用旧船上截图/NPC坐标，不从用户任务名称推定当前已在游戏内。当前任务/游戏内键位无法完成输入前只读核验，因此按用户“完成或遇阻塞停止”不进入有限输入；需要用户手动进入该角色的游戏世界并保持WoW激活后再继续。
 
 本轮唯一任务WowJev-FirstQuest-Readonly-52ed32a9cca246d5bac3ac437119209d创建/执行/删除，独立GetTask回查80070002不存在。没有创建输入执行器/看门狗、没有持有按键；真实输入0、外部Seed调用0、助手原图复核1，没有物理释放ACK或游戏任务完成可报告。Windows QPC capture85.461ms、完整只读观察697.609ms，协调器任务生命周期monotonic1895.437ms；按既有TraceRecorder分域记录，观察→输入、输入发出与效果确认均unknown/未开始，不混减时钟，不报告行动收益。原图/身份/生命周期/清理/sidecar/摘要及SHA在主`out/acceptance/exiles-first-task-20261006/foreground-restored-*`。仅独立树更新HANDOFF与验收记录，本地提交集成，不推送；源码不变，最新完整源码回归仍为309e858阶段的TS498/498、Python702passed+3strict xfail、0skip/typecheck通过，本轮只做diff-check，不重复软件套件冒充现场验收。
