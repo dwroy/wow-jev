@@ -30,7 +30,23 @@
 - 原始完整`npm --prefix agent test`：498/498passed、0fail/skip/cancel/todo。保留旧437项，新增61项；Python保留旧660passed，新增32项。
 - `npm --prefix agent run typecheck`及`git diff --check`通过；没有删/跳用例、选择子集或改变全量脚本。
 
-固定提交后运行default/all场景、zero-model以及两倍模型成本成对基准并独立replay，实际本地包prepare、field prepare/help；主checkout集成结果将保存`main-acceptance.json`并补记。完整回归期间源码冻结，后续记录只改文档。
+源码提交`f41b4a9`ff-only合入主checkout；下列实际CLI全部exit0，原始stdout/summary/原件/source快照/replay保留主`out/acceptance/action-benchmark/`。完整回归期间源码冻结，后续提交只改验收文档。
+
+| 配置 | 每组正常工作量 | single虚拟总时长ms | layered虚拟总时长ms | 单层/分层总时长比 |
+| --- | --- | --- | --- | --- |
+| default（visual180/brain120/Jev60ms） | 11模拟后观察验效动作 | 5105 | 2584 | 1.976 |
+| zero-model（仅三角色模型成本0） | 11 | 1805 | 1864 | 0.968（分层略慢） |
+| double-model（仅三角色模型成本×2） | 11 | 8405 | 3304 | 2.544 |
+
+每种配置normal均4个AB/BA配对、workload_equal/performance_comparable=true；default的六场景48trial为8completed、32blocked、8cancelled、0failed，zero/double各8trial全部completed，三次独立严格replay exit0。阻塞/取消不会计为有效动作；no-progress保留已完成模拟输入与未确认效果的差别。
+
+默认正常组capture→simulated input：single p50/p95=341/341ms，layered=42/341ms；尾部没有降低。虚拟有效动作/min=129.3/255.4；模拟visual/brain/Jev调用=11/11/0对2/2/2，每次11个效果对应22对6次transport请求。layered最终选择份额code=7/11（63.6%）、Jev=2/11、brain=2/11（各18.2%）；在这个合成样本中各层尝试hit=100%，不推广成真实覆盖/准确率。阻塞/失败/wait/miss/not_attempted的机会分母另在每trial指标中保留，不能以正常组hit隐藏它们。
+
+`scorecard.json`另列同次程序实测wall、每个环节wall分布、初始未预热pair及后续pairs；这些是离线程序耗时，不包含真实模型/游戏，不和注入模型成本混算。每arm的原始虚拟/壁钟端到端、capture/CV/fusion/artifact/视觉/brain/Jev/code/复采样/dispatch/action/effect/release分布、模型与输入计数、route/recognition比例在summary/benchmark.jsonl中。真实model/input/game-confirmed均0，real input latency=null；因此本轮只能证明可复现的对照机制与在声明成本下的差异，不能证明现在正式服动作更快。
+
+主目录实际`tools.warrior_start_prepare`读取现存固定包并生成`main-warrior-start/`：30卡、4联盟参考候选、26排除、当前适用0/已核实giver0；报告SHA`d8b2a831279aae625b57a66523e666df526e64ad0d615623d0e873a0c64550a2`和profile SHA`d3919980e8315b23ef3350de02dcafdc4d1a9f8e0cb542cd20bd07ca62deb12d`与工作树相同，原pack/SQLite SHA未变。`tools/action_benchmark_field.py prepare`和`--help`实际exit0，`main-field-kit`三个模板已生成，所有实例/版本未知值保持null，user_declared联盟战士与教程双路径保留。没有运行readonly/input现场命令。
+
+加入可选埋点后，既有world-brain-demo实际四child完成，独立parent严格回放仍exit0。完整固定提交结果`main-acceptance.json`关联所有命令/原始log/summary/source commit；只普通推送codex/agent-system，远端所有heads前后核对另留本目录。主原bundle及HANDOFF备份完整SHA未变，既有工作树与local_only参考包保留。
 
 离线体验：
 
