@@ -4,6 +4,10 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-06 B→C：恢复/启动编排及入口已完成软件验收，准备主集成现场。** TypeScript RecoveryOrchestrator统一预算/源观察/目标身份/按钮边界/前台例外闸，recover只到第一个交谈、launch只到世界，默认180s/阶段30s/8操作/100ms点击。真正现场class waApplication Window已精确纳入（不再误用旧Gx前缀）；已有无窗口进程不重复启动。战网冷窗口轮询、CLI仅请求后独立发现WoW；明确技术失败或限期无效果才在重新取证的健康战网执行唯一CV备用，auth/terms/update/unknown/权限拒绝不回退。进入世界的无字loading仅有限只读等候，不生成动作、不先计效果；中途危险词即时停止。
+
+C的37项状态机测试包括真实canonical危险词+背景Play全部0input、wa实际类、冷窗口、launched但无WoW后唯一fresh-CV fallback、错误/近似角色、无字loading/认证中断、取消/永不返回端口/源时效、独立effect与未知release；全树typecheck绿。恢复code状态机/root监督，Jev/Brain/Seed调用0，不虚构模型分层加速；当前输入首SendInput与后独立观察按QPC/协调器分域trace记录。可用python3 tools/recover.py launch|recover --recovery-authorized --target-character 小啊 --run-dir <全新主out目录>，见docs/session-recovery.md。A525d712、B受限交互桥已分步本地提交，C收尾提交后ff-only主集成；全绿后再运行现场recover，任务完成或实际用户处理阻塞后更新取证并停，不继续后续训练。
+
 **2026-10-06 A→B：会话1受限交互桥及当前选角/教程CV已完成，仍未现场输入。** A提交525d712；B支持discover/observe/input/launch_battlenet/launch_wow，当前登录用户、最低权限、无trigger、固定payload/源码与校准/schema SHA、一次性/IT+RunEx1、30s上限、取消文件及精确删除回查。C#只在session1做捕获/OCR/CV和原WinInput通信；普通输入/恢复点击都复用A闸与原guardian/ledger，ready即200ms独立心跳、stdin写锁，签名/UNC复核不会饿1000mslease。源观察hash/身份/尺寸/DPI/15s时效严格匹配。unsafe KILL_ON_JOB_CLOSE拒绝输入；记录nested_parent_jobs_checked=false及整树强杀未验证。AllowHardTerminate=false，不Stop/强杀输入树；release必须原回执+空账本+executor退出证据。
 
 Battle.net按验签的path/session/PID独立EnumWindows发现，不扩展旧Native游戏list；注册表/已知安装位置只读，固定--exec launch WoW只记请求/effect unknown，不把Process.Start当客户端成功。认证/协议/更新危险关键词跨OCR、Native launch和TS共用session-recovery schema枚举，不得用CV回退绕过requires_user拒绝。OCR只输出白名单状态词及line框，credential/raw text不留日志。选中小啊金色行/name/战士/联盟徽记独立小ROI，名字/职业阈值收严至fraction .002/mean .8，30像素改名反例拒绝；当前名字和交谈提示掩码同新帧匹配才给一次吉安娜右键候选，旧图只作校准。
