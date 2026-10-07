@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-07用户授权的单次背景focus_click实测：SendInput插入成功，但前台未改变，立即停止。** 独立manual-first-task树、业务基线40c1650。当前readonly确认session1/Default/UOI_IO=true、Wow22072/start639268827443062278/HWND0x904a6/物理2560×1440/DPI144；客户区点(1536,360)→屏幕(2148,773)的5×5像素全为WoW，避开按钮/公告且在PowerShell右侧。PowerShell外框(141,152)-(1893,1088)，WoW外框(601,368)-(3183,1864)、客户区(612,413)-(3172,1853)。当前光标flags2/handle0（系统抑制），本次明确授权的固定验收助手仅对此已知状态、无鼠标捕获/无人持键、空闲>5s放行，普通生产光标闸未改；使用原GlobalExecutorAdmission/LeaseStore账本及独立WinInputWatchdog。
+
+唯一次Focus输入为绝对MOVE+LEFT_DOWN，SendInput返回2/2、GetLastError raw0；有限60ms后UP返回1/1，成功释放、held keys/mouse均0、watchdog退出。前台复核仍0x3607de/PID32924管理员PowerShell，没有成为WoW；按最新指令失败即停，没有第二次点击、重连、AltTab、窗口操作、权限提升或其它绕过。总插入鼠标事件3、focus_click意图1、普通游戏任务输入0，首交谈未完成；SendInput成功不替代focus效果确认。没有拿此单次焦点试验作为L4/L3性能或150ms目标。
+
+本轮1Resident只读/1FocusClickTrial临时任务全删除且GetTask80070002回查；原始返回、窗口矩形、native source/payload SHA和清理在主out/acceptance/focus-click-trial-20261007，详情docs/acceptance/focus-click-trial.md。C#编译及真实受限试验已执行，diff检查；普通核心源码未改，未重新全量测试或推送。OCR/慢视觉/学习候选仍暂停、方舟配置仍待用户，禁止密钥搜索。到此停止等待，不尝试其它方法。
+
 **2026-10-07人工审核优先轮次：重连按钮当前像素匹配，但管理员遮挡窗最小化被Windows拒绝，切换复核失败后停止。** 用户最新指令暂停OCR/模板与耗时研究，使用reviewer=claude对seed-recovery/initial/evidence-2.png的人工审核：原SHA f60daaacd71fc016cf6dbc53dc7d876305326eb0e49ad56769fd477e57498737，reconnect normalized bbox x.431–.569/y.474–.526、center(.5,.5)，不能点logout y.603。新readonly-01成功：session1 inputDefault/UOI_IO=true，Wow22072/start639268827443062278/HWND0x904a6/2560×1440/DPI144一致；按钮ROI与审核图mean absRGB .00065264、独立logo .686516，仍为重连界面，未授权把旧图改称当前源。
 
 现场前台0x3607de/PID32924是“管理员: Windows PowerShell”WindowsTerminal，实际覆盖WoW且高Z。独立manual-first-task树新增固定单遮挡窗最小化闸（会话/身份/正面遮挡/空闲>5s/人类按钮检查，一次ShowWindowAsync SW_MINIMIZE，不含键鼠输入/SetForegroundWindow/系统设置），当前用户least-privilege /IT执行返回false/GetLastError5；窗口未最小化，1.5s后FG仍0x3607de，立即停止，未尝试第二切换。游戏/键鼠输入0，未取得输入执行器；不能冒称物理release ACK。两项临时任务均删除且独立GetTask80070002回查。编译通过，实测权限拒绝；不声称成功焦点恢复、重连/选角/首任务或完整套件复验。
