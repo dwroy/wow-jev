@@ -4,12 +4,21 @@ import type {MemoryFrameRegistry} from '../eye/memory-frame.js';
 import type {Collected} from '../eye/runtime.js';
 import type {ResidentMemorySample} from '../resident/protocol.js';
 import type {JsonValue,ObservedField} from '../core/protocol.js';
-import type {ActionIntent} from '../core/protocol.js';
+import type {ActionIntent,ActionCondition} from '../core/protocol.js';
 import type {NativeAction} from '../hand/protocol.js';
-import type {UiFrame,UiPorts,UiScope,UiState,HardStop} from './types.js';
+import type {UiFrame,UiPorts,UiScope,UiState,UiSkill,HardStop} from './types.js';
 import type {BodyAction} from '../layers/contracts.js';
 const hash=(v:unknown):v is string=>typeof v==='string'&&/^[0-9a-f]{64}$/.test(v);
 const object=(v:JsonValue|undefined):v is Record<string,JsonValue>=>Boolean(v&&typeof v==='object'&&!Array.isArray(v));
+/** Bind the approved character into Body's independently recollected dispatch
+ * frame, rather than relying only on the earlier routing observation. */
+export function uiCharacterConditions(skill:UiSkill,before:UiFrame):ActionCondition[]{
+  const enter=/enter[_-]?world/i.test(skill.element.purpose)||skill.element.id==='enter_world'||/^(char_select|character_select)$/.test(skill.state_id)&&/^(world|in_world)$/.test(skill.expected_effect?.state_id??'');
+  if(!enter)return[];
+  const character=before.collected.observation.fields['ui.selected_character'],value=character?.value;
+  if(character?.status!=='known'||character.source!=='cv'||character.source_observation_id!==before.collected.observation.id||character.captured_at_ms!==before.collected.bracket.started_at_ms||!object(value)||value.name!=='小啊'||value.class!=='warrior'||value.faction!=='alliance')throw new Error('ui_alliance_warrior_selected_identity_required');
+  return[{field:'ui.selected_character',op:'eq',value:structuredClone(value),max_age_ms:750}];
+}
 export interface UiResidentAdapterOptions {
   body:BodyRuntimeOptions;registry:Pick<MemoryFrameRegistry,'owns'>;scope:UiScope;
   collect:(kind:'hot'|'evidence'|'effect',signal:AbortSignal)=>Promise<Collected<ResidentMemorySample>>;
@@ -60,7 +69,7 @@ export function createResidentUiPorts(options:UiResidentAdapterOptions):UiPorts{
       const identity=options.body.currentIdentity();const state=before.collected.observation.fields['ui.state'];const signatures=before.collected.observation.fields['ui.control_signatures'];
       if(state?.status!=='known'||!skill.action&&signatures?.status!=='known')throw new Error('ui_current_state_unknown');
       const matches=before.collected.observation.fields['ui.skill_matches'];if(skill.action&&matches?.status!=='known')throw new Error('ui_current_skill_match_unknown');
-      const result=await body.execute(action,{command_id:attemptId,...identity,mode:'live',conditions:[{field:'ui.state',op:'eq',value:state.value,max_age_ms:750},...(skill.action?[{field:'ui.skill_matches',op:'eq' as const,value:matches!.value,max_age_ms:750}]:[{field:'ui.control_signatures',op:'eq' as const,value:signatures!.value,max_age_ms:750}])],signal});
+      const result=await body.execute(action,{command_id:attemptId,...identity,mode:'live',conditions:[...uiCharacterConditions(skill,before),{field:'ui.state',op:'eq',value:state.value,max_age_ms:750},...(skill.action?[{field:'ui.skill_matches',op:'eq' as const,value:matches!.value,max_age_ms:750}]:[{field:'ui.control_signatures',op:'eq' as const,value:signatures!.value,max_age_ms:750}])],signal});
       // Registry latest-frame validity may already have advanced during Body's
       // after-collect. This is the actual authenticated source kept at collect.
       const plan=plans.get(attemptId);plans.delete(attemptId);
