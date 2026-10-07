@@ -24,4 +24,8 @@ Windows同域最新观察→首MOVE完成：24为355.1117ms，27为230.0235ms，
 
 验证器新增当前Native任务面板组合（头像、羊皮纸、控件）、分词标题OCR、同源新增任务追踪。匹配NPC任务面板无需世界目标栏仍选中该NPC，仍核对面板的NPC与来源。当前面板修订14个其它已知状态负例通过；仅candidate、确认0。新增回归包含错误NPC、旧后效、缺头像、已有条目/缺前图/无图证明、输入时效与提交后禁止重复点击，专项TS67/67及typecheck通过。尚未现场复测新验证器，原图人工验收范围与软件回归分开。
 
+34原后图的Native OCR只保留“小呵”和右下NPC姓名提示，没有左上任务窗标题或接受按钮，分词修补不能单独消除此样本的漏判；当前任务面板CV给出独立替代路径。原OCR白名单还缺热身、拒绝/完成与任务目标，已补有限固定词，原漏读记录不覆盖。
+
+冻结d582cae全量Python980 passed+3原有strict xfail、0普通skip/fail，TS760/760、0skip/cancel/fail，typecheck通过。日志主`out/integration/d582cae-{python.log,ts.tap,typecheck.log}`。独立验收树最初缺忽略的capture/NPC二进制导致环境skip，补齐并完整重跑；不删/跳测试。最新审计`autonomous-audit-first-conversation/`，JSON SHA 2df449748e99518efd07c1b6243beb57894d41656bd2a0d72c28d749d67b9d06，HTML19,772,636字节，active0/治理合格确认0。
+
 安全回程43一次登出点击3/3释放，源码061343f。+15s后图为倒计时，+25s帧超时，原结果保留failed；只读44的新原图到选角，当前留在选角进行下一步开发。所有该轮临时任务删除回查，输入端退出/空账本/capture关闭已确认；只读44未取得输入端，不能冒充一次物理释放验证。
