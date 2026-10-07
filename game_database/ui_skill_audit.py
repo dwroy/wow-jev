@@ -18,15 +18,17 @@ from .runtime import RuntimeDatabase
 from .store import ValidationError, canonical, parse_json
 from .ui_skills import UiSkills, _read
 
-RENDER_VERSION = 'thumb-v2'
+RENDER_VERSION = 'thumb-v3'
 THUMBNAIL_MAX_EDGE = 640
 THUMBNAIL_QUALITY = 78
+HTML_MAX_BYTES = 20_000_000
 
 
 class Images:
     """One render's verified thumbnails; no cache survives an invocation."""
-    def __init__(self, base_dir: Path | None = None):
+    def __init__(self, base_dir: Path | None = None, *, max_edge: int = THUMBNAIL_MAX_EDGE):
         self.base_dir = base_dir.resolve() if base_dir else None
+        self.max_edge = max_edge
         self.cache = {}
 
     def link(self, proof: dict) -> str:
@@ -45,7 +47,7 @@ class Images:
                 source_width, source_height = original.size
                 thumbnail = original.convert('RGB')
             try:
-                thumbnail.thumbnail((THUMBNAIL_MAX_EDGE, THUMBNAIL_MAX_EDGE), Image.Resampling.LANCZOS)
+                thumbnail.thumbnail((self.max_edge, self.max_edge), Image.Resampling.LANCZOS)
                 output = BytesIO()
                 thumbnail.save(output, format='JPEG', quality=THUMBNAIL_QUALITY, optimize=True, subsampling=2)
                 self.cache[key] = (base64.b64encode(output.getvalue()).decode(), thumbnail.width, thumbnail.height, source_width, source_height)
@@ -65,8 +67,8 @@ def image(proof: dict | None, *, bbox: dict | None = None, title: str = '') -> s
     return Images().image(proof, bbox=bbox, title=title)
 
 
-def document(report: dict, report_sha: str, *, base_dir: Path | None = None) -> str:
-    images = Images(base_dir)
+def document(report: dict, report_sha: str, *, base_dir: Path | None = None, max_edge: int = THUMBNAIL_MAX_EDGE) -> str:
+    images = Images(base_dir, max_edge=max_edge)
     parts = ['<!doctype html><html lang="zh"><meta charset="utf-8"><title>UI Skill Audit</title>',
              '<style>body{font-family:system-ui;max-width:1200px;margin:2rem auto;padding:0 1rem}section{border-top:2px solid #aaa;margin-top:3rem}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#eee;padding:1rem}figure{margin:1rem 0;max-width:640px}.frame{position:relative;max-width:100%}.frame img{width:100%;height:auto;display:block}.bbox{position:absolute;border:2px solid red;box-sizing:border-box}code{overflow-wrap:anywhere}table{border-collapse:collapse;width:100%}td,th{border:1px solid #aaa;padding:.5rem}.pass{color:#067700}.fail{color:#ad0000}</style>',
              '<h1>UI Skill Audit</h1><p>只读离线审核。生成报告不授予输入权限。</p>',
@@ -110,11 +112,16 @@ def _render(report: dict, raw: bytes, output: Path) -> dict:
     output.mkdir(parents=True, exist_ok=True)
     json_path = output / ('ui-skill-audit-' + sha + '.json')
     html_path = output / ('ui-skill-audit-' + sha + '.' + RENDER_VERSION + '.html')
-    html = document(report, sha, base_dir=output).encode()
+    # A growing negative corpus repeats previews. Reduce presentation size,
+    # never records, matrices, history or the authoritative JSON/PNG bytes.
+    for max_edge in (640, 512, 384, 256, 192, 128, 64):
+        html = document(report, sha, base_dir=output, max_edge=max_edge).encode()
+        if len(html) < HTML_MAX_BYTES: break
+    else: raise ValidationError('UI audit: metadata and minimum previews exceed HTML size budget')
     _write_new(json_path, raw); _write_new(html_path, html)
     return {'report': {'path': str(json_path.resolve()), 'sha256': sha}, 'html': str(html_path.resolve()),
             'html_sha256': hashlib.sha256(html).hexdigest(), 'html_bytes': len(html), 'render_version': RENDER_VERSION,
-            'thumbnail': {'format': 'JPEG', 'max_edge': THUMBNAIL_MAX_EDGE, 'quality': THUMBNAIL_QUALITY},
+            'thumbnail': {'format': 'JPEG', 'max_edge': max_edge, 'quality': THUMBNAIL_QUALITY}, 'html_max_bytes': HTML_MAX_BYTES,
             'snapshot_sha256': report['snapshot_sha256'], 'activation_frozen': report['activation_frozen'], 'input_count': 0}
 
 

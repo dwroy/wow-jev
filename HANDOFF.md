@@ -8,6 +8,8 @@ Windows QPC最新源→首MOVE：首次交谈209.5049ms、接受热身195.228ms�
 
 本轮冻结d582cae完整验收：Python980 passed+3原有strict xfail、0普通skip/fail；TS760/760、0skip/fail/cancel；typecheck通过。独立验收树接入忽略的capture/NPC测试工具后完整重跑，环境skip日志保留。任务面板更新后的审计JSON SHA 2df449748e99518efd07c1b6243beb57894d41656bd2a0d72c28d749d67b9d06，HTML19,772,636字节，JPEG长边≤640及原图链接，active0/治理合格确认0。人工验收不计入该合格数。
 
+a73f5a0已正常推送唯一codex/agent-system，远端SHA核验一致；Windows Native/Resident/Recovery冻结树编译通过，OCR/恢复98项、主checkout集成35项与typecheck通过，bundle原SHA保留。后续thumb-v3为报告增长增加严格20,000,000字节上限：只递减JPEG预览长边（640至64），保留精确JSON、全部负例/记录/历史和原图；若最小预览仍超限明确失败，不删记录。四项展示不变量测试通过，包含缩图时不丢负例/技能。
+
 34原OCR只有右下姓名，缺左侧任务窗标题/按钮，不是仅分词；当前CV任务面板无需OCR成功。低频OCR白名单另补热身、拒绝/完成、作战假人及0/1与1/1目标，供新任务追踪正例识别，仍不保留任意聊天/账号文本；必须独立Native编译和检查，不把保存图OCR漏读写成恢复成功。
 
 遗留：作战假人当前实体定位与L4/L3攻击入口正在独立开发；≥2跨run独立确认、5轮学习曲线与现场成对速度比较未完成，不宣称反射学习收敛。长开发先留选角。以下为先前阶段历史记录，不代表当前首任务尚未完成。

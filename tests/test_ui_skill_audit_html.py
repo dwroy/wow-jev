@@ -55,7 +55,7 @@ def test_render_existing_report_preserves_json_legacy_html_all_negatives_and_his
     old_html = json_path.with_suffix('.html'); old_html.write_bytes(b'legacy full PNG presentation; immutable')
     result = render_report(first['report'], tmp_path / 'new-version')
     new_html = Path(result['html']); html = new_html.read_text()
-    assert new_html.name.endswith('.thumb-v2.html') and result['thumbnail']['max_edge'] == 640
+    assert new_html.name.endswith('.thumb-v3.html') and result['thumbnail']['max_edge'] == 640
     assert result['html_bytes'] == len(new_html.read_bytes())
     assert hashlib.sha256(new_html.read_bytes()).hexdigest() == result['html_sha256']
     assert json_path.read_bytes() == original_json == Path(result['report']['path']).read_bytes()
@@ -83,3 +83,22 @@ def test_each_new_render_rechecks_source_and_report_sha(tmp_path):
     capture = Path(report['skills'][0]['skill']['signature']['source']['capture']['path'])
     capture.write_bytes(b'changed original PNG')
     with pytest.raises(ValidationError, match='hash changed'): render_report(first['report'], tmp_path / 'changed-source')
+
+
+def test_growing_preview_corpus_shrinks_images_without_omitting_records(tmp_path, monkeypatch):
+    import game_database.ui_skill_audit as audit
+    from game_database.store import canonical
+    with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
+        store = UiSkills(db, create=True); prepare_governed(store, tmp_path)
+        report = store.audit_manifest()
+    large = audit.document(report, 'a' * 64, base_dir=tmp_path, max_edge=640).encode()
+    small = audit.document(report, 'a' * 64, base_dir=tmp_path, max_edge=64).encode()
+    assert len(small) < len(large)
+    monkeypatch.setattr(audit, 'HTML_MAX_BYTES', (len(large) + len(small)) // 2)
+    raw = (canonical(report) + '\n').encode()
+    result = audit._render(report, raw, tmp_path / 'bounded')
+    html = Path(result['html']).read_text()
+    assert result['html_bytes'] < result['html_max_bytes'] and result['thumbnail']['max_edge'] < 640
+    assert Path(result['report']['path']).read_bytes() == raw
+    assert html.count('class="negative-row"') == sum(len(e['negative_matrix']['rows']) for e in report['skills'])
+    assert all(e['skill']['skill_id'] in html for e in report['skills'])
