@@ -43,6 +43,7 @@ export interface ResidentSourceOwner {
 export interface ResidentIntentBinding {
   observation_id:string;intent_id:string;actor:'code'|'jev'|'brain';plan_id:string;plan_revision:number;
   task_id:string;task_revision:number;run_epoch:number;gate_id:string;action_sha256:string;
+  ui_skill?:{skill_id:string;route:'reflex'|'slow_path';knowledge_sha256:string};
 }
 export interface ResidentEvidence {
   protocol:'wow-resident';version:1;type:'evidence';session_id:string;id:string;sample:ResidentMemorySample;

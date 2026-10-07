@@ -577,6 +577,9 @@
         },
         "action_sha256": {
           "$ref": "#/definitions/sha256"
+        },
+        "ui_skill": {
+          "$ref": "#/definitions/uiSkillDispatch"
         }
       },
       "required": [
@@ -774,7 +777,91 @@
               "maximum": 1
             },
             "matches": {
-              "type": "array"
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "skill_id",
+                  "state_id",
+                  "signature_id",
+                  "status",
+                  "hard_stop",
+                  "roi_sha256",
+                  "scores"
+                ],
+                "properties": {
+                  "skill_id": {
+                    "type": "string"
+                  },
+                  "state_id": {
+                    "type": "string"
+                  },
+                  "signature_id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "hard_stop": {
+                    "type": "boolean"
+                  },
+                  "roi_sha256": {
+                    "$ref": "#/definitions/sha256"
+                  },
+                  "scores": {
+                    "type": "object"
+                  },
+                  "current_point": {
+                    "type": "object",
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "properties": {
+                      "x": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "y": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "current_rect": {
+                    "type": "object",
+                    "required": [
+                      "x",
+                      "y",
+                      "width",
+                      "height"
+                    ],
+                    "properties": {
+                      "x": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "y": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "width": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "height": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "location": {
+                    "$ref": "#/definitions/uiNpcLocation"
+                  }
+                }
+              }
             },
             "knowledge_sha256": {
               "$ref": "#/definitions/sha256"
@@ -1366,7 +1453,7 @@
             "snapshot_canonical": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 60000
+              "maxLength": 262144
             },
             "snapshot_sha256": {
               "$ref": "#/definitions/sha256"
@@ -1403,6 +1490,14 @@
                   "maximum": 4
                 }
               }
+            },
+            "negative_validation_canonical": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 262144
+            },
+            "negative_validation_sha256": {
+              "$ref": "#/definitions/sha256"
             }
           }
         }
@@ -1685,6 +1780,110 @@
           "const": false
         }
       }
+    },
+    "uiNpcLocation": {
+      "type": "object",
+      "required": [
+        "method",
+        "name",
+        "frame_id",
+        "source_qpc_ms",
+        "layout_id",
+        "roi_id",
+        "roi_sha256",
+        "calibration_sha256",
+        "nameplate_rect",
+        "score",
+        "point_semantics"
+      ],
+      "properties": {
+        "method": {
+          "const": "current_nameplate_yellow_outline_v1"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "frame_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_qpc_ms": {
+          "type": "number"
+        },
+        "layout_id": {
+          "$ref": "#/definitions/sha256"
+        },
+        "roi_id": {
+          "const": "learned-ui-npc-current-view"
+        },
+        "roi_sha256": {
+          "$ref": "#/definitions/sha256"
+        },
+        "calibration_sha256": {
+          "$ref": "#/definitions/sha256"
+        },
+        "nameplate_rect": {
+          "type": "object",
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "properties": {
+            "x": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "y": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "score": {
+          "type": "object"
+        },
+        "point_semantics": {
+          "const": "detected_body_interior"
+        }
+      },
+      "additionalProperties": false
+    },
+    "uiSkillDispatch": {
+      "type": "object",
+      "required": [
+        "skill_id",
+        "route",
+        "knowledge_sha256"
+      ],
+      "properties": {
+        "skill_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "route": {
+          "enum": [
+            "reflex",
+            "slow_path"
+          ]
+        },
+        "knowledge_sha256": {
+          "$ref": "#/definitions/sha256"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

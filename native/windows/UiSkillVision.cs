@@ -15,7 +15,7 @@ sealed class UiSkillVision
     readonly List<Entry> entries=new List<Entry>();
     public string KnowledgeSha {get;private set;}
     public void Load(string canonical,string sha) {
-        ResidentWire.Need(Encoding.UTF8.GetByteCount(canonical)<=60000&&ResidentWire.Hash(Encoding.UTF8.GetBytes(canonical))==sha,"ui_knowledge_sha_changed");
+        ResidentWire.Need(canonical.Length<=262144&&Encoding.UTF8.GetByteCount(canonical)<=786432&&ResidentWire.Hash(Encoding.UTF8.GetBytes(canonical))==sha,"ui_knowledge_sha_changed");
         var body=ResidentWire.Map(ResidentWire.Decode(canonical));ResidentWire.Need(ResidentWire.Text(body,"protocol")=="wow-ui-skill-snapshot"&&ResidentWire.Int(body,"version")==1,"ui_knowledge_protocol");
         bool features=false;if(body.ContainsKey("feature_policy")){var policy=ResidentWire.Map(body["feature_policy"]);ResidentWire.Need(policy.Count==2&&ResidentWire.Text(policy,"command")=="talk"&&ResidentWire.Text(policy,"scope")=="talk_jaina_layered","ui_feature_policy_rejected");features=true;}
         var skills=body["skills"] as object[];ResidentWire.Need(skills!=null&&skills.Length<=24,"ui_signature_capacity");var next=new List<Entry>();

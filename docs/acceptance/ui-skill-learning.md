@@ -16,6 +16,16 @@
 
 原11.186秒冷恢复来自PrintWindow，不能写成WGC首帧。实际QPC分段为观察宿主流水3250.9341ms、观察结束到输入宿主开始4069.3476ms、输入宿主到首发送3865.8517ms；同域连续段合计11186.1334ms。旧日志没有足够独立事件再把宿主启动、CV、OCR逐项无重叠细分，缺项保留unknown。协调器discover9551.1195ms、observe6658.5267ms、input_transport7892.4429ms是另一时钟域的往返跨度，不与QPC加减；gate0.0788ms不是大头。
 
+## 本轮审计期间的现场复核
+
+`jaina-talk-02` 发现实际退回选角，0输入。`jaina-reenter-03` 发出一次进入世界点击；`jaina-controls-04` 发出一次教程操作说明确认。后图分别为世界操作说明与“观察四周”，但原 UI expected_effect 绑定不合格，自动结果仍保持 unconfirmed，不补录为可晋升确认。`jaina-orient-07` 经 L4/L3 发出11/11事件且释放，独立后图教程变为交谈，程序报告当前教程转换 confirmed；这仍不是治理 v2 合格晋升样本。
+
+本轮三项物理动作的最新源 QPC→首 SendInput 完成为181.1080、283.8340、170.6158ms，n=3、中位数181.1080ms，150ms目标未通过。此范围包含最新源后的处理与发送，不含之前的恢复规划、Jev/Seed调用或未对时 compositor→回调延迟。进入世界阶段实际调用1次Jev文本及2次Seed后图识别（1成功、1失败）；操作说明调用1次Jev，视角路径0模型。失败请求计入调用数。
+
+`jaina-talk-03` 按 Claude 最后一次人工审核源帧准备，但当前姓名板随动画移位，固定位置签名拒绝，0交谈输入。新旧图原件分别在 `jaina-orient-07/frame-3-evidence-12.png` 与 `jaina-talk-03/frame-1-evidence-3.png`，不能把旧点位强行当当前目标。后续必须改为当前帧姓名板与高亮躯干检测。三次被拒交谈入口均未发输入，各次宿主释放、空账本、输入进程退出、capture关闭与临时任务删除/回查已确认。
+
+机器可读原件汇总：主 checkout `out/acceptance/ui-skill-learning-20261007/audit-phase-field-observed-summary.json`。未完成五轮；active晋升0。
+
 ## 学习治理停止边界
 
 用户最新16项审计要求是后续验收基准。所有晋升先冻结；原late-review、固定NPC坐标、self/seed批准和未绑目标签名的旧记录只能候选证据。两轮/五轮真实练习未完成，不能拿模拟成功填补或报告零模型收敛。需要按P0修复审核链、独立重算目标后图、多run成功率和全状态负例，再产HTML报告由claude/user批准；之后才恢复五轮练习。
