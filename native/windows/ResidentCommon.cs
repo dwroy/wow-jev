@@ -15,7 +15,7 @@ using WowJev.Input;
 
 static class ResidentWire
 {
-    public static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength=262144, RecursionLimit=64 };
+    public static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength=1048576, RecursionLimit=64 };
     public static Dictionary<string,object> Obj(params object[] values) {var r=new Dictionary<string,object>();for(int i=0;i<values.Length;i+=2)r.Add((string)values[i],values[i+1]);return r;}
     public static Dictionary<string,object> Map(object o){var r=o as Dictionary<string,object>;Need(r!=null,"object_required");return r;}
     public static object Field(Dictionary<string,object> d,string k){Need(d.ContainsKey(k),"missing_"+k);return d[k];}

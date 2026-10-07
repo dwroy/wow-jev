@@ -17,6 +17,12 @@ static class ResidentSafetyFixture
     static int Main(string[] args){try{
         if(args.Length!=1)throw new Exception("fixed_fixture_directory_required");var schema=new ResidentSchema(Path.Combine(args[0],"resident-session-v1.schema.json"),Path.Combine(args[0],"native-input-v1.schema.json"));
         schema.Definition(Config(),"launch_config");checks++;
+        var largePair=ResidentWire.Obj("snapshot_canonical",new string('x',140000),"negative_validation_canonical",new string('y',140000));
+        string largeWire=ResidentWire.Encode(largePair);
+        Need(largeWire.Length>262144&&largeWire.Length<1048576,"paired_knowledge_exceeds_old_serializer_budget");
+        Need(ResidentWire.Same(ResidentWire.Decode(largeWire),largePair),"paired_knowledge_roundtrip_within_wire_budget");
+        bool oversizeRejected=false;try{ResidentWire.Decode("\""+new string('x',1048576)+"\"");}catch(ArgumentException){oversizeRejected=true;}
+        Need(oversizeRejected,"serializer_total_wire_budget_remains_bounded");
         var original=new byte[6*4*4];for(int i=0;i<original.Length;i++)original[i]=(byte)i;
         var cropped=ResidentRoiBytes.Slice(original,6,4,new Rectangle(2,1,3,2));
         Need(cropped.Length==24&&cropped[0]==32&&cropped[11]==43&&cropped[12]==56&&cropped[23]==67,"batched_roi_exact_origin_rows");
@@ -27,7 +33,7 @@ static class ResidentSafetyFixture
         Need(!ResidentFrameClock.Fresh(100,125,120,130,-1),"future_arrival_rejected");
         Need(!ResidentFrameClock.Fresh(100,110,120,Double.NaN,-1),"invalid_render_rejected");
         foreach(string field in new[]{"nonce","pipe_name","session_id","channel_generation"}){var invalid=Config();invalid[field]="bad";Reject(()=>schema.Definition(invalid,"launch_config"),field);}
-        foreach(int value in new[]{0,300001}){var invalid=Config();invalid["duration_ms"]=value;Reject(()=>schema.Definition(invalid,"launch_config"),"run_budget");}
+        foreach(int value in new[]{0,950001}){var invalid=Config();invalid["duration_ms"]=value;Reject(()=>schema.Definition(invalid,"launch_config"),"run_budget");}
         var unsafeConfig=Config();unsafeConfig["arbitrary_executable"]="cmd.exe";Reject(()=>schema.Definition(unsafeConfig,"launch_config"),"unowned_launch");
         foreach(string op in new[]{"heartbeat","observe","cancel","release_all","shutdown","status"}){schema.Definition(Command(op),"command");checks++;}
         foreach(string op in new[]{"set_foreground","background_key","run_shell","update_install"})Reject(()=>schema.Definition(Command(op),"command"),"unsupported_operation");

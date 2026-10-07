@@ -16,6 +16,19 @@ export function selectKnownTutorialControl(request:UiChoiceRequest,frame:UiFrame
   return unique.length===1?{status:'selected',skill_id:unique[0]!.skill_id,source_observation_id:frame.source.observation_id,source_frame_id:frame.source.frame_id,decision_owner:'code'}:null;
 }
 type Scene={scene:string;confidence:number;stop_reason:string|null;controls:Array<{id:string;status:string;rect:Bbox|null;confidence:number}>};
+/** Trial entry uses current character facts and the current native button plus
+ * button-local OCR. It selects a candidate; Body still takes a fresh source. */
+export function selectCurrentCharacterEntry(request:UiChoiceRequest,frame:UiFrame):Extract<UiChoice,{status:'selected'}>|null{
+  if(request.goal_state_id!=='in_world'||!frame.source.capture||canonical(request.source)!==canonical(frame.source)||frame.state?.id!=='char_select'||frame.hard_stop||frame.state.hard_stop||!dispatchRecognition(frame)||frame.recognition?.modal_status==='present')return null;
+  const character=frame.collected.observation.fields['ui.selected_character'],evidence=frame.native_evidence;
+  if(character?.status!=='known'||character.source!=='cv'||character.source_observation_id!==frame.source.observation_id||character.captured_at_ms!==frame.collected.bracket.started_at_ms||canonical(character.value)!==canonical({name:'小呵',class:'warrior',faction:'alliance'})||!evidence||evidence.artifact.sha256!==frame.source.capture.sha256||evidence.sample.memory_frame.frame_id!==frame.source.frame_id||evidence.ocr?.status!=='available'||!Array.isArray(evidence.ocr.items))return null;
+  const items=evidence.ocr.items as Array<Record<string,unknown>>;
+  const eligible=request.candidates.filter(s=>s.state_id==='char_select'&&s.element.purpose==='enter_world'&&!s.action&&executableUiSkill(s,false,true)&&s.governance?.user_revoked!==true&&frame.elements.some(e=>e.id===s.element.id&&e.enabled&&e.signature_sha256===s.signature.sha256&&e.layout_id===frame.source.layout_id)).filter(s=>{
+    const b=s.element.bbox,x=b.x*frame.source.width,y=b.y*frame.source.height,w=b.width*frame.source.width,h=b.height*frame.source.height;
+    return items.some(t=>t.text==='进入魔兽世界'&&[t.x,t.y,t.width,t.height].every(n=>typeof n==='number'&&Number.isFinite(n))&&Number(t.width)>0&&Number(t.height)>0&&Number(t.x)>=x&&Number(t.y)>=y&&Number(t.x)+Number(t.width)<=x+w&&Number(t.y)+Number(t.height)<=y+h);
+  });
+  return eligible.length===1?{status:'selected',skill_id:eligible[0]!.skill_id,source_observation_id:frame.source.observation_id,source_frame_id:frame.source.frame_id,decision_owner:'code'}:null;
+}
 /** Seed confirms a normal current scene; Native still owns identity and pixels.
  * This selects an existing candidate, never creates a CV field or active grant. */
 export function selectExistingSceneControl(request:UiChoiceRequest,frame:UiFrame,model:Scene):Extract<UiChoice,{status:'selected'}>|null{

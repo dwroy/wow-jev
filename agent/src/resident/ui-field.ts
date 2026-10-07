@@ -32,7 +32,7 @@ import {verifyProposalPixels,independentProposalAnchors} from '../ui-skills/prop
 import {prepareUiRunRegistration,registeredUiProvenance,frozenRunSkills,type UiRuntimeContext,type UiRunRegistration} from '../ui-skills/run-provenance.js';
 import {freshTutorialObservation} from '../ui-skills/tutorial-observation.js';
 import {unverifiedLayerAttempt} from '../ui-skills/layer-attempt.js';
-import {selectExistingSceneControl,selectKnownTutorialControl} from '../ui-skills/scene-choice.js';
+import {selectExistingSceneControl,selectKnownTutorialControl,selectCurrentCharacterEntry} from '../ui-skills/scene-choice.js';
 const hash=(x:string|Buffer)=>createHash('sha256').update(x).digest('hex');
 const run=promisify(execFile);
 const fixedRoot=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
@@ -113,6 +113,7 @@ export async function uiField(args:string[]){
     const safe=request.candidates.filter(s=>s.state_id==='game_menu'&&s.signature.sha256===latest.state!.signature_sha256&&s.review.status==='approved'&&s.review.reviewer==='self'&&s.governance?.user_revoked!==true&&s.element.purpose==='logout'&&s.element.label==='登出'&&!s.action&&s.expected_effect?.state_id==='char_select'&&latest.elements.some(e=>e.id===s.element.id&&e.signature_sha256===s.signature.sha256&&e.enabled&&e.layout_id===latest.source.layout_id));
     if(safe.length===1){const choice:UiChoice={status:'selected',skill_id:safe[0]!.skill_id,source_observation_id:request.source.observation_id,source_frame_id:request.source.frame_id,decision_owner:'code'};await append('code_bounded_safe_logout_selected',{choice,source:request.source,basis:'current static logout button and independent main-menu title reviewed by self; slow_path only, no reflex eligibility'});return choice;}
    }
+   if(vision){const code=selectCurrentCharacterEntry(request,latest);if(code){await append('code_current_character_enter_selected',{choice:code,source:request.source,basis:'same-source current selected name/class/faction, native button and button OCR; slow_path, no reflex grant'});return code;}}
    if(vision){const code=selectKnownTutorialControl(request,latest);if(code){await append('code_existing_tutorial_control_selected',{source:request.source,choice:code,basis:'current_native_expected_panel_signature_and_same_frame_button_ocr; no_reflex_grant'});return code;}}
    const modelDir=join(directory,'model-'+ ++counter),requestPath=modelDir+'.request.json';await writeFile(requestPath,JSON.stringify(request)+'\n',{flag:'wx'});
    if(!vision){const task=await run(python,['-B','-m','perception.ui_skill_choice','--request',requestPath,'--out',modelDir],{cwd:fixedRoot,timeout:15000,maxBuffer:262144}).catch(async()=>({stdout:await readFile(join(modelDir,'result.json'),'utf8')}));const response=JSON.parse(task.stdout) as {status:string;choice:{skill_id:string}|null;api_calls?:unknown};await append('jev_model_decision',{source:request.source,artifact:modelDir,model:'doubao-seed-2-0-mini-260428',api_calls:response.api_calls??null,adoption:'candidate ID; fresh native match remains required'});return response.status==='selected'&&response.choice?{status:'selected',skill_id:response.choice.skill_id,source_observation_id:request.source.observation_id,source_frame_id:request.source.frame_id}:{status:'unavailable',reason:'jev_provider_failed'};}
@@ -188,7 +189,7 @@ export async function uiField(args:string[]){
    }
    const layerResult=result as {result:{status:string}};result={...layerResult,status:layerResult.result.status};
   }else if(command==='engage'||command==='approach'){
-   const frame=await collect('hot');if(frame.state?.id!=='tutorial_attack_training'||frame.collected.observation.fields['target.entity_kind']?.value!=='training_dummy'||frame.collected.observation.fields['target.world_npc_surface']?.status!=='known'){await collect('evidence',true);throw new Error('training_current_dummy_and_instruction_required');}
+   let frame=await collect('hot');if(frame.collected.observation.fields['target.entity_kind']?.value!=='training_dummy')frame=await collect('evidence',true);if(frame.state?.id!=='tutorial_attack_training'||frame.collected.observation.fields['target.entity_kind']?.value!=='training_dummy'||frame.collected.observation.fields['target.world_npc_surface']?.status!=='known'){await collect('evidence',true);throw new Error('training_current_dummy_and_instruction_required');}
    const approaching=command==='approach';
    if(approaching){await append('persistent_forward_binding',{key:'W',source_artifact:bindingReference,source_semantics:'previous same-character keyboard instruction, persistent frozen BodyProfile; not a current CV keybinding claim',current_ground_source:frame.collected.observation.fields['player.ground_source']??null});}
    const task={id:approaching?'tutorial-approach-warmup':'tutorial-engage-warmup',revision:1,kind:'sequence' as const,params:{},max_duration_ms:12000,max_behaviors:1,behaviors:[{id:'engage-local-training-dummy',kind:approaching?'approach_target' as const:'engage_target' as const,params:{target_signature:'visible-name:作战假人',action_duration_ms:approaching?150:80},max_duration_ms:7000,max_actions:1}]};

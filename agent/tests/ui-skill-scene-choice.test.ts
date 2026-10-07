@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createUiDemo} from '../src/ui-skills/demo.js';
-import {selectExistingSceneControl,selectKnownTutorialControl} from '../src/ui-skills/scene-choice.js';
+import {selectExistingSceneControl,selectKnownTutorialControl,selectCurrentCharacterEntry} from '../src/ui-skills/scene-choice.js';
 import {UiSkillRuntime} from '../src/ui-skills/runtime.js';
 test('Seed normal scene selects existing current candidate without modal guard or active qualification',async()=>{
  const d=createUiDemo(),f=await d.ports.collect('evidence',new AbortController().signal),s=d.skills[0]!;
@@ -28,4 +28,14 @@ test('a newly known evidence frame refreshes candidates after an unknown first h
  d.ports.chooseSeed=async r=>{assert.equal(r.state?.id,'character_select');assert.equal(r.candidates[0]?.skill_id,'enter_world');return{status:'selected',skill_id:'enter_world',source_observation_id:r.source.observation_id,source_frame_id:r.source.frame_id,decision_owner:'code'};};
  const r=await new UiSkillRuntime({run_id:'ui-test',mode:'simulated',authorized:true,autonomous_trial_authorized:true,scope:d.skills[0]!.scope},d.ports).step(new AbortController().signal);
  assert.equal(r.owner,'code');assert.equal(r.input_issued,false);assert.equal(d.executions,1);assert.equal(r.attempt!.route,'simulated');
+});
+test('character entry requires same-source alliance warrior name and Native button-local OCR',async()=>{
+ const d=createUiDemo(),f=await d.ports.collect('evidence',new AbortController().signal),s=d.skills[0]!;
+ f.state!.id='char_select';s.state_id='char_select';s.element.purpose='enter_world';s.status='candidate';f.recognition!.modal_status='unknown';
+ f.collected.observation.fields['ui.selected_character']={status:'known',value:{name:'小呵',class:'warrior',faction:'alliance'},source:'cv',confidence:1,source_observation_id:f.source.observation_id,captured_at_ms:f.collected.bracket.started_at_ms};
+ const b=s.element.bbox;f.native_evidence={artifact:{sha256:f.source.capture!.sha256},sample:{memory_frame:{frame_id:f.source.frame_id}},ocr:{status:'available',items:[{text:'进入魔兽世界',x:b.x*f.source.width,y:b.y*f.source.height,width:b.width*f.source.width,height:b.height*f.source.height}]}} as unknown as NonNullable<typeof f.native_evidence>;
+ const r={run_id:'test',mode:'live' as const,scope:f.scope,source:f.source,state:f.state,candidates:[s],failure_streak:0,goal_state_id:'in_world'};
+ assert.equal(selectCurrentCharacterEntry(r,f)?.decision_owner,'code');assert.equal(s.status,'candidate');
+ for(const mutate of [(x:typeof f)=>{x.collected.observation.fields['ui.selected_character']!.value={name:'其它角色',class:'warrior',faction:'alliance'}},(x:typeof f)=>{x.collected.observation.fields['ui.selected_character']!.source_observation_id='old'},(x:typeof f)=>{x.collected.observation.fields['ui.selected_character']!.captured_at_ms-=1},(x:typeof f)=>{x.recognition!.modal_status='present'},(x:typeof f)=>{x.native_evidence!.sample.memory_frame.frame_id='old'},(x:typeof f)=>{(x.native_evidence!.ocr!.items as Array<Record<string,unknown>>)[0]!.x=-1},(x:typeof f)=>{x.elements=[]}]){const x=structuredClone(f);mutate(x);assert.equal(selectCurrentCharacterEntry(r,x),null);}
+ s.review.status='rejected';assert.equal(selectCurrentCharacterEntry(r,f),null);
 });
