@@ -38,7 +38,10 @@ sealed class UiSkillVision
             if(skill.ContainsKey("element"))e.Element=ResidentWire.Map(skill["element"]);if(skill.ContainsKey("action")&&skill["action"]!=null)e.Action=ResidentWire.Map(skill["action"]);
             var authority=skill.ContainsKey("review")?ResidentWire.Map(skill["review"]):review;e.SupervisorReviewed=ResidentWire.Text(authority,"status")=="approved"&&(ResidentWire.Text(authority,"reviewer")=="user"||ResidentWire.Text(authority,"reviewer")=="claude");
             e.AuthorityReview=authority;
-            e.RecognizeApproved=hardStop||(status=="active"||status=="candidate")&&ResidentWire.Text(review,"status")=="approved";
+            bool revoked=skill.ContainsKey("governance")&&ResidentWire.Map(skill["governance"]).ContainsKey("user_revoked")&&ResidentWire.Bool(ResidentWire.Map(skill["governance"]),"user_revoked");
+            // Pending model/self proposals may be recognized from actual new
+            // pixels under autonomous policy; recognition never grants active.
+            e.RecognizeApproved=hardStop||!revoked&&ResidentWire.Text(review,"status")!="rejected";
             if(e.State=="in_world"&&!hardStop){quarantine.Add(ResidentWire.Obj("skill_id",e.Id,"reason","generic_in_world_requires_independent_world_detector"));e.RecognizeApproved=false;}
             ResidentWire.Need(e.Width>=1&&e.Width<=64&&e.Height>=1&&e.Height<=32&&e.MaxError>=0&&e.MaxError<=12&&e.MaxFraction>=0&&e.MaxFraction<=.1,"ui_template_bounds");
             e.Template=Convert.FromBase64String(ResidentWire.Text(sig,"rgb_base64"));ResidentWire.Need(e.Template.Length==e.Width*e.Height*3&&ResidentWire.Hash(e.Template)==ResidentWire.Text(sig,"template_sha256"),"ui_template_sha_changed");

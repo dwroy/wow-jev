@@ -15,7 +15,7 @@ Native 回执及独立后图时不会生成游戏成功证据。
 - 该技能的 scope/state/immutable signature SHA、原正例和其它全部已知状态
   的每个源图 SHA；每个负例恰出现一次、实际比较为不匹配且通过；
 - 客观确认历史（至少两次、至少两个 run、最近 issued/released 尝试成功率 ≥80%）、
-  没有用户撤销、无冻结，以及所有比较状态的模板已装入（未审核模板只作歧义比较，不成为可执行识别结果）；
+  没有用户撤销、无冻结，以及所有比较状态的模板已装入（pending/self/Seed 模板可识别当前像素，识别不授予 active；多个状态匹配为歧义）；
 - `source_skill_canonical/source_skill_sha256`、
   `signature_original_canonical` 原字节 SHA；逐项比原 RGB、阈值、bbox、anchors、
   element/action、review、modal guard。compact 不能保留旧 SHA 却替换素材；
@@ -86,7 +86,7 @@ bash tools/ui_skill_governance_build.sh
 out/acceptance/native-governance/UiSkillGovernanceFixture.exe
 ```
 
-2026-10-07 的 29 项纯合成故障测试通过，覆盖完整/缺失/失败的负例、self客观采纳、用户撤销、
+2026-10-07 的 31 项纯合成故障测试通过，覆盖完整/缺失/失败的负例、self客观采纳、用户撤销、
 冻结、素材/动作/guard 替换、未知明暗模态、匹配裕度、改名硬停、坏条目隔离、
 固定 NPC 与 primitive 绑定等边界。另有保存图 locator 8 项回归及完整
 WinInput/Watchdog/ResidentHost/Relay 编译通过。fixture 元数据是显式离线输入，
