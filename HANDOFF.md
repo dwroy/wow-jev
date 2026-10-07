@@ -370,3 +370,5 @@ UI 和世界屏幕交互仍使用原同帧目标、布局、自由光标条件�
 ## 2026-10-07：视觉 JSON 输出约束与一次解析重试（离线）
 
 独立 `.worktrees/vision-json-retry` 从331eea4实现Recovery promptv2/UI promptv5，保旧坐标schema1/4与硬停/像素复核。实际Chat请求带json_object，首个完整对象可从围栏/说明提取，原输出与提取证据不覆盖；仅invalid_json同原图最多重试一次，共用15s API预算，attempted/completed及每次请求/失败原文保留。双语法失败是无模型结果/零候选的nonfatal unknown，CLI exit0让上层继续只读观察，不合成成功或刷新QPC。其它安全/语义错误不重试；中央选角模态不得产生enter_world候选。专项Python81/81、py_compile、diff check通过；未读密钥/访问桌面/调用模型/输入或推送。详见docs/ui-skill-learning.md本次JSON段落；主负责人继续集成和现场验收。
+
+**2026-10-07自主运行停止：controls19/20/21三轮识别失败，0教程确认输入；21更新self candidate的按钮/不透明键鼠锚点后仍unknown，不能授active。旧源码run17已发进入世界且后图到船上，18只读见教程键位弹窗；尚未交谈。新增同帧Native+按钮OCR只允许普通教程candidate，决策者记code并保留slow_path闸，未放宽认证/模态present或晋升。类型/OCR缺失拒绝与治理专项已通过；修补合入后须完整回归并仅推codex/agent-system。现场已停止，后续无第四次尝试。**

@@ -36,7 +36,7 @@ export interface UiProposal {
 }
 export interface UiChoiceRequest {run_id:string;mode:UiMode;scope:UiScope;source:UiSource;state:UiState|null;candidates:UiSkill[];failure_streak:number;goal_state_id:string|null}
 export type UiChoice=
-  |{status:'selected';skill_id:string;source_observation_id:string;source_frame_id:string}
+  |{status:'selected';skill_id:string;source_observation_id:string;source_frame_id:string;decision_owner?:'code'}
   |{status:'proposed';proposal:UiProposal}
   |{status:'unavailable'|'blocked'|'unknown';reason:string;hard_stop?:HardStop};
 export interface UiReviewRequest {request_id:string;run_id:string;reason:string;scope:UiScope;frame:UiSource;state:UiState|null;goal_state_id:string|null;candidates:Array<{skill_id:string;element_id:string;bbox:Bbox}>;proposal:UiProposal|null;input_allowed:false}
@@ -51,7 +51,7 @@ export interface UiAttempt {
 }
 export interface UiBodyOutcome extends BodyOutcome {dispatch_frame:UiFrame|null;compiled_action?:NativeAction;intent?:ActionIntent}
 export interface UiStep {
-  status:'completed'|'blocked'|'cancelled'|'failed';reason:string;owner:'reflex'|'jev'|'seed'|'review'|null;skill_id:string|null;
+  status:'completed'|'blocked'|'cancelled'|'failed';reason:string;owner:'reflex'|'code'|'jev'|'seed'|'review'|null;skill_id:string|null;
   input_issued:boolean;effect_confirmed:boolean;game_effect:'confirmed'|'unverified';release:'confirmed'|'unconfirmed';attempt:UiAttempt|null;review_request:UiReviewRequest|null;
 }
 export interface UiPorts {
