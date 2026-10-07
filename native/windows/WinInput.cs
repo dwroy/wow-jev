@@ -18,6 +18,7 @@ static class WinInput
     const int MaxRecords = 1024;
     const int HeartbeatLeaseMs = 1000;
     const int MaxDurationMs = 5000;
+    const int ClickSettleMs = 150;
     static readonly Regex IdPattern = new Regex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", RegexOptions.CultureInvariant);
 
     sealed class InputFailure : Exception
@@ -54,6 +55,8 @@ static class WinInput
         public long Requested, Inserted;
         public bool OwnedEver;
         public bool ReleaseAccounted;
+        public volatile bool ClickMoveIssued;
+        public double ClickMoveFinishedMs = -1, ClickDownStartedMs = -1, ClickDownFinishedMs = -1, ClickUpStartedMs = -1, ClickUpFinishedMs = -1;
         public volatile bool FocusClickStarted;
         public volatile bool FocusObserved;
         public bool TimelineMousePointSet, TimelineMouseDownIssued;
@@ -255,10 +258,12 @@ static class WinInput
                     !safety.ContainsKey("process_start_ticks") || Convert.ToInt64(safety["process_start_ticks"], CultureInfo.InvariantCulture) != targetStartTicks)
                     throw new InputFailure("window_identity_unknown", "Focus recovery target identity was not confirmed");
                 string reason = (string)safety["reason"];
-                // Our first SendInput updates this session's last-input timestamp.
-                // Afterwards visibility is still required; idle alone is not reused
-                // as a human-input classifier and is checked only before this batch.
-                if (!(bool)safety["allowed"] && !(work.FocusClickStarted && reason == "user_recent_input"))
+                // The separate owned MOVE also resets session idle. Initial idle
+                // is checked before MOVE; during settle require the pointer to
+                // remain at the target and retain all first-DOWN safety checks.
+                if (work.ClickMoveIssued && !work.FocusClickStarted && !Native.CursorAtClientPoint(hwnd, work.X, work.Y))
+                    throw new InputFailure("cursor_moved_after_owned_move", "Cursor changed during the click settle interval");
+                if (!(bool)safety["allowed"] && !((work.FocusClickStarted || work.ClickMoveIssued) && reason == "user_recent_input"))
                     throw new InputFailure(reason, "Focus recovery safety checks failed");
                 if (!Native.RecoveryPointOwnedByWindow(hwnd, work.X, work.Y))
                     throw new InputFailure("recovery_point_not_target", "Focus recovery point is not owned by target window");
@@ -319,6 +324,8 @@ static class WinInput
                 CheckSafe(work, state);
                 if (Native.IsMouseDown(work.Button)) throw new InputFailure("user_button_held", "Mouse button is already held; no cursor move issued");
                 StartTimestamp(work); SendEvents(work, new[] { Native.MouseAbsolute(hwnd, x, y) });
+                if (work.Kind == "mouse_click" || work.Kind == "focus_click")
+                { work.ClickMoveFinishedMs = work.LastSendFinishedMs; work.ClickMoveIssued = true; }
             });
         }
         void PressOwned(Work work)
@@ -344,13 +351,32 @@ static class WinInput
                 CheckSafe(work, state);
                 List<Native.InputPacket> packets = new List<Native.InputPacket>();
                 if (work.Keys != null) foreach (KeySpec key in work.Keys) packets.Add(Native.KeyEvent(key, false));
-                if (work.Kind == "focus_click" || work.Kind == "mouse_click")
-                    packets.AddRange(Native.ClickBatch(Native.MouseAbsolute(hwnd, work.X, work.Y), work.Button));
-                else if (work.Button != 0) packets.Add(Native.MouseButton(work.Button, false));
+                if (work.Button != 0) packets.Add(Native.MouseButton(work.Button, false));
                 if (work.Kind == "focus_click")
                 { Interlocked.Exchange(ref work.FocusActivationDeadlineMs, Clock.NowMs + Math.Min(work.Duration, 75)); work.FocusClickStarted = true; }
+                if (work.ClickMoveIssued) work.ClickDownStartedMs = Clock.PreciseMs;
                 SendEvents(work, packets.ToArray());
+                if (work.ClickMoveIssued) work.ClickDownFinishedMs = work.LastSendFinishedMs;
             });
+        }
+        void RunClick(Work work)
+        {
+            MoveBeforeButton(work, work.X, work.Y);
+            // QPC rounding cannot shorten the required 150ms MOVE-to-DOWN gap.
+            double deadline = work.ClickMoveFinishedMs + ClickSettleMs;
+            while (Clock.PreciseMs < deadline)
+            {
+                if (work.Cancel.WaitOne(5)) throw new InputFailure(work.CancelReason, "Action cancelled during click settle");
+                CheckSafe(work, store.Read());
+            }
+            CheckSafe(work, store.Read());
+            PressOwned(work);
+            double holdUntil = work.ClickDownFinishedMs + work.Duration;
+            while (Clock.PreciseMs < holdUntil)
+            {
+                if (work.Cancel.WaitOne(5)) throw new InputFailure(work.CancelReason, "Action cancelled during click hold");
+                CheckSafe(work, store.Read());
+            }
         }
         void WaitDuration(Work work)
         {
@@ -468,7 +494,11 @@ static class WinInput
             {
                 try
                 {
+                    double upStarted = Clock.PreciseMs;
                     last = store.ReleaseOwned("executor_release");
+                    double upFinished = Clock.PreciseMs;
+                    if (work != null && work.ClickMoveIssued && last.Requested > 0 && last.Inserted > 0)
+                    { work.ClickUpStartedMs = upStarted; work.ClickUpFinishedMs = upFinished; work.LastSendFinishedMs = upFinished; }
                     requested += last.Requested; inserted += last.Inserted;
                     if (work != null) { Interlocked.Add(ref work.Requested, last.Requested); Interlocked.Add(ref work.Inserted, last.Inserted); }
                     if (last.Released)
@@ -499,10 +529,10 @@ static class WinInput
                         if (!Native.CursorWithinClient(hwnd)) throw new InputFailure("cursor_outside_client", "Wheel requires cursor within the target client");
                         return new[] { Native.MouseWheel(work.Delta) };
                     });
-                else if (work.Kind == "focus_click") { PressOwned(work); WaitDuration(work); }
+                else if (work.Kind == "focus_click") { RunClick(work); }
                 else if (work.Kind == "mouse_click")
                 {
-                    PressOwned(work); WaitDuration(work);
+                    RunClick(work);
                 }
                 else if (work.Kind == "mouse_drag")
                 {
@@ -552,6 +582,10 @@ static class WinInput
             reply.Add("input_timing", work.FirstSendStartedMs < 0 ? null : Obj("clock", "windows_qpc",
                 "first_send_started_ms", work.FirstSendStartedMs, "first_send_finished_ms", work.FirstSendFinishedMs,
                 "last_send_finished_ms", work.LastSendFinishedMs));
+            if (work.ClickMoveIssued) reply.Add("click_timing", Obj("clock", "windows_qpc", "settle_min_ms", ClickSettleMs, "hold_requested_ms", work.Duration,
+                "move_finished_ms", work.ClickMoveFinishedMs, "down_started_ms", work.ClickDownStartedMs < 0 ? null : (object)work.ClickDownStartedMs,
+                "down_finished_ms", work.ClickDownFinishedMs < 0 ? null : (object)work.ClickDownFinishedMs,
+                "up_started_ms", work.ClickUpStartedMs < 0 ? null : (object)work.ClickUpStartedMs, "up_finished_ms", work.ClickUpFinishedMs < 0 ? null : (object)work.ClickUpFinishedMs));
             lock (stateLock) if (active == work) active = null;
             SendReply(work.Command, reply);
         }

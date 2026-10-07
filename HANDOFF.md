@@ -312,3 +312,12 @@ WSL运行TypeScript编排和Python低频视觉，Windows运行C#5/.NET4截图、
 第3阶段可按`docs/play-runtime.md`体验纯模拟与当前4K正式服有限代码序列，眼单独观察仍见`docs/eye-runtime.md`。第4阶段可按`docs/jev-runtime.md`体验纯模拟与只读入口；第5–7工程可按`docs/system-runtime.md`体验三层模拟、真实日志学习与版本切换。用户已明确先推进后续工程，后续补第4阶段正式服及NPC感知/动作验收。actor=jev必需decision_id，模型只选候选ID、返回后重新采样，再复用统一CodePlay与手。默认真实槽位为空，未知字段只wait/escalate；不能把离线模型probe的人为观察用于live动作。
 
 对移动、跳跃、转向暂不自动确认游戏效果；背包CV仅在已验收布局适用。个人长期记忆按 `/home/dai/agent-memory/SPEC.md` 操作，进度只写项目文件。
+
+
+## 2026-10-07 重连点击分段时序重试
+
+按 reviewer=claude 对前帧的审核，仅一次重试；鼠标原语改为独立MOVE→Windows QPC等待≥150ms并持续安全复核→DOWN持请求时长→独立账本UP。duration_ms明确是持有时长，不是释放后的等待。首次SendInput边界为MOVE，click_timing另存DOWN/UP，不冒充按钮效果。焦点恢复MOVE不提前触发激活期限，首DOWN前仍保留自由光标/人类按钮/点位核验。
+
+现场 out/acceptance/click-retry-20261007：同源审核帧SHA85b8f0…a441a76与当前重连按钮/Logo匹配；FG=0x904a6，PID22072，2560×1440/DPI144。请求hold80；MOVE完成→DOWN开始158.4412ms，DOWN完成→UP开始88.4799ms；3/3事件，独立release_all+空账本+executor退出。Windows本地以UP结束为参考预约+1/+3/+8秒图片，实际capture开始+1094.649/+3182.840/+8094.750ms（偏差保留）。+1图显示刷新服务器列表，+8图角色列表加载，随后step-3角色选择CV核实小啊/warrior/alliance。恢复有意maxActions=1，返回recovery_action_budget；input_issued=1、effects_confirmed=1、release=confirmed，不是游戏交谈完成。4个一次性WowJev-SessionRecovery任务均删除并GetTask回查。相关83 TS、27 Python、typecheck与Windows编译通过；全量回归/全局Body timeline覆盖继续整合，未推送。
+
+用户新增操作技能自学习A–F并授权反复登出/进世界和退出/战网重启练习；先已报告本次重连成功，下一步docs/ui-skill-learning.md设计、agent.sqlite技能图/独立学习者、分层路由/审核队列、常驻Windows签名识别、最小2轮练习。凭据/验证/协议/更新仍硬停止，Seed配置等待通知，不查其它密钥。

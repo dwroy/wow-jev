@@ -12,7 +12,7 @@ function processKind(target:RecoveryTarget):'wow'|'battle_net' {validateTarget(t
 export function validateRecoveryOptions(options:RecoveryOptions):void {
   if(!options.authorized||!['recover','launch'].includes(options.command)||!['offline','live'].includes(options.mode)||!isAbsolute(options.directory)||!options.runId||options.targetCharacter!=='小啊')throw new Error('recovery_explicit_authorization_alliance_warrior_required');
   if(options.focusVisibilityMode!==undefined&&!['complete_client','visible_point'].includes(options.focusVisibilityMode))throw new Error('recovery_focus_visibility_mode');
-  integer(options.maxDurationMs,180000,180000);integer(options.stageTimeoutMs,30000,30000);integer(options.maxActions,8,8);integer(options.maxObservationAgeMs,15000,15000);integer(options.clickDurationMs,60,100);integer(options.maxObservations,120,200);
+  integer(options.maxDurationMs,180000,180000);integer(options.stageTimeoutMs,30000,30000);integer(options.maxActions,8,8);integer(options.maxObservationAgeMs,15000,15000);integer(options.clickDurationMs,80,100);integer(options.maxObservations,120,200);
 }
 /** One dispatcher owns all recovery operations; perception has no input port. */
 export class RecoveryOrchestrator {
@@ -22,7 +22,7 @@ export class RecoveryOrchestrator {
   constructor(private options:RecoveryOptions,private ports:RecoveryPorts){
     this.options=Object.freeze(structuredClone(options));
     if(!options.authorized||!['recover','launch'].includes(options.command)||!['offline','live'].includes(options.mode)||!isAbsolute(options.directory)||!options.runId||typeof options.targetCharacter!=='string'||options.targetCharacter!=='小啊')throw new Error('recovery_explicit_authorization_alliance_warrior_required');
-    validateRecoveryOptions(options);this.total=integer(options.maxDurationMs,180000,180000);this.stage=integer(options.stageTimeoutMs,30000,30000);this.maxActions=integer(options.maxActions,8,8);this.age=integer(options.maxObservationAgeMs,15000,15000);this.clickDuration=integer(options.clickDurationMs,60,100);this.observationLimit=integer(options.maxObservations,120,200);
+    validateRecoveryOptions(options);this.total=integer(options.maxDurationMs,180000,180000);this.stage=integer(options.stageTimeoutMs,30000,30000);this.maxActions=integer(options.maxActions,8,8);this.age=integer(options.maxObservationAgeMs,15000,15000);this.clickDuration=integer(options.clickDurationMs,80,100);this.observationLimit=integer(options.maxObservations,120,200);
     this.trace=new TraceRecorder({traceId:options.runId,clock:()=>({domain:options.mode==='offline'?'simulation-monotonic':'coordinator-monotonic',id:options.runId,ms:ports.now()}),timingKind:options.mode==='offline'?'virtual':'measured',maxRecords:5000});
   }
   cancel(reason='user_cancel'):void{this.controller.abort(reason);}

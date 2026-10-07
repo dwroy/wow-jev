@@ -32,3 +32,18 @@ test('legacy executors remain schema compatible and capability does not imply co
   assert.throws(() => assertNativeMessage({ ...ready, capabilities: { ...ready.capabilities, focus_click: 'true' } }, validate), /native_schema/);
   assert.throws(() => assertNativeMessage({ ...ready, effect: { status: 'confirmed' } }, validate), /native_schema/);
 });
+
+
+test('click receipts distinguish MOVE from held DOWN and real ledger UP', async () => {
+  const validator = await loadNativeValidator(path);
+  const value = {protocol:'wow-input', version:1, type:'receipt', id:'click', session_id:'6d12af20-0011-4222-8333-012345678901',
+    op:'execute', status:'completed', input:{status:'released',events_requested:3,events_inserted:3,released:true},
+    effect:{status:'unknown'}, timing:{clock:'windows_qpc',started_ms:10,finished_ms:260}, local_clock:{domain:'windows-qpc',at_ms:260},
+    input_timing:{clock:'windows_qpc',first_send_started_ms:10,first_send_finished_ms:11,last_send_finished_ms:255},
+    click_timing:{clock:'windows_qpc',settle_min_ms:150,hold_requested_ms:80,move_finished_ms:11,down_started_ms:161,down_finished_ms:162,up_started_ms:242,up_finished_ms:255}};
+  assert.doesNotThrow(() => assertNativeMessage(value,validator));
+  for (const change of [{down_started_ms:160}, {up_started_ms:241}, {up_finished_ms:null}])
+    assert.throws(() => assertNativeMessage({...value,click_timing:{...value.click_timing,...change}},validator), /native_click_timing/);
+  assert.doesNotThrow(() => assertNativeMessage({...value,status:'cancelled',input:{...value.input,events_requested:1,events_inserted:1},
+    click_timing:{...value.click_timing,down_started_ms:null,down_finished_ms:null,up_started_ms:null,up_finished_ms:null}},validator));
+});

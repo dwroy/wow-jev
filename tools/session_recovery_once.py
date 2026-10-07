@@ -82,7 +82,7 @@ def exact(value, required, optional=()):
 
 def validate(request: dict) -> None:
     schema_validate(request,'request')
-    exact(request, ('version', 'op'), ('target', 'action', 'source'))
+    exact(request, ('version', 'op'), ('target', 'action', 'source', 'post_click_observations'))
     if type(request['version']) is not int or request['version'] != 1 or request['op'] not in OPS:
         raise ValueError('unsupported_recovery_request')
     op = request['op']
@@ -124,7 +124,9 @@ def validate(request: dict) -> None:
         fields = {'key': ('kind','keys','duration_ms'), 'mouse_click': ('kind','button','x','y','duration_ms'),
                   'focus_click': ('kind','x','y','duration_ms')}
         if kind not in fields: raise ValueError('one_finite_action_required')
-        exact(action, fields[kind])
+        exact(action, fields[kind], ('visibility_mode',) if kind == 'focus_click' else ())
+        if 'post_click_observations' in request and kind not in {'mouse_click','focus_click'}:
+            raise ValueError('post_click_requires_click')
         if type(action['duration_ms']) is not int or not 1 <= action['duration_ms'] <= 150:
             raise ValueError('action_duration_1_to_150ms_required')
         if kind == 'key':
@@ -136,6 +138,8 @@ def validate(request: dict) -> None:
             if any(type(action[key]) is not int or not 0 <= action[key] < request['source']['width' if key == 'x' else 'height'] for key in ('x','y')):
                 raise ValueError('client_coordinate_required')
             if kind == 'mouse_click' and action['button'] not in {'left','right','middle'}: raise ValueError('invalid_mouse_button')
+    elif 'post_click_observations' in request:
+        raise ValueError('post_click_requires_click')
     elif 'action' in request:
         raise ValueError('action_not_permitted')
 

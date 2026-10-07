@@ -62,6 +62,8 @@ export interface NativeReceipt {
   input: { status: 'not_sent' | 'sent' | 'partial' | 'released' | 'failed'; events_requested: number; events_inserted: number; released: boolean };
   effect: { status: 'unknown' };
   reason?: { code: string; message?: string };
+  /** Click MOVE, DOWN and ledger-release UP are separate native batches. */
+  click_timing?: { clock: 'windows_qpc'; settle_min_ms: 150; hold_requested_ms: number; move_finished_ms: number; down_started_ms: number | null; down_finished_ms: number | null; up_started_ms: number | null; up_finished_ms: number | null };
   timing: { clock: 'windows_qpc'; started_ms: number | null; finished_ms: number | null };
   /** Original successful SendInput call bounds; absent with legacy native binaries. */
   input_timing?: { clock: 'windows_qpc'; first_send_started_ms: number; first_send_finished_ms: number; last_send_finished_ms: number } | null;
@@ -98,4 +100,15 @@ export function assertNativeMessage(value: unknown, validate: NativeValidator): 
     precise.first_send_started_ms < start || precise.first_send_finished_ms < precise.first_send_started_ms ||
     precise.last_send_finished_ms < precise.first_send_finished_ms || precise.last_send_finished_ms >= finish + 1 ||
     precise.last_send_finished_ms >= value.local_clock.at_ms + 1)) throw new Error('native_input_timing_invalid');
+  const click = value.click_timing;
+  if (click) {
+    const {move_finished_ms: move, down_started_ms: down, down_finished_ms: held, up_started_ms: up, up_finished_ms: releasedAt} = click;
+    if (value.op !== 'execute' || !precise || move < precise.first_send_finished_ms ||
+      down !== null && down - move < click.settle_min_ms || held !== null && (down === null || held < down) ||
+      up !== null && (held === null || up < held) || releasedAt !== null && (up === null || releasedAt < up || releasedAt >= value.local_clock.at_ms + 1) ||
+      value.status === 'completed' && (held === null || up === null || releasedAt === null || up - held < click.hold_requested_ms)) {
+      throw new Error('native_click_timing_invalid');
+    }
+  }
+
 }

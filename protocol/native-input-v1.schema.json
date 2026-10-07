@@ -778,6 +778,65 @@
               }
             }
           ]
+        },
+        "click_timing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "clock",
+            "settle_min_ms",
+            "hold_requested_ms",
+            "move_finished_ms",
+            "down_started_ms",
+            "down_finished_ms",
+            "up_started_ms",
+            "up_finished_ms"
+          ],
+          "properties": {
+            "clock": {
+              "const": "windows_qpc"
+            },
+            "settle_min_ms": {
+              "const": 150
+            },
+            "hold_requested_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5000
+            },
+            "move_finished_ms": {
+              "type": "number",
+              "minimum": 0
+            },
+            "down_started_ms": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "down_finished_ms": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "up_started_ms": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "up_finished_ms": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
         }
       },
       "allOf": [

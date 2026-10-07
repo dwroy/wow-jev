@@ -239,7 +239,7 @@
       "oneOf": [
         {"type": "object", "additionalProperties": false, "required": ["version", "op"], "properties": {"version": {"const": 1}, "op": {"enum": ["discover", "launch_battlenet"]}}},
         {"type": "object", "additionalProperties": false, "required": ["version", "op", "target"], "properties": {"version": {"const": 1}, "op": {"const": "observe"}, "target": {"$ref": "#/definitions/target"}}},
-        {"type": "object", "additionalProperties": false, "required": ["version", "op", "target", "source", "action"], "properties": {"version": {"const": 1}, "op": {"const": "input"}, "target": {"$ref": "#/definitions/target"}, "source": {"$ref": "#/definitions/source"}, "action": {"$ref": "#/definitions/action"}}},
+        {"type": "object", "additionalProperties": false, "required": ["version", "op", "target", "source", "action"], "properties": {"version": {"const": 1}, "op": {"const": "input"}, "target": {"$ref": "#/definitions/target"}, "source": {"$ref": "#/definitions/source"}, "action": {"$ref": "#/definitions/action"}, "post_click_observations": {"const": true}}},
         {"type": "object", "additionalProperties": false, "required": ["version", "op", "target", "source"], "properties": {"version": {"const": 1}, "op": {"const": "launch_wow"}, "target": {"$ref": "#/definitions/target"}, "source": {"$ref": "#/definitions/source"}}}
       ]
     },
@@ -247,7 +247,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["file", "sha256", "width", "height", "started_windows_qpc_ms", "finished_windows_qpc_ms", "method"],
       "properties": {
-        "file": {"const": "client.png"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "file": {"enum": ["client.png", "post-click-1000.png", "post-click-3000.png", "post-click-8000.png"]}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "width": {"type": "integer", "minimum": 1}, "height": {"type": "integer", "minimum": 1},
         "started_windows_qpc_ms": {"type": "number", "minimum": 0}, "finished_windows_qpc_ms": {"type": "number", "minimum": 0},
         "method": {"enum": ["PrintWindow-client-renderfullcontent", "CopyFromScreen-client-visible"]}

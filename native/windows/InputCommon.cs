@@ -844,6 +844,11 @@ namespace WowJev.Input
             input.Data.Mouse.Dy = (int)Math.Round((point.Y - top) * 65535.0 / (height - 1));
             return input;
         }
+        public static bool CursorAtClientPoint(IntPtr hwnd, int x, int y)
+        {
+            Point point;
+            return GetCursorPos(out point) && ScreenToClient(hwnd, ref point) && Math.Abs(point.X - x) <= 1 && Math.Abs(point.Y - y) <= 1;
+        }
         public static bool CursorWithinClient(IntPtr hwnd)
         {
             Point point;

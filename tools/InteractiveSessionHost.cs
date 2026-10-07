@@ -116,9 +116,9 @@ static class InteractiveSessionHost
         }
         result["processes"]=items;result["process_inventory"]=inventory;result["launcher_candidates"]=LauncherCandidates();result["status"]="discovered";
     }
-    static void Observe(Dictionary<string,object> request,Dictionary<string,object> result) {
+    static void Observe(Dictionary<string,object> request,Dictionary<string,object> result, string file = "client.png", bool analyze = true) {
         var target=Map(Field(request,"target"));WindowInfo before=Identity(target);Need(IsWindowVisible(before.Hwnd)&&!IsIconic(before.Hwnd),"visible_nonminimized_target_required");
-        result["target"]=target;result["window"]=Window(before);double captureStart=Clock.PreciseMs;string path=Path.Combine(Output,"client.png");string method="PrintWindow-client-renderfullcontent";bool okay;
+        result["target"]=target;result["window"]=Window(before);double captureStart=Clock.PreciseMs;string path=Path.Combine(Output,file);string method="PrintWindow-client-renderfullcontent";bool okay;
         using(var bitmap=new Bitmap(before.Width,before.Height,PixelFormat.Format32bppArgb)) {
             using(Graphics graphics=Graphics.FromImage(bitmap)){IntPtr dc=graphics.GetHdc();try{result["capture_api_started_windows_qpc_ms"]=Clock.PreciseMs;okay=PrintWindow(before.Hwnd,dc,3);result["capture_api_finished_windows_qpc_ms"]=Clock.PreciseMs;}finally{graphics.ReleaseHdc(dc);}}
             if(!okay){var safety=Native.GetRecoverySafety(before.Hwnd);Need(Convert.ToBoolean(Field(safety,"client_fully_visible")),"capture_failed_client_occluded");var origin=new Native.Point();Need(ClientToScreen(before.Hwnd,ref origin),"client_origin_unavailable");using(Graphics graphics=Graphics.FromImage(bitmap))graphics.CopyFromScreen(origin.X,origin.Y,0,0,new Size(before.Width,before.Height),CopyPixelOperation.SourceCopy);method="CopyFromScreen-client-visible";}
@@ -128,8 +128,8 @@ static class InteractiveSessionHost
             result["png_write_finished_windows_qpc_ms"]=Clock.PreciseMs;
         }
         double captureEnd=Clock.PreciseMs;result["window_revalidate_started_windows_qpc_ms"]=Clock.PreciseMs;WindowInfo after=Identity(target);Need(before.Width==after.Width&&before.Height==after.Height,"capture_dimensions_changed");
-        result["window"]=Window(after);result["window_revalidate_finished_windows_qpc_ms"]=Clock.PreciseMs;result["capture"]=Obj("file","client.png","sha256",Hash(path),"width",after.Width,"height",after.Height,"started_windows_qpc_ms",captureStart,"finished_windows_qpc_ms",captureEnd,"method",method);
-        result["observation_id"]="session-observe-"+Guid.NewGuid().ToString("D");double cvStart=Clock.PreciseMs;
+        result["window"]=Window(after);result["window_revalidate_finished_windows_qpc_ms"]=Clock.PreciseMs;result["capture"]=Obj("file",file,"sha256",Hash(path),"width",after.Width,"height",after.Height,"started_windows_qpc_ms",captureStart,"finished_windows_qpc_ms",captureEnd,"method",method);
+        result["observation_id"]="session-observe-"+Guid.NewGuid().ToString("D");if (!analyze) { result["status"]="observed"; return; } double cvStart=Clock.PreciseMs;
         using(var capturedImage=new Bitmap(path)){var selected=RecoveryCalibration.Match(capturedImage,AppDomain.CurrentDomain.BaseDirectory);selected["observation_id"]=result["observation_id"];selected["capture_sha256"]=Hash(path);result["selected_character"]=selected;var tutorial=RecoveryTutorialCv.Match(capturedImage,AppDomain.CurrentDomain.BaseDirectory);tutorial["observation_id"]=result["observation_id"];tutorial["capture_sha256"]=Hash(path);result["tutorial_cv"]=tutorial;}
         result["cv_started_windows_qpc_ms"]=cvStart;result["cv_finished_windows_qpc_ms"]=Clock.PreciseMs;
         double ocrStart=Clock.PreciseMs;result["ocr"]=RecoveryOcr.Read(path);result["ocr_started_windows_qpc_ms"]=ocrStart;result["ocr_finished_windows_qpc_ms"]=Clock.PreciseMs;result["status"]="observed";
@@ -219,6 +219,19 @@ static class InteractiveSessionHost
             result["input_sent"]=inserted;result["effect_status"]="unknown";if(executor!=null){result["executor_exited"]=executorExited;executor.Dispose();}raw.Dispose();result["native_raw_file"]="native-input.jsonl";result["native_raw_sha256"]=Hash(nativeRaw);queue.Dispose();
         }
         Need(Convert.ToBoolean(Field(result,"release_confirmed")),"input_release_unconfirmed");var receiptResult=Map(Field(result,"execute_receipt"));Need(Text(receiptResult,"status")=="completed","native_action_not_completed");result["status"]=File.Exists(Cancel)?"cancelled":"input_released";
+        if (request.ContainsKey("post_click_observations")) {
+            Need(kind=="mouse_click"||kind=="focus_click","post_click_requires_click");
+            var timing=Map(Field(receiptResult,"click_timing"));double releasedAt=Numeric(timing,"up_finished_ms");
+            var observations=new List<object>();result["post_click_observations"]=observations;
+            foreach(int offset in new int[]{1000,3000,8000}) {
+                while(Clock.PreciseMs<releasedAt+offset){CheckCancel();Identity(target);Thread.Sleep(10);}
+                CheckCancel();WindowInfo current=Identity(target);Need(current.Focused,"post_click_target_unfocused");
+                var observation=Obj("requested_offset_ms",offset,"reference_windows_qpc_ms",releasedAt,"actual_started_windows_qpc_ms",Clock.PreciseMs);
+                // Evidence only: no OCR/model decision, no further action, no refreshing the pre-input source.
+                Observe(request,observation,"post-click-"+offset+".png",false);observations.Add(observation);
+            }
+        }
+
     }
     static void Launch(Dictionary<string,object> request,Dictionary<string,object> result) {
         string op=Text(request,"op"),path=null;string arguments="";
@@ -255,7 +268,7 @@ static class InteractiveSessionHost
             foreach(var entry in hashes){Need(Regex.IsMatch(entry.Key,"^[A-Za-z0-9_.-]+\\.(?:exe|json|png)$"),"payload_manifest_name_rejected");Need(Hash(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,entry.Key))==(string)entry.Value,"fixed_payload_manifest_changed");}
             result["protocol_sha256"]=Text(hashes,"session-recovery-v1.schema.json");result["payload_hashes"]=hashes;
             var request=Map(Field(envelope,"request"));Need(Number(request,"version")==1,"unsupported_request_version");string op=Text(request,"op");result["operation"]=op;
-            if(op=="discover"){Exact(request,"version","op");Discover(result);}else if(op=="observe"){Exact(request,"version","op","target");Observe(request,result);}else if(op=="input"){Exact(request,"version","op","target","source","action");Input(request,envelope,result);}else if(op=="launch_battlenet"){Exact(request,"version","op");Launch(request,result);}else if(op=="launch_wow"){Exact(request,"version","op","target","source");Launch(request,result);}else throw new InvalidOperationException("unknown_operation");
+            if(op=="discover"){Exact(request,"version","op");Discover(result);}else if(op=="observe"){Exact(request,"version","op","target");Observe(request,result);}else if(op=="input"){if(request.ContainsKey("post_click_observations")){Exact(request,"version","op","target","source","action","post_click_observations");Need(Convert.ToBoolean(Field(request,"post_click_observations")),"post_click_observations_true_required");}else Exact(request,"version","op","target","source","action");Input(request,envelope,result);}else if(op=="launch_battlenet"){Exact(request,"version","op");Launch(request,result);}else if(op=="launch_wow"){Exact(request,"version","op","target","source");Launch(request,result);}else throw new InvalidOperationException("unknown_operation");
             result["finished_windows_qpc_ms"]=Clock.PreciseMs;WriteResult(result);return 0;
         } catch(Exception error) {
             result["status"]=error is InvalidOperationException&&error.Message=="cancelled"?"cancelled":"blocked";
