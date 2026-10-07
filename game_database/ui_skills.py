@@ -872,8 +872,8 @@ class UiSkills:
         return parse_json(row[1])
 
     def _activation_metrics(self, skill: dict, floor: int = 0) -> dict:
-        runs = set(); outcomes = []; excluded = {'timeout': 0, 'cancelled': 0, 'unverified': 0}; non_success = {'true_failure': 0, 'timeout': 0, 'cancelled': 0, 'unverified': 0}; dynamic_count = 0
-        for live, payload in self.runtime.connection.execute('SELECT live_confirmed,payload FROM ui_attempt WHERE skill_id=? AND ordinal>? ORDER BY ordinal', (skill['skill_id'], floor)):
+        runs = set(); outcomes = []; excluded = {'timeout': 0, 'cancelled': 0, 'unverified': 0}; non_success = {'true_failure': 0, 'timeout': 0, 'cancelled': 0, 'unverified': 0}; dynamic_count = 0; requalified = 0
+        for ordinal, live, payload in self.runtime.connection.execute('SELECT ordinal,live_confirmed,payload FROM ui_attempt WHERE skill_id=? ORDER BY ordinal', (skill['skill_id'],)):
             attempt = parse_json(payload)
             if attempt['mode'] != 'live': continue
             outcome = attempt.get('outcome_class', 'unverified')
@@ -884,17 +884,19 @@ class UiSkills:
                     valid = self.transition_key(historical['seed']) == self.transition_key(skill['seed']) and self._confirmed(attempt, historical, historical=True)[0]
                 except ValidationError: pass
             if valid:
-                runs.add(attempt['provenance']['run_id']); outcomes.append(True)
-                if self._stored('ui_element', 'element_key', historical['element_key'])['purpose'] == 'talk_jaina_layered' and self._dynamic_npc_match(parse_json(_read(attempt['native_receipt'])), attempt, historical): dynamic_count += 1
+                outcomes.append(True)
+                if ordinal > floor:
+                    runs.add(attempt['provenance']['run_id']); requalified += 1
+                    if self._stored('ui_element', 'element_key', historical['element_key'])['purpose'] == 'talk_jaina_layered' and self._dynamic_npc_match(parse_json(_read(attempt['native_receipt'])), attempt, historical): dynamic_count += 1
             elif self._issued_and_released(attempt):
                 outcomes.append(False); non_success[outcome if outcome in non_success else 'unverified'] += 1
             else: excluded[outcome if outcome in excluded else 'unverified'] += 1
         recent = outcomes[-RECENT_WINDOW:]
-        return {'qualified_count': sum(outcomes), 'dynamic_locator_count': dynamic_count, 'distinct_runs': len(runs), 'recent_window': RECENT_WINDOW, 'recent_count': len(recent),
+        return {'qualified_count': sum(outcomes), 'requalified_count': requalified, 'dynamic_locator_count': dynamic_count, 'distinct_runs': len(runs), 'recent_window': RECENT_WINDOW, 'recent_count': len(recent),
                 'recent_success_rate': sum(recent) / len(recent) if recent else 0, 'confirmed_success_rate': sum(recent) / len(recent) if recent else 0,
                 'qualification_rate': sum(outcomes) / len(outcomes) if outcomes else 0, 'excluded': excluded, 'non_success': non_success,
                 'denominator_rule': 'last 10 live attempts with actual Native input issued and released; timeout/unverified count as non-success; no-input cancel/readonly excluded',
-                'ready': len(runs) >= 2 and sum(outcomes) >= 2 and len(recent) >= 2 and sum(recent) / len(recent) >= .8}
+                'ready': len(runs) >= 2 and requalified >= 2 and len(recent) >= 2 and sum(recent) / len(recent) >= .8}
 
     def _issued_and_released(self, attempt: dict) -> bool:
         if attempt['mode'] != 'live' or attempt['native_receipt'] is None: return False
@@ -1192,7 +1194,7 @@ class UiSkills:
             failed = data['mode'] == 'live' and data['before']['producer'] in {'resident_wgc', 'recovery_printwindow'} and data['effect']['status'] == 'failed' and data.get('outcome_class') == 'true_failure'
             streak = streak + 1 if failed else 0 if confirmed else streak
             last_failure = canonical({'attempt_id': data['attempt_id'], 'reason': data['failure_reason'] or 'effect_failed'}) if failed else None
-            if status == 'active' and streak >= 2:
+            if failed and streak >= 2:
                 status = 'candidate'; floor = ordinal
             metrics = self._activation_metrics(skill, floor)
             if skill['hard_stop']:
@@ -1269,13 +1271,15 @@ class UiSkills:
                 approval = self.runtime.connection.execute('SELECT payload FROM ui_audit_approval WHERE skill_id=? AND report_sha256=?',
                     (row['skill_id'], row['governance']['approved_audit_sha256'])).fetchone()
                 reviewer = parse_json(approval[0])['review']['reviewer'] if approval else None
-            validation_profiles.append({'skill_id': row['skill_id'], 'state_id': row['state_id'], 'scope': row['scope'],
+            profile = {'skill_id': row['skill_id'], 'state_id': row['state_id'], 'scope': row['scope'],
                 'signature_sha256': row['signature']['sha256'], 'own_positive': matrix['own_positive'], 'negatives': matrix['rows'],
                 'complete': True, 'pass': matrix['pass'], 'review_eligible': row['governance']['review_eligible'],
                 'approved_audit_sha256': row['governance']['approved_audit_sha256'], 'audit_reviewer': reviewer,
-                'activation_frozen': row['governance']['activation_frozen'],
-                'source_skill_canonical': canonical(row), 'source_skill_sha256': canonical_sha256(row),
-                'signature_original_canonical': canonical({k: v for k, v in self._stored('ui_signature', 'signature_id', row['signature']['signature_id']).items() if k not in {'sha256', 'signature_id'}})})
+                'activation_frozen': row['governance']['activation_frozen']}
+            if row['status'] == 'active' and row['governance']['review_eligible'] and not row['governance']['activation_frozen']:
+                profile.update(source_skill_canonical=canonical(row), source_skill_sha256=canonical_sha256(row),
+                    signature_original_canonical=canonical({k: v for k, v in self._stored('ui_signature', 'signature_id', row['signature']['signature_id']).items() if k not in {'sha256', 'signature_id'}}))
+            validation_profiles.append(profile)
         validation = {'protocol': 'wow-ui-negative-validation', 'version': 1, 'snapshot_sha256': sha, 'algorithm': MATCH_ALGORITHM,
                       'corpus_sha256': canonical_sha256(corpus), 'corpus': corpus, 'skills': validation_profiles, 'quarantine': self.quarantine_records()}
         negative_text = canonical(validation); negative_sha = hashlib.sha256(negative_text.encode()).hexdigest()

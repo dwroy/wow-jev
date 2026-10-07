@@ -84,6 +84,10 @@ def test_html_report_actual_sources_negative_matrix_and_explicit_per_entry_appro
         assert row['status'] == 'active' and row['governance']['approved_audit_sha256'] == result['report']['sha256']
         assert not row['governance']['activation_frozen'] and row['governance']['default_activation_frozen']
         assert next(r for r in store.query({})['skills'] if r['skill_id'] == 'world-ready-recognizer')['governance']['activation_frozen']
+        sidecar = json.loads(store.export({})['negative_validation_canonical'])
+        profile = next(p for p in sidecar['skills'] if p['skill_id'] == 'reconnect')
+        assert hashlib.sha256(profile['source_skill_canonical'].encode()).hexdigest() == profile['source_skill_sha256']
+        assert hashlib.sha256(profile['signature_original_canonical'].encode()).hexdigest() == profile['signature_sha256']
         Path(result['report']['path']).write_text('{}')
         assert not store.query({'status': 'active'})['skills']
         assert store.query({})['quarantine']  # tampered approval fails closed independently
@@ -311,9 +315,7 @@ def test_negative_sidecar_and_modal_guard_source_are_byte_bound_and_auditable(tm
         html = Path(generate(db.path, tmp_path / 'audit')['html']).read_text(); assert 'Reviewed unknown-modal negative' in html
         bad = deepcopy(initial); bad['skill_id'] = 'wrong-guard'; bad['modal_guard']['source_capture_sha256'] = 'f' * 64
         with pytest.raises(ValidationError, match='source capture'): store.seed(bad)
-        profile = body['skills'][0]
-        assert hashlib.sha256(profile['source_skill_canonical'].encode()).hexdigest() == profile['source_skill_sha256']
-        assert hashlib.sha256(profile['signature_original_canonical'].encode()).hexdigest() == profile['signature_sha256']
+        assert 'source_skill_canonical' not in body['skills'][0]  # Inactive material omitted; full corpus is retained.
 
 
 def test_legacy_false_stop_can_be_reviewed_clear_but_real_grounded_frame_cannot(tmp_path):
@@ -345,3 +347,7 @@ def test_two_true_failures_return_active_to_candidate_without_erasing_history(tm
         assert row['status'] == 'candidate' and row['failure_streak'] == 2 and row['confirmed_count'] == 2
         assert row['last_failure']['attempt_id'] == failed['attempt_id'] and row['governance']['activation_frozen']
         assert db.connection.execute('SELECT COUNT(*) FROM ui_attempt').fetchone()[0] == 4
+        for number, run in ((5, 'offline-run-a'), (6, 'offline-run-b')): row = store.attempt(governed_attempt(store, tmp_path, number, run_id=run))['skill']
+        assert row['governance']['metrics']['requalified_count'] == 2
+        assert row['governance']['metrics']['recent_success_rate'] == 4 / 6  # demotion does not erase the denominator
+        assert not row['governance']['metrics']['ready'] and row['status'] == 'candidate'
