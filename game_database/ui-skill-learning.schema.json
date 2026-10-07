@@ -1,52 +1,1358 @@
 {
-  "$schema":"http://json-schema.org/draft-07/schema#",
-  "$id":"urn:wow-jev:ui-skill-learning-v1",
-  "type":"object","additionalProperties":false,
-  "required":["protocol","version","request_id","op","data"],
-  "properties":{
-    "protocol":{"const":"wow-ui-skill-learning"},"version":{"const":1},
-    "request_id":{"$ref":"#/definitions/id"},
-    "op":{"enum":["seed","attempt","review","query","learn","export","report"]},
-    "data":{"type":"object"}
-  },
-  "allOf":[
-    {"if":{"properties":{"op":{"const":"seed"}}},"then":{"properties":{"data":{"$ref":"#/definitions/seed"}}}},
-    {"if":{"properties":{"op":{"const":"attempt"}}},"then":{"properties":{"data":{"$ref":"#/definitions/attempt"}}}},
-    {"if":{"properties":{"op":{"const":"review"}}},"then":{"properties":{"data":{"$ref":"#/definitions/review_request"}}}},
-    {"if":{"properties":{"op":{"enum":["query","export","report"]}}},"then":{"properties":{"data":{"$ref":"#/definitions/query"}}}},
-    {"if":{"properties":{"op":{"const":"learn"}}},"then":{"properties":{"data":{"type":"object","additionalProperties":false,"required":["queue"],"properties":{"queue":{"$ref":"#/definitions/path"},"maximum_records":{"type":"integer","minimum":1,"maximum":10000}}}}}}
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:wow-jev:ui-skill-learning-v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "version",
+    "request_id",
+    "op",
+    "data"
   ],
-  "definitions":{
-    "id":{"type":"string","pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
-    "sha":{"type":"string","pattern":"^[a-f0-9]{64}$"},
-    "path":{"type":"string","minLength":1,"maxLength":4096},
-    "proof":{"type":"object","additionalProperties":false,"required":["path","sha256"],"properties":{"path":{"$ref":"#/definitions/path"},"sha256":{"$ref":"#/definitions/sha"}}},
-    "nullable_proof":{"anyOf":[{"type":"null"},{"$ref":"#/definitions/proof"}]},
-    "nullable_text":{"anyOf":[{"type":"null"},{"type":"string","minLength":1,"maxLength":512}]},
-    "scope":{"type":"object","additionalProperties":false,"required":["target_scope","build","locale","size_bucket","ui_scale"],"properties":{
-      "target_scope":{"enum":["retail_wow","recording_fixture"]},"build":{"type":"string","minLength":1,"maxLength":80},"locale":{"type":"string","minLength":1,"maxLength":32},"size_bucket":{"type":"string","pattern":"^[A-Za-z0-9._:-]{1,80}$"},"ui_scale":{"type":"number","minimum":0.25,"maximum":4}
-    }},
-    "bbox":{"type":"object","additionalProperties":false,"required":["x","y","width","height"],"properties":{"x":{"type":"number","minimum":0,"maximum":1},"y":{"type":"number","minimum":0,"maximum":1},"width":{"type":"number","minimum":0.000001,"maximum":1},"height":{"type":"number","minimum":0.000001,"maximum":1}}},
-    "clock":{"type":"object","additionalProperties":false,"required":["domain","clock_id","ticks","unit"],"properties":{"domain":{"enum":["windows-qpc","coordinator-monotonic"]},"clock_id":{"type":"string","minLength":1,"maxLength":256},"ticks":{"type":"number","minimum":0},"unit":{"const":"ms"}}},
-    "target":{"type":"object","additionalProperties":false,"required":["pid","start_ticks","hwnd","class","executable","session_id"],"properties":{"pid":{"type":"integer","minimum":1},"start_ticks":{"type":"string","pattern":"^[1-9][0-9]*$"},"hwnd":{"type":"string","pattern":"^0x[0-9a-fA-F]+$"},"class":{"type":"string","minLength":1,"maxLength":256},"executable":{"$ref":"#/definitions/path"},"session_id":{"type":"integer","minimum":1}}},
-    "frame":{"type":"object","additionalProperties":false,"required":["observation_id","frame_id","seq","width","height","layout_id","target","clock","capture","producer"],"properties":{
-      "observation_id":{"$ref":"#/definitions/id"},"frame_id":{"type":"string","minLength":1,"maxLength":256},"seq":{"type":"integer","minimum":1},"width":{"type":"integer","minimum":1,"maximum":7680},"height":{"type":"integer","minimum":1,"maximum":4320},"layout_id":{"type":"string","minLength":1,"maxLength":256},"target":{"$ref":"#/definitions/target"},"clock":{"$ref":"#/definitions/clock"},"capture":{"$ref":"#/definitions/nullable_proof"},"roi_sha256":{"$ref":"#/definitions/sha"},"producer":{"enum":["resident_wgc","recovery_printwindow","calibration_reference","simulation"]}
-    }},
-    "review":{"type":"object","additionalProperties":false,"required":["status","reviewer","reviewed_at","reason"],"properties":{"status":{"enum":["approved","pending","rejected"]},"reviewer":{"enum":["seed","claude","user","self","root","seed_model","unreviewed"]},"reviewed_at":{"type":"string","minLength":1,"maxLength":80},"reason":{"type":"string","minLength":1,"maxLength":512}}},
-    "element":{"type":"object","additionalProperties":false,"required":["id","purpose","label","bbox","button","duration_ms"],"properties":{"id":{"$ref":"#/definitions/id"},"purpose":{"$ref":"#/definitions/id"},"label":{"type":"string","minLength":1,"maxLength":200},"bbox":{"$ref":"#/definitions/bbox"},"button":{"enum":["left","right"]},"duration_ms":{"type":"integer","minimum":1,"maximum":150}}},
-    "action":{"oneOf":[
-      {"type":"object","additionalProperties":false,"required":["kind","keys","duration_ms"],"properties":{"kind":{"const":"key"},"keys":{"type":"array","minItems":1,"maxItems":1,"items":{"enum":["ESC","ENTER"]}},"duration_ms":{"type":"integer","minimum":1,"maximum":150}}},
-      {"type":"object","additionalProperties":false,"required":["kind","duration_ms"],"properties":{"kind":{"const":"wait"},"duration_ms":{"type":"integer","minimum":1,"maximum":1000}}}
-    ]},
-    "expected_effect":{"anyOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["state_id","signature_sha256"],"properties":{"state_id":{"$ref":"#/definitions/id"},"signature_sha256":{"anyOf":[{"type":"null"},{"$ref":"#/definitions/sha"}]}}}]},
-    "seed":{"type":"object","additionalProperties":false,"required":["state_id","skill_id","scope","signature_bbox","element","frame","review","hard_stop"],"properties":{"state_id":{"$ref":"#/definitions/id"},"skill_id":{"$ref":"#/definitions/id"},"scope":{"$ref":"#/definitions/scope"},"signature_bbox":{"$ref":"#/definitions/bbox"},"signature_anchors":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"object","additionalProperties":false,"required":["id","bbox"],"properties":{"id":{"$ref":"#/definitions/id"},"bbox":{"$ref":"#/definitions/bbox"}}}},"element":{"$ref":"#/definitions/element"},"action":{"$ref":"#/definitions/action"},"frame":{"$ref":"#/definitions/frame"},"review":{"$ref":"#/definitions/review"},"hard_stop":{"type":"boolean"},"expected_effect":{"$ref":"#/definitions/expected_effect"}}},
-    "review_request":{"type":"object","additionalProperties":false,"required":["skill_id","source_capture_sha256","signature_sha256","review"],"properties":{"skill_id":{"$ref":"#/definitions/id"},"source_capture_sha256":{"$ref":"#/definitions/sha"},"signature_sha256":{"$ref":"#/definitions/sha"},"review":{"$ref":"#/definitions/review"}}},
-    "effect":{"type":"object","additionalProperties":false,"required":["status","verifier","source_observation_id","proof"],"properties":{"status":{"enum":["confirmed","failed","unverified"]},"verifier":{"enum":["cv","local_ocr","seed","review"]},"source_observation_id":{"$ref":"#/definitions/nullable_text"},"proof":{"$ref":"#/definitions/nullable_proof"},"state_id":{"$ref":"#/definitions/nullable_text"},"signature_sha256":{"anyOf":[{"type":"null"},{"$ref":"#/definitions/sha"}]}}},
-    "nullable_duration":{"anyOf":[{"type":"null"},{"type":"number","minimum":0,"maximum":300000}]},
-    "latency":{"type":"object","additionalProperties":false,"required":["clock","observe_to_input_ms","observe_to_effect_ms"],"properties":{"clock":{"type":"object","additionalProperties":false,"required":["domain","clock_id","unit"],"properties":{"domain":{"enum":["windows-qpc","coordinator-monotonic"]},"clock_id":{"type":"string","minLength":1,"maxLength":256},"unit":{"const":"ms"}}},"observe_to_input_ms":{"$ref":"#/definitions/nullable_duration"},"observe_to_effect_ms":{"$ref":"#/definitions/nullable_duration"}}},
-    "attempt":{"type":"object","additionalProperties":false,"required":["skill_id","attempt_id","mode","route","before","after","native_receipt","windows_clock_id","effect","latency","failure_reason"],"properties":{
-      "skill_id":{"$ref":"#/definitions/id"},"attempt_id":{"$ref":"#/definitions/id"},"mode":{"enum":["live","simulated","readonly"]},"route":{"enum":["code","model_revalidated","manual_reviewed","simulated"]},"before":{"$ref":"#/definitions/frame"},"after":{"anyOf":[{"type":"null"},{"$ref":"#/definitions/frame"}]},"native_receipt":{"$ref":"#/definitions/nullable_proof"},"windows_clock_id":{"$ref":"#/definitions/nullable_text"},"effect":{"$ref":"#/definitions/effect"},"latency":{"$ref":"#/definitions/latency"},"failure_reason":{"$ref":"#/definitions/nullable_text"},"candidate":{"$ref":"#/definitions/seed"}
-    }},
-    "query":{"type":"object","additionalProperties":false,"properties":{"scope":{"$ref":"#/definitions/scope"},"status":{"enum":["active","candidate","pending_review","degraded","hard_stop","all"]},"state_id":{"$ref":"#/definitions/id"}}}
+  "properties": {
+    "protocol": {
+      "const": "wow-ui-skill-learning"
+    },
+    "version": {
+      "const": 1
+    },
+    "request_id": {
+      "$ref": "#/definitions/id"
+    },
+    "op": {
+      "enum": [
+        "seed",
+        "attempt",
+        "review",
+        "query",
+        "learn",
+        "export",
+        "report",
+        "migrate",
+        "audit_approve",
+        "revise",
+        "repair",
+        "register_run",
+        "query_run"
+      ]
+    },
+    "data": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "seed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/seed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "attempt"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/attempt"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "review"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/review_request"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "enum": [
+              "query",
+              "export",
+              "report"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/query"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "learn"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "queue"
+            ],
+            "properties": {
+              "queue": {
+                "$ref": "#/definitions/path"
+              },
+              "maximum_records": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10000
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "migrate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/migration"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "audit_approve"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/audit_approval"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "revise"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/revision_request"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "repair"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/repair_request"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "register_run"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/run_registration"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "query_run"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/query_run"
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "sha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/definitions/path"
+        },
+        "sha256": {
+          "$ref": "#/definitions/sha"
+        }
+      }
+    },
+    "nullable_proof": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/definitions/proof"
+        }
+      ]
+    },
+    "nullable_text": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_scope",
+        "build",
+        "locale",
+        "size_bucket",
+        "ui_scale"
+      ],
+      "properties": {
+        "target_scope": {
+          "enum": [
+            "retail_wow",
+            "recording_fixture"
+          ]
+        },
+        "build": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "locale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "size_bucket": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:-]{1,80}$"
+        },
+        "ui_scale": {
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 4
+        }
+      }
+    },
+    "bbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "width": {
+          "type": "number",
+          "minimum": 1e-06,
+          "maximum": 1
+        },
+        "height": {
+          "type": "number",
+          "minimum": 1e-06,
+          "maximum": 1
+        }
+      }
+    },
+    "clock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "domain",
+        "clock_id",
+        "ticks",
+        "unit"
+      ],
+      "properties": {
+        "domain": {
+          "enum": [
+            "windows-qpc",
+            "coordinator-monotonic"
+          ]
+        },
+        "clock_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "ticks": {
+          "type": "number",
+          "minimum": 0
+        },
+        "unit": {
+          "const": "ms"
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pid",
+        "start_ticks",
+        "hwnd",
+        "class",
+        "executable",
+        "session_id"
+      ],
+      "properties": {
+        "pid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "start_ticks": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "hwnd": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]+$"
+        },
+        "class": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "executable": {
+          "$ref": "#/definitions/path"
+        },
+        "session_id": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observation_id",
+        "frame_id",
+        "seq",
+        "width",
+        "height",
+        "layout_id",
+        "target",
+        "clock",
+        "capture",
+        "producer"
+      ],
+      "properties": {
+        "observation_id": {
+          "$ref": "#/definitions/id"
+        },
+        "frame_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7680
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4320
+        },
+        "layout_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "target": {
+          "$ref": "#/definitions/target"
+        },
+        "clock": {
+          "$ref": "#/definitions/clock"
+        },
+        "capture": {
+          "$ref": "#/definitions/nullable_proof"
+        },
+        "roi_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "producer": {
+          "enum": [
+            "resident_wgc",
+            "recovery_printwindow",
+            "calibration_reference",
+            "simulation"
+          ]
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reviewer",
+        "reviewed_at",
+        "reason"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "approved",
+            "pending",
+            "rejected"
+          ]
+        },
+        "reviewer": {
+          "enum": [
+            "seed",
+            "claude",
+            "user",
+            "self",
+            "root",
+            "seed_model",
+            "unreviewed"
+          ]
+        },
+        "reviewed_at": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      }
+    },
+    "element": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "purpose",
+        "label",
+        "bbox",
+        "button",
+        "duration_ms"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "purpose": {
+          "$ref": "#/definitions/id"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "bbox": {
+          "$ref": "#/definitions/bbox"
+        },
+        "button": {
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 150
+        }
+      }
+    },
+    "action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "keys",
+            "duration_ms"
+          ],
+          "properties": {
+            "kind": {
+              "const": "key"
+            },
+            "keys": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "items": {
+                "enum": [
+                  "ESC",
+                  "ENTER"
+                ]
+              }
+            },
+            "duration_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 150
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "duration_ms"
+          ],
+          "properties": {
+            "kind": {
+              "const": "wait"
+            },
+            "duration_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "duration_ms",
+            "compiled_action"
+          ],
+          "properties": {
+            "kind": {
+              "const": "drag"
+            },
+            "duration_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1500
+            },
+            "compiled_action": {
+              "$ref": "urn:wow-input:protocol:native-v1#/definitions/action"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "duration_ms",
+            "compiled_action"
+          ],
+          "properties": {
+            "kind": {
+              "const": "move"
+            },
+            "duration_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1500
+            },
+            "compiled_action": {
+              "$ref": "urn:wow-input:protocol:native-v1#/definitions/action"
+            }
+          }
+        }
+      ]
+    },
+    "expected_effect": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state_id",
+            "signature_sha256"
+          ],
+          "properties": {
+            "state_id": {
+              "$ref": "#/definitions/id"
+            },
+            "signature_sha256": {
+              "anyOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/definitions/sha"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "seed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state_id",
+        "skill_id",
+        "scope",
+        "signature_bbox",
+        "element",
+        "frame",
+        "review",
+        "hard_stop"
+      ],
+      "properties": {
+        "state_id": {
+          "$ref": "#/definitions/id"
+        },
+        "skill_id": {
+          "$ref": "#/definitions/id"
+        },
+        "scope": {
+          "$ref": "#/definitions/scope"
+        },
+        "signature_bbox": {
+          "$ref": "#/definitions/bbox"
+        },
+        "signature_anchors": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "bbox"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/definitions/id"
+              },
+              "bbox": {
+                "$ref": "#/definitions/bbox"
+              }
+            }
+          }
+        },
+        "element": {
+          "$ref": "#/definitions/element"
+        },
+        "action": {
+          "$ref": "#/definitions/action"
+        },
+        "frame": {
+          "$ref": "#/definitions/frame"
+        },
+        "review": {
+          "$ref": "#/definitions/review"
+        },
+        "hard_stop": {
+          "type": "boolean"
+        },
+        "expected_effect": {
+          "$ref": "#/definitions/expected_effect"
+        },
+        "proposer": {
+          "enum": [
+            "user",
+            "claude",
+            "self",
+            "seed",
+            "seed_model",
+            "root"
+          ]
+        },
+        "safety_evidence": {
+          "$ref": "#/definitions/proof"
+        },
+        "proposal_provenance": {
+          "$ref": "#/definitions/proposal_provenance"
+        },
+        "modal_guard": {
+          "$ref": "#/definitions/modal_guard"
+        }
+      }
+    },
+    "review_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill_id",
+        "source_capture_sha256",
+        "signature_sha256",
+        "review"
+      ],
+      "properties": {
+        "skill_id": {
+          "$ref": "#/definitions/id"
+        },
+        "source_capture_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "signature_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "review": {
+          "$ref": "#/definitions/review"
+        }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "verifier",
+        "source_observation_id",
+        "proof"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "confirmed",
+            "failed",
+            "unverified"
+          ]
+        },
+        "verifier": {
+          "enum": [
+            "cv",
+            "local_ocr",
+            "seed",
+            "review"
+          ]
+        },
+        "source_observation_id": {
+          "$ref": "#/definitions/nullable_text"
+        },
+        "proof": {
+          "$ref": "#/definitions/nullable_proof"
+        },
+        "state_id": {
+          "$ref": "#/definitions/nullable_text"
+        },
+        "signature_sha256": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/sha"
+            }
+          ]
+        }
+      }
+    },
+    "nullable_duration": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 300000
+        }
+      ]
+    },
+    "latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clock",
+        "observe_to_input_ms",
+        "observe_to_effect_ms"
+      ],
+      "properties": {
+        "clock": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "domain",
+            "clock_id",
+            "unit"
+          ],
+          "properties": {
+            "domain": {
+              "enum": [
+                "windows-qpc",
+                "coordinator-monotonic"
+              ]
+            },
+            "clock_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "unit": {
+              "const": "ms"
+            }
+          }
+        },
+        "observe_to_input_ms": {
+          "$ref": "#/definitions/nullable_duration"
+        },
+        "observe_to_effect_ms": {
+          "$ref": "#/definitions/nullable_duration"
+        }
+      }
+    },
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill_id",
+        "attempt_id",
+        "mode",
+        "route",
+        "before",
+        "after",
+        "native_receipt",
+        "windows_clock_id",
+        "effect",
+        "latency",
+        "failure_reason"
+      ],
+      "properties": {
+        "skill_id": {
+          "$ref": "#/definitions/id"
+        },
+        "attempt_id": {
+          "$ref": "#/definitions/id"
+        },
+        "mode": {
+          "enum": [
+            "live",
+            "simulated",
+            "readonly"
+          ]
+        },
+        "route": {
+          "enum": [
+            "code",
+            "model_revalidated",
+            "manual_reviewed",
+            "simulated"
+          ]
+        },
+        "before": {
+          "$ref": "#/definitions/frame"
+        },
+        "after": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/frame"
+            }
+          ]
+        },
+        "native_receipt": {
+          "$ref": "#/definitions/nullable_proof"
+        },
+        "windows_clock_id": {
+          "$ref": "#/definitions/nullable_text"
+        },
+        "effect": {
+          "$ref": "#/definitions/effect"
+        },
+        "latency": {
+          "$ref": "#/definitions/latency"
+        },
+        "failure_reason": {
+          "$ref": "#/definitions/nullable_text"
+        },
+        "candidate": {
+          "$ref": "#/definitions/seed"
+        },
+        "governance_version": {
+          "const": 2
+        },
+        "provenance": {
+          "$ref": "#/definitions/provenance"
+        },
+        "outcome_class": {
+          "enum": [
+            "success",
+            "true_failure",
+            "timeout",
+            "cancelled",
+            "unverified"
+          ]
+        },
+        "actual_action": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/definitions/actual_action"
+            }
+          ]
+        },
+        "before_native_sample": {
+          "$ref": "urn:wow-resident:protocol:session-v1#/definitions/sample"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "governance_version"
+            ],
+            "properties": {
+              "governance_version": {
+                "const": 2
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "provenance",
+              "outcome_class",
+              "actual_action"
+            ]
+          }
+        }
+      ]
+    },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "$ref": "#/definitions/scope"
+        },
+        "status": {
+          "enum": [
+            "active",
+            "candidate",
+            "pending_review",
+            "degraded",
+            "hard_stop",
+            "all",
+            "deprecated",
+            "alias"
+          ]
+        },
+        "state_id": {
+          "$ref": "#/definitions/id"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "code_sha256",
+        "prompt_sha256",
+        "prompt_version",
+        "knowledge_sha256",
+        "skill_revision"
+      ],
+      "properties": {
+        "run_id": {
+          "$ref": "#/definitions/id"
+        },
+        "code_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "prompt_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "prompt_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "knowledge_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "skill_revision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backup"
+      ],
+      "properties": {
+        "backup": {
+          "$ref": "#/definitions/path"
+        }
+      }
+    },
+    "audit_approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill_id",
+        "report",
+        "review"
+      ],
+      "properties": {
+        "skill_id": {
+          "$ref": "#/definitions/id"
+        },
+        "report": {
+          "$ref": "#/definitions/proof"
+        },
+        "review": {
+          "$ref": "#/definitions/review"
+        }
+      }
+    },
+    "proposal_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "prompt_version",
+        "prompt_sha256",
+        "result_sha256",
+        "run_id",
+        "code_sha256",
+        "knowledge_sha256"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "prompt_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "prompt_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "result_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "code_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "knowledge_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "run_id": {
+          "$ref": "#/definitions/id"
+        },
+        "skill_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "result_artifact": {
+          "$ref": "#/definitions/proof"
+        }
+      }
+    },
+    "actual_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "duration_ms",
+        "compiled_action"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "click",
+            "screen_interact",
+            "key",
+            "drag",
+            "move"
+          ]
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1500
+        },
+        "compiled_action": {
+          "$ref": "urn:wow-input:protocol:native-v1#/definitions/action"
+        }
+      }
+    },
+    "revision_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill_id",
+        "expected_revision",
+        "seed"
+      ],
+      "properties": {
+        "skill_id": {
+          "$ref": "#/definitions/id"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "seed": {
+          "$ref": "#/definitions/seed"
+        }
+      }
+    },
+    "repair_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "skill_id",
+        "expected_revision",
+        "action",
+        "review",
+        "reason"
+      ],
+      "properties": {
+        "skill_id": {
+          "$ref": "#/definitions/id"
+        },
+        "expected_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "action": {
+          "enum": [
+            "deprecate",
+            "alias",
+            "correct_state",
+            "clear_unverified_legacy_stop"
+          ]
+        },
+        "canonical_skill_id": {
+          "$ref": "#/definitions/id"
+        },
+        "review": {
+          "$ref": "#/definitions/review"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "canonical_state_id": {
+          "$ref": "#/definitions/id"
+        }
+      }
+    },
+    "run_registration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run",
+        "account_id",
+        "world_directory",
+        "artifacts"
+      ],
+      "properties": {
+        "run": {
+          "type": "object"
+        },
+        "account_id": {
+          "$ref": "#/definitions/id"
+        },
+        "world_directory": {
+          "$ref": "#/definitions/path"
+        },
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "sha256",
+              "media_type"
+            ],
+            "properties": {
+              "path": {
+                "$ref": "#/definitions/path"
+              },
+              "sha256": {
+                "$ref": "#/definitions/sha"
+              },
+              "media_type": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          }
+        }
+      }
+    },
+    "modal_guard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "algorithm_sha256",
+        "source_capture_sha256",
+        "expected_panels",
+        "negative_artifacts"
+      ],
+      "properties": {
+        "method": {
+          "const": "neutral_panel_components_v1"
+        },
+        "algorithm_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "source_capture_sha256": {
+          "$ref": "#/definitions/sha"
+        },
+        "expected_panels": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/definitions/bbox"
+          }
+        },
+        "negative_artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/definitions/proof"
+          }
+        }
+      }
+    },
+    "query_run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id"
+      ],
+      "properties": {
+        "run_id": {
+          "$ref": "#/definitions/id"
+        }
+      }
+    }
   }
 }

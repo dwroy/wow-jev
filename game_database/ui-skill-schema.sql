@@ -47,3 +47,68 @@ CREATE TRIGGER ui_skill_request_no_update BEFORE UPDATE ON ui_skill_request
 BEGIN SELECT RAISE(ABORT,'UI learning request identity is immutable'); END;
 CREATE TRIGGER ui_skill_request_no_delete BEFORE DELETE ON ui_skill_request
 BEGIN SELECT RAISE(ABORT,'UI learning request history is immutable'); END;
+
+-- UI_GOVERNANCE_V2: explicit, backed-up additive migration only.
+CREATE TABLE ui_review_event (
+  event_sha256 TEXT PRIMARY KEY, skill_id TEXT NOT NULL REFERENCES ui_skill(skill_id),
+  previous_sha256 TEXT, payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE ui_skill_revision (
+  skill_id TEXT NOT NULL REFERENCES ui_skill(skill_id), revision INTEGER NOT NULL,
+  content_sha256 TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(skill_id,revision)
+) STRICT;
+CREATE TABLE ui_knowledge_snapshot (
+  sha256 TEXT PRIMARY KEY, ordinal INTEGER NOT NULL, payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE ui_audit_approval (
+  skill_id TEXT NOT NULL REFERENCES ui_skill(skill_id), report_sha256 TEXT NOT NULL,
+  snapshot_sha256 TEXT NOT NULL, revision INTEGER NOT NULL, payload TEXT NOT NULL,
+  PRIMARY KEY(skill_id,report_sha256)
+) STRICT;
+CREATE TABLE ui_quarantine (
+  quarantine_id TEXT PRIMARY KEY, raw_sha256 TEXT NOT NULL, reason TEXT NOT NULL,
+  payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE ui_safety_frame (
+  capture_sha256 TEXT PRIMARY KEY, proof_sha256 TEXT NOT NULL, payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE ui_governance_migration (
+  migration_id TEXT PRIMARY KEY, backup_sha256 TEXT NOT NULL, payload TEXT NOT NULL
+) STRICT;
+CREATE TRIGGER ui_review_event_no_update BEFORE UPDATE ON ui_review_event
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+CREATE TRIGGER ui_review_event_no_delete BEFORE DELETE ON ui_review_event
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+CREATE TRIGGER ui_skill_revision_no_update BEFORE UPDATE ON ui_skill_revision
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+CREATE TRIGGER ui_skill_revision_no_delete BEFORE DELETE ON ui_skill_revision
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+CREATE TRIGGER ui_knowledge_snapshot_no_update BEFORE UPDATE ON ui_knowledge_snapshot
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+CREATE TRIGGER ui_knowledge_snapshot_no_delete BEFORE DELETE ON ui_knowledge_snapshot
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+CREATE TRIGGER ui_audit_approval_no_update BEFORE UPDATE ON ui_audit_approval
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+CREATE TRIGGER ui_audit_approval_no_delete BEFORE DELETE ON ui_audit_approval
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+CREATE TRIGGER ui_quarantine_no_update BEFORE UPDATE ON ui_quarantine
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+CREATE TRIGGER ui_quarantine_no_delete BEFORE DELETE ON ui_quarantine
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+CREATE TRIGGER ui_safety_frame_no_update BEFORE UPDATE ON ui_safety_frame
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+CREATE TRIGGER ui_safety_frame_no_delete BEFORE DELETE ON ui_safety_frame
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+CREATE TRIGGER ui_governance_migration_no_update BEFORE UPDATE ON ui_governance_migration
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+CREATE TRIGGER ui_governance_migration_no_delete BEFORE DELETE ON ui_governance_migration
+BEGIN SELECT RAISE(ABORT,'UI governance evidence is immutable'); END;
+
+CREATE TABLE ui_repair_event (
+  event_sha256 TEXT PRIMARY KEY, skill_id TEXT NOT NULL REFERENCES ui_skill(skill_id),
+  revision INTEGER NOT NULL, payload TEXT NOT NULL
+) STRICT;
+CREATE TRIGGER ui_repair_event_no_update BEFORE UPDATE ON ui_repair_event
+BEGIN SELECT RAISE(ABORT,'UI repair evidence is immutable'); END;
+CREATE TRIGGER ui_repair_event_no_delete BEFORE DELETE ON ui_repair_event
+BEGIN SELECT RAISE(ABORT,'UI repair evidence is immutable'); END;

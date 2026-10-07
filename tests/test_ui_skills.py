@@ -40,7 +40,7 @@ def seed(root, *, pending=False, hard_stop=False):
     return {'state_id': 'disconnected', 'skill_id': 'reconnect', 'scope': SCOPE,
             'signature_bbox': BBOX, 'signature_anchors': [{'id': 'independent-state', 'bbox': {'x': 0, 'y': 0, 'width': .25, 'height': .25}}],
             'element': {'id': 'reconnect-button', 'purpose': 'reconnect', 'label': '重新连接', 'bbox': BBOX, 'button': 'left', 'duration_ms': 80},
-            'frame': frame(root, 1), 'review': {'status': 'pending' if pending else 'approved', 'reviewer': 'unreviewed' if pending else 'root',
+            'frame': frame(root, 1), 'review': {'status': 'pending' if pending else 'approved', 'reviewer': 'unreviewed' if pending else 'claude',
                                               'reviewed_at': '2026-10-07T00:00:00Z', 'reason': 'Explicit offline protocol fixture, not field evidence.'},
             'hard_stop': hard_stop}
 
@@ -98,19 +98,20 @@ def request(op, data, ident):
     return {'protocol': 'wow-ui-skill-learning', 'version': 1, 'request_id': ident, 'op': op, 'data': data}
 
 
-def test_two_independent_confirmations_promote_and_two_failures_demote(tmp_path):
+def test_legacy_confirmations_and_failures_are_retained_without_promotion(tmp_path):
     with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
         base = dict(db.connection.execute('SELECT key,value FROM runtime_meta'))
         store = UiSkills(db, create=True); store.seed(seed(tmp_path))
         assert store.attempt(attempt(tmp_path, 1))['skill']['status'] == 'candidate'
-        assert store.attempt(attempt(tmp_path, 2))['skill']['status'] == 'active'
-        assert store.attempt(attempt(tmp_path, 3, outcome='failed'))['skill']['status'] == 'active'
-        assert store.attempt(attempt(tmp_path, 4, outcome='failed'))['skill']['status'] == 'degraded'
+        assert store.attempt(attempt(tmp_path, 2))['skill']['status'] == 'candidate'
+        assert store.attempt(attempt(tmp_path, 3, outcome='failed'))['skill']['status'] == 'candidate'
+        assert store.attempt(attempt(tmp_path, 4, outcome='failed'))['skill']['status'] == 'candidate'
         recovering = store.attempt(attempt(tmp_path, 5))['skill']
-        assert recovering['status'] == 'degraded' and recovering['last_failure'] is None and recovering['failure_streak'] == 0
+        assert recovering['status'] == 'candidate' and recovering['failure_streak'] == 0
         restored = store.attempt(attempt(tmp_path, 6))['skill']
-        assert restored['status'] == 'active' and restored['last_failure'] is None  # reflex routing can recover
-        assert store.query({})['skills'][0]['confirmed_count'] == 4
+        assert restored['status'] == 'candidate'
+        assert store.query({})['skills'][0]['confirmed_count'] == 0
+        assert db.connection.execute('SELECT COUNT(*) FROM ui_attempt').fetchone()[0] == 6
         assert dict(db.connection.execute('SELECT key,value FROM runtime_meta')) == base
         assert db.integrity_check()['status'] == 'ok'
 
@@ -135,12 +136,11 @@ def test_duplicate_attempt_frame_and_native_receipt_cannot_double_count(tmp_path
         doc['source'] = original['source']; doc['intent']['observation_id'] = changed['before']['observation_id']
         doc['action_intent']['based_on_observation_id'] = changed['before']['observation_id']
         changed['native_receipt'] = proof(Path(changed['native_receipt']['path']), doc)
-        with pytest.raises(ValidationError, match='duplicate live'):
-            store.attempt(changed)
+        assert not store.attempt(changed)['live_confirmed']  # old replay remains ineligible
         changed = deepcopy(one); changed['effect']['status'] = 'failed'
         with pytest.raises(ValidationError, match='ID reused'):
             store.attempt(changed)
-        assert store.query({})['skills'][0]['confirmed_count'] == 1
+        assert store.query({})['skills'][0]['confirmed_count'] == 0
 
 
 def test_native_frame_counter_restart_is_distinct_but_observation_rename_is_not(tmp_path):
@@ -156,7 +156,7 @@ def test_native_frame_counter_restart_is_distinct_but_observation_rename_is_not(
         second['native_receipt'] = proof(Path(second['native_receipt']['path']), receipt)
         effect = json.loads(Path(second['effect']['proof']['path']).read_text()); effect['frame_id'] = second['after']['frame_id']
         second['effect']['proof'] = proof(Path(second['effect']['proof']['path']), effect)
-        assert store.attempt(second)['skill']['status'] == 'active'
+        assert store.attempt(second)['skill']['status'] == 'candidate'
         renamed = deepcopy(second); renamed['attempt_id'] = 'renamed-replay'; renamed['before']['observation_id'] = 'renamed-before'
         with pytest.raises(ValidationError, match='action ID or native session'):
             store.attempt(renamed)
@@ -190,10 +190,10 @@ def test_pending_review_and_hard_stop_cannot_be_executable(tmp_path):
         with pytest.raises(ValidationError, match='review not bound'):
             store.review(wrong)
         wrong['source_capture_sha256'] = row['signature']['source_capture_sha256']
-        assert store.review(wrong)['skill']['status'] == 'active'
+        assert store.review(wrong)['skill']['status'] == 'candidate'
     other = tmp_path / 'hard'; other.mkdir()
     with RuntimeDatabase(other / 'agent.sqlite') as db:
-        store = UiSkills(db, create=True); s = seed(other); s['element']['label'] = '安装更新'; store.seed(s)
+        store = UiSkills(db, create=True); s = seed(other, hard_stop=True); s['element']['label'] = '安装更新'; store.seed(s)
         store.attempt(attempt(other, 1)); store.attempt(attempt(other, 2))
         assert store.query({})['skills'][0]['status'] == 'hard_stop'
         assert store.query({'status': 'active'})['skills'] == []
@@ -203,13 +203,12 @@ def test_original_capture_crop_and_status_tampering_fail_closed(tmp_path):
     with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
         store = UiSkills(db, create=True); source = seed(tmp_path); store.seed(source)
         db.connection.execute("UPDATE ui_skill SET status='active' WHERE skill_id='reconnect'")
-        with pytest.raises(ValidationError, match='status/index'):
-            store.query({})
+        bad = store.query({}); assert bad['skills'] == [] and 'status/index' in bad['quarantine'][0]['reason']
         db.connection.execute("UPDATE ui_skill SET status='candidate' WHERE skill_id='reconnect'")
         row = store.query({})['skills'][0]
         Path(row['signature']['crop']['path']).write_bytes(b'changed crop')
-        with pytest.raises(ValidationError, match='artifact hash'):
-            store.export({})
+        assert store.export({})['snapshot']['skills'] == []
+        assert any('artifact hash' in row['reason'] for row in store.query({})['quarantine'])
 
 
 def test_export_sampling_canonical_sha_scope_and_single_writer(tmp_path):
@@ -231,7 +230,7 @@ def test_unknown_slow_confirmation_auto_crops_pending_review_candidate(tmp_path)
         store = UiSkills(db, create=True); data = attempt(tmp_path, 1)
         data['candidate'] = seed(tmp_path, pending=True)
         result = store.attempt(data)
-        assert result['live_confirmed'] and result['skill']['status'] == 'pending_review'
+        assert not result['live_confirmed'] and result['skill']['status'] == 'pending_review'
         assert Path(result['skill']['signature']['crop']['path']).is_file()
         assert store.report({})['review_queue'][0]['skill_id'] == 'reconnect'
 
@@ -267,7 +266,8 @@ def test_wrong_click_or_key_cannot_promote_even_with_consistent_native_digest(tm
             store.attempt(wrong_key)
         for number in (3, 4):
             correct = attempt(tmp_path, number, action=key_seed['action']); correct['skill_id'] = key_seed['skill_id']; store.attempt(correct)
-        assert store.query({'status': 'active'})['skills'][0]['skill_id'] == key_seed['skill_id']
+        assert store.query({'status': 'active'})['skills'] == []
+        assert next(s for s in store.query({})['skills'] if s['skill_id'] == key_seed['skill_id'])['confirmed_count'] == 0
 
 
 def test_original_body_plan_args_ids_and_full_insertion_are_required(tmp_path):
@@ -302,9 +302,9 @@ def test_legacy_unbound_history_is_preserved_but_not_an_active_qualification(tmp
         db.connection.execute('INSERT INTO ui_attempt(attempt_id,skill_id,content_sha256,live_confirmed,before_frame_id,after_frame_id,receipt_key,payload) VALUES (?,?,?,?,?,?,?,?)',
                               (legacy['attempt_id'], legacy['skill_id'], canonical_sha256(legacy), 1, 'legacy-before', 'legacy-after', 'legacy-receipt', canonical(legacy)))
         row = store.query({})['skills'][0]
-        assert row['confirmed_count'] == 1 and row['status'] == 'candidate'
+        assert row['confirmed_count'] == 0 and row['status'] == 'candidate'
         assert db.connection.execute('SELECT count(*) FROM ui_attempt').fetchone()[0] == 2
-        assert store.attempt(attempt(tmp_path, 3))['skill']['status'] == 'active'
+        assert store.attempt(attempt(tmp_path, 3))['skill']['status'] == 'candidate'
 
 
 def test_queue_checkpoint_partial_tail_replay_and_mutated_prefix(tmp_path):
@@ -385,8 +385,8 @@ def test_world_npc_native_surface_right_click_qualifies_without_ui_button_fallba
         for number in (1, 2):
             data, _ = world_npc_attempt(tmp_path, number)
             result = store.attempt(data)
-            assert result['live_confirmed']
-        assert result['skill']['status'] == 'active' and result['skill']['confirmed_count'] == 2
+            assert not result['live_confirmed']  # v1 effect proof does not acquire v2 qualification
+        assert result['skill']['status'] == 'candidate' and result['skill']['confirmed_count'] == 0
 
 
 def test_wrong_world_surface_cannot_promote_with_consistent_compilation_and_full_insertion(tmp_path):
@@ -412,3 +412,98 @@ def test_wrong_world_surface_cannot_promote_with_consistent_compilation_and_full
             bad['native_receipt'] = proof(Path(bad['native_receipt']['path']), document)
             with pytest.raises(ValidationError): store.attempt(bad)
         assert store.query({})['skills'][0]['confirmed_count'] == 0
+
+
+TARGET_COLOR = (210, 40, 40)
+
+
+def prepare_governed(store, root):
+    target = seed(root); target.update(state_id='world_ready', skill_id='world-ready-recognizer')
+    target['element'].update(id='world-ready-control', purpose='ready', label='Explicit target fixture')
+    target['frame'] = frame(root, 200); target['frame']['clock']['ticks'] = 100
+    Image.new('RGB', (96, 64), TARGET_COLOR).save(target['frame']['capture']['path'])
+    target['frame']['capture']['sha256'] = hashlib.sha256(Path(target['frame']['capture']['path']).read_bytes()).hexdigest()
+    target_sig = store.seed(target)['signature_sha256']
+    initial = seed(root); initial['expected_effect'] = {'state_id': 'world_ready', 'signature_sha256': target_sig}
+    store.seed(initial)
+
+
+def governed_attempt(store, root, number, *, run_id='offline-run-a', wrong_pixels=False):
+    """Complete, explicitly artificial v2 input/after-evidence and Runtime run."""
+    from tests.test_game_runtime import run_record
+    data = attempt(root, number); after = data['after']
+    Image.new('RGB', (96, 64), (0, 0, 0) if wrong_pixels else TARGET_COLOR).save(after['capture']['path'])
+    after['capture']['sha256'] = hashlib.sha256(Path(after['capture']['path']).read_bytes()).hexdigest()
+    rows = {r['skill_id']: r for r in store.query({})['skills']}
+    try: run = store.runtime.get_run(run_id)
+    except ValidationError:
+        code = root / 'offline-code.json'; code.write_text('{"scope":"explicit offline fixture code"}')
+        prompt = root / 'offline-prompt.json'; prompt.write_text('{"scope":"no model was called; offline fixture"}')
+        code_sha = store.runtime.register_artifact(code, media_type='application/json')['sha256']
+        prompt_sha = store.runtime.register_artifact(prompt, media_type='application/json')['sha256']
+        store.runtime.register_account('account-1', namespace='retail'); store.runtime.register_character('character-1', account_id='account-1', namespace='retail')
+        run = run_record(mode='live'); run.update(run_id=run_id, code_sha256=code_sha, prompt_sha256=prompt_sha, knowledge_sha256=store.export({})['snapshot_sha256'])
+        store.runtime.create_run(run)
+    snapshot = json.loads(store.runtime.connection.execute('SELECT payload FROM ui_knowledge_snapshot WHERE sha256=?', (run['knowledge_sha256'],)).fetchone()[0])
+    revision = next(r['revision'] for r in snapshot['skills'] if r['skill_id'] == 'reconnect')
+    data.update(governance_version=2, outcome_class='success', provenance={'run_id': run_id, 'code_sha256': run['code_sha256'], 'prompt_sha256': run['prompt_sha256'],
+        'prompt_version': 'explicit-offline-v1', 'knowledge_sha256': run['knowledge_sha256'], 'skill_revision': revision})
+    receipt_path = Path(data['native_receipt']['path']); document = json.loads(receipt_path.read_text()); document['action_intent']['run_id'] = run_id
+    data['actual_action'] = {'kind': 'click', 'duration_ms': 80, 'compiled_action': deepcopy(document['compiled_action'])}
+    data['native_receipt'] = proof(receipt_path, document)
+    source = deepcopy(document['source']); source.update(frame_id=after['frame_id'], seq=after['seq'], source_qpc_ms=after['clock']['ticks'], request_received_qpc_ms=after['clock']['ticks'] - 1)
+    qpc = source['source_qpc_ms']; target = source['target']
+    native = {'protocol': 'wow-resident', 'version': 1, 'type': 'sample', 'session_id': source['session_id'], 'id': 'explicit-offline-after', 'seq': source['seq'],
+        'window': {'pid': target['pid'], 'hwnd': target['hwnd'], 'client_width': 96, 'client_height': 64, 'focused': True,
+                   'class': target['class'], 'executable': target['executable'], 'start_ticks': target['start_ticks'], 'dpi': 144, 'visible': True, 'minimized': False,
+                   'client_rect': {'left': 0, 'top': 0, 'right': 96, 'bottom': 64}},
+        'memory_frame': source, 'capture': {'status': 'ok', 'method': 'wgc', 'started_qpc_ms': qpc, 'finished_qpc_ms': qpc + 2,
+            'request_received_qpc_ms': qpc - 1, 'arrived_qpc_ms': qpc}, 'artifact': None,
+        'metrics': {'mean_luma': None, 'variance_luma': None, 'frame_delta': None},
+        'detectors': {'inventory_open': {'status': 'unknown', 'value': None, 'confidence': 0, 'calibration_id': None}},
+        'cv': {'selected_character': {'verified': False}, 'tutorial_interaction': {'verified': False}},
+        'local_clock': {'domain': 'windows-qpc', 'at_ms': qpc + 10},
+        'input_state': {'status': 'known', 'cursor_visible': True, 'cursor_free': True, 'mouse_buttons_held': False, 'cursor_flags': 1,
+            'capture_hwnd': '0x0', 'target_thread_id': 999, 'sampled_qpc_ms': qpc + 9, 'reason': None},
+        'processing_timing': {'clock': 'windows_qpc', 'request_ms': qpc - 1, 'frame_arrived_ms': qpc, 'roi_started_ms': qpc,
+            'roi_finished_ms': qpc + 2, 'cv_started_ms': qpc + 2, 'cv_finished_ms': qpc + 4, 'response_ms': qpc + 10}}
+    evidence = {'protocol': 'wow-resident', 'version': 1, 'type': 'evidence', 'session_id': source['session_id'], 'id': 'explicit-offline-evidence',
+        'sample': native, 'artifact': {'id': 'explicit-fixture-after-png', 'windows_path': 'C:\\offline-fixture.png', 'sha256': after['capture']['sha256'],
+            'source_frame_id': after['frame_id'], 'source_qpc_ms': qpc, 'width': 96, 'height': 64},
+        'ocr': {'status': 'not_requested', 'raw_text_retained': False, 'items': []}, 'local_clock': {'domain': 'windows-qpc', 'at_ms': qpc + 15}}
+    data['effect'].update(state_id='world_ready', signature_sha256=rows['world-ready-recognizer']['signature']['sha256'])
+    data['effect']['proof'] = proof(Path(data['effect']['proof']['path']), {'protocol': 'wow-ui-skill-effect-proof', 'version': 2, 'status': 'confirmed',
+        'source_observation_id': after['observation_id'], 'frame_id': after['frame_id'], 'capture_sha256': after['capture']['sha256'],
+        'verifier': 'review', 'state_id': data['effect']['state_id'], 'signature_sha256': data['effect']['signature_sha256'], 'native_evidence': evidence})
+    return data
+
+
+def test_v2_independent_target_and_two_runs_remain_frozen_pending_explicit_report(tmp_path):
+    with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
+        store = UiSkills(db, create=True); prepare_governed(store, tmp_path)
+        assert store.attempt(governed_attempt(store, tmp_path, 1))['live_confirmed']
+        same_run = store.attempt(governed_attempt(store, tmp_path, 2))['skill']
+        assert same_run['governance']['metrics']['distinct_runs'] == 1 and not same_run['governance']['metrics']['ready']
+        other_run = store.attempt(governed_attempt(store, tmp_path, 3, run_id='offline-run-b'))['skill']
+        assert other_run['confirmed_count'] == 3 and other_run['governance']['metrics']['ready']
+        assert other_run['status'] == 'candidate' and other_run['governance']['activation_frozen']
+        assert db.connection.execute('SELECT COUNT(*) FROM ui_skill_revision WHERE skill_id="reconnect"').fetchone()[0] == 4
+        assert db.connection.execute('SELECT COUNT(*) FROM ui_knowledge_snapshot').fetchone()[0] >= 5
+
+
+def test_v2_executor_claim_cannot_replace_independent_pixels_or_original_after_source(tmp_path):
+    with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
+        store = UiSkills(db, create=True); prepare_governed(store, tmp_path)
+        bad = governed_attempt(store, tmp_path, 1, wrong_pixels=True)
+        with pytest.raises(ValidationError, match='independent after PNG'): store.attempt(bad)
+        for number, mutation in enumerate(('artifact_sha', 'wrong_frame', 'knowledge', 'expected_signature'), 2):
+            bad = governed_attempt(store, tmp_path, number)
+            if mutation == 'knowledge': bad['provenance']['knowledge_sha256'] = 'f' * 64
+            elif mutation == 'expected_signature': bad['effect']['signature_sha256'] = 'f' * 64
+            else:
+                original = json.loads(Path(bad['effect']['proof']['path']).read_text())
+                if mutation == 'artifact_sha': original['native_evidence']['artifact']['sha256'] = 'f' * 64
+                else: original['native_evidence']['sample']['memory_frame']['frame_id'] = 'unrelated-source'
+                bad['effect']['proof'] = proof(Path(bad['effect']['proof']['path']), original)
+            with pytest.raises(ValidationError): store.attempt(bad)
+        assert next(r for r in store.query({})['skills'] if r['skill_id'] == 'reconnect')['confirmed_count'] == 0
