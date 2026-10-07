@@ -89,6 +89,11 @@ export class UiResidentCollector {
         add('target.screen_interaction',{id:entry.element.id,signature,layout_id:m.layout_id,...point,enabled:true},'cv');add('target.world_npc_surface',{id:entry.element.id,signature,layout_id:m.layout_id,rect,point,frame_id:m.frame_id,roi_id:roi.id,roi_sha256:roi.sha256,calibration_sha256:roi.calibration_sha256,visible:true},'cv');
       }
     }
+    if(state?.id==='tutorial_attack_training'&&matched?.status==='known'){
+      const ground=matched.matches.find(match=>skills.some(k=>k.skill_id===match.skill_id&&k.element.purpose==='ground_training_evidence'&&k.element.label==='双脚与甲板'));
+      const roi=ground?m.rois.find(r=>r.id==='learned-ui-'+ground.skill_id&&r.sha256===ground.roi_sha256&&r.calibration_sha256===matched.knowledge_sha256):null;
+      if(ground&&roi){add('player.movement_mode','ground','cv');add('player.ground_source',{mode:'ground',frame_id:m.frame_id,layout_id:m.layout_id,roi_id:roi.id,roi_sha256:roi.sha256,calibration_sha256:roi.calibration_sha256},'cv');}
+    }
     if(elements.length){add('ui.elements',elements.map(({signature_sha256:_,...e})=>e),'cv');add('ui.control_signatures',elements.map(e=>({id:e.id,signature_sha256:e.signature_sha256})),'cv');add('input.mouse_mode','ui','cv');}
     if(state?.id==='dialog_jaina_warmup'&&matched?.status==='known'){
       const accept=matched.matches.map(match=>skills.find(k=>k.skill_id===match.skill_id)).find(k=>k?.element.purpose==='quest_accept_jaina_warmup'&&k.element.label==='接受');
