@@ -1,3 +1,11 @@
+**本轮最终：首个交谈与接受“热身”已按reviewer=claude独立证据确认，代码修补和全量验收已完成；后续“热身”仍0/1，当前已安全回选角，现场/模型停止。** 代码功能3a9c7bb，完整Python985 passed＋3项既有strict xfail、TS774/774、typecheck，0普通skip/fail/cancel；正常推送只codex/agent-system，最终文档提交SHA以Git为准。
+
+69进世界3/3释放并独立world后图；70只读3000ms记录17次观察，L3 ground/scene/body未同时满足，0W/0execute。18份保存UiFrame中的dummy全known、movement_mode均无ground，不能用放宽阈值/猜测移动宣称推进。71安全ESC原签名不匹配、Seed未采纳，0输入；现帧71教程/独立hotbar修订普通self候选后72ESC2/2释放、73登出3/3释放，74独立新帧char_select（QPC271971957.2412、PNG SHA b58772fbcc340a633b6a329dd883f60025e192cbc2074f4aabd759af90d2699d）。69UP→72首ESC8.512856分钟，本轮十分钟前开始安全操作；不是十分钟前已完成登出。所有6个WowJev-Resident临时任务删除并回查80070002，capture关闭，输入runs空账本/执行端退出/释放确认；74只读无执行器不冒充物理释放。
+
+原件training-field-69-74-summary.json SHA110a59a03bef3d8e637b5f771c4610b7547edcc7f66445357fcb69588dbfbf13含6个精确task名与逐项回执SHA。本段总Seed API5次attempted/4次completed（含69后验1、71慢路2、73后验2），均未采纳；动作选择代码、反射active0、晋升合格0，不漏计失败与后验。69/72/73最新源→firstSend完成202.8286/205.7988/229.7874ms，各n1非p50，150ms未达。最新audit-checkpoint-74 JSON SHA5c12e77d8caf4d89605273b86c6ea063473be3c5a01c742bad74e77787150482，HTML19,483,033字节、512px JPEG，23技能/0active/0合格确认。
+
+当前阻塞是移动前地面识别跨光照/姿态仍不可靠，未发W或攻击，不再同策略重进。遗留：用当前场景证据和真正Native像素复核设计慢路地面识别，避免固定亮度/固定甲板纹理；已知当前教程场景经普通Body.ui_key(ESC)的安全返回入口只完成评估，未实现。所有实际效果/程序超时保留区分，下一轮需先解决这些识别/安全返回能力再恢复教程，详见热身验收。
+
 **最新冻结3a9c7bb完整验收：Python985 passed＋3项既有strict xfail、TS774/774、typecheck通过，0普通skip/fail/cancel。首交谈人工验收confirmed不变；“热身”0/1。最近独立68新帧确认选角（QPC270383353.8127）。**
 
 63实际进入世界3/3并释放，ground未匹配，0W；64安全ESC被整份ui.skill_matches等值误拒（0输入），无intent前置拒绝又被误写run_provenance_mismatch。现只对按键放行无关候选波动，当前选中skill_id/signature_id/state_id和原知识SHA必须一致，Native私有绑定、身份/前台/750ms不变；原拒绝reason准确保留。65实际AFK坐姿，全部签名unknown，Seed1次API完成但输出契约未采纳，0输入。用65当前帧教程+独立hotbar修订既有ESC candidate，66实际ESC2/2释放、后图菜单；67登出3/3释放，68独立新帧确认选角SHA ea5753643efc3d62c98fd4cb8c7d9e1b227b8ef2ddc060d90f3e4c5fac0d2678。临时任务删除回查、空账本/执行端退出/capture关闭均确认；原后验超时/存储失败不追认晋升。63UP→66首DOWN15.7405分钟，再次违反十分钟前回程，作为遗留未达标记录。

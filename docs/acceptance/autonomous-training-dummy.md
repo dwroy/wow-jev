@@ -43,3 +43,22 @@ Python985 passed＋3项既有strict xfail、TS769/769、typecheck全部通过，
 3a9c7bb增加最多3000ms有界只读择新hot帧：复用L3 ground/scene/body条件、原750ms，源target/layout/clock一致；旧帧、Seed冒充地面、失焦/硬停、取消/采集不返回均拒绝。等待没有input dispatch；超时0W并优先安全回程。完整Python985+3原strict xfail、TS774/774、typecheck，0普通skip/fail/cancel；原生源未变，无需重复既有c4522eb编译与32/14原生检查。
 
 更新审计23技能/0active/0合格确认，audit-checkpoint-68 JSON SHA09a625a491280bc460a126cafde0fb6c49541c4a6846c2ad1685ae6cb6eac883，HTML18,434,381字节、512px JPEG、全部记录与原图保留。63/66/67各自源→首SendInput188.3928/231.5385/235.1701ms，分别n=1，不称稳态p50；最初规划与模型不在这一最新源区间。
+
+## 最终69–74：移动前证据阻塞，安全停止
+
+69实际进世界3/3释放；70事件training_readonly_ready_wait记录17次观察、预算3000ms，timeout未选出ground/scene/body同时known的当前帧，0W、0execute。18份保存UiFrame的假人全known，ground全缺；没有假装Source支持移动或放宽阈值。本轮“热身”仍0/1，0攻击输入。71 ESC旧签名不匹配，Seed结果未采纳；按71当前原帧教程/独立hotbar修订self候选后，72实际ESC2/2释放、独立菜单；73登出3/3释放，74独立新帧确认选角（QPC271971957.2412，PNG SHA b58772fbcc340a633b6a329dd883f60025e192cbc2074f4aabd759af90d2699d）。69最后UP→72首ESC8.512856分钟，十分钟前开始安全操作，不宣称十分钟前已完成登出。
+
+六项计划任务只用于当前用户交互宿主，都删除并独立回查GetTask80070002不存在；全部capture关闭，输入runs原生release、空账本与executorExit已确认。74无输入器，不以只读确认冒充物理释放。精确名称如下（完整逐项SHA/回执见主out/acceptance/ui-skill-learning-20261007/training-field-69-74-summary.json，SHA110a59a03bef3d8e637b5f771c4610b7547edcc7f66445357fcb69588dbfbf13）：
+
+- 69：WowJev-Resident-ebbb644d93ae473681977315c14813d6
+- 70：WowJev-Resident-42968f58d0a7448ba2c78cf360597fc2
+- 71：WowJev-Resident-3c29c67a7f0c45dbb54cfbcdeee67eb5
+- 72：WowJev-Resident-fdc7d11676c346e3a2b89960c19d2deb
+- 73：WowJev-Resident-5a101be0d2714ba38e73b39854245028
+- 74：WowJev-Resident-5d82268e301744d58441f87375a32da2
+
+69–74 Seed总API attempted5/completed4，全部未采纳：69后效1次，71慢路2次，73后效2次（仅1完成）。不是仅数动作选择，也不遗漏失败。69/72/73 latest frameArrived→firstSend完成202.8286/205.7988/229.7874ms，分别n1、未达到150ms，不含先前规划/模型，不能称稳态p50；输入与实际世界/菜单/选角效果独立记录。原程序效果超时/存储失败回执不回填学习确认。
+
+最终源码3a9c7bb已通过完整Python985＋3项原strict xfail、TS774/774、typecheck。现场仅更新运行候选参考，业务源码无新改动，不无故重复全量。audit-checkpoint-74 HTML19,483,033字节、JPEG长边≤512，精确JSON SHA5c12e77d8caf4d89605273b86c6ea063473be3c5a01c742bad74e77787150482，23技能/0active/0治理合格确认；原图/全部负例/尝试/审核链保留。
+
+本轮停止现场及模型，不重进或重复当前失败策略。遗留是地面识别跨光照/姿态的真实可靠性，以及普通代码Body.ui_key(ESC)依当前已知教程场景/retail身份/原750ms/焦点与释放闸的安全返回入口（仅评估，未实施，不能说已可运行）。下一轮应先解决能力，不能用固定坐标/猜测地面/低阈值充作证据，也不能把NPC选中当摧毁完成。
