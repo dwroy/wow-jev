@@ -202,6 +202,20 @@ def test_unknown_slow_confirmation_auto_crops_pending_review_candidate(tmp_path)
         assert store.report({})['review_queue'][0]['skill_id'] == 'reconnect'
 
 
+def test_key_and_wait_actions_roundtrip_without_fake_mouse_authority(tmp_path):
+    with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
+        store = UiSkills(db, create=True); s = seed(tmp_path); s['action'] = {'kind': 'key', 'keys': ['ESC'], 'duration_ms': 80}
+        s['review']['reviewer'] = 'self'; store.seed(s)
+        assert store.export({})['snapshot']['skills'][0]['action'] == s['action']
+        bad = deepcopy(s); bad['skill_id'] = 'bad-key'; bad['action']['keys'] = ['ESC', 'ENTER']
+        with pytest.raises(ValidationError):
+            store.seed(bad)
+        wait = deepcopy(s); wait['skill_id'] = 'wait-transition'; wait['action'] = {'kind': 'wait', 'duration_ms': 1000}; store.seed(wait)
+        data = attempt(tmp_path, 1); data['skill_id'] = wait['skill_id']
+        assert store.attempt(data)['live_confirmed'] is False
+        assert store.query({'status': 'active'})['skills'] == []
+
+
 def test_queue_checkpoint_partial_tail_replay_and_mutated_prefix(tmp_path):
     queue = tmp_path / 'queue.jsonl'; first = request('seed', seed(tmp_path), 'seed-once')
     second = request('attempt', attempt(tmp_path, 1, mode='simulated'), 'attempt-once')

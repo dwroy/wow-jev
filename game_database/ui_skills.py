@@ -256,7 +256,7 @@ class UiSkills:
             element_key = canonical_sha256({'state_key': state_key, 'element': data['element']})
             skill = {'skill_id': data['skill_id'], 'state_key': state_key, 'state_id': data['state_id'], 'scope': data['scope'],
                      'signature_id': signature['signature_id'], 'element_key': element_key, 'hard_stop': hard,
-                     'review': data['review'], 'expected_effect': data.get('expected_effect'), 'seed': data}
+                     'review': data['review'], 'expected_effect': data.get('expected_effect'), 'action': data.get('action'), 'seed': data}
             old = self.runtime.connection.execute('SELECT skill_id FROM ui_skill WHERE skill_id=?', (data['skill_id'],)).fetchone()
             if old:
                 if self._stored('ui_skill', 'skill_id', data['skill_id'])['seed'] != data:
@@ -314,10 +314,14 @@ class UiSkills:
         return {'skill_id': skill_id, 'state_id': skill['state_id'], 'scope': skill['scope'], 'status': row[0], 'revision': row[1],
                 'confirmed_count': row[2], 'failure_streak': row[3], 'last_failure': parse_json(row[4]) if row[4] else None,
                 'hard_stop': skill['hard_stop'] or state['hard_stop'], 'review': skill['review'], 'element': element,
-                'signature': {**signature, 'review': skill['review']}, 'expected_effect': skill['expected_effect']}
+                'signature': {**signature, 'review': skill['review']}, 'expected_effect': skill['expected_effect'], 'action': skill['action']}
 
     def _confirmed(self, data: dict, skill: dict) -> tuple[bool, str | None]:
         before, after, effect = data['before'], data['after'], data['effect']
+        # A local wait emits no native input. Observing an autonomous transition
+        # cannot satisfy the input-backed promotion rule, even with a UI effect.
+        if skill['action'] is not None and skill['action']['kind'] == 'wait':
+            return False, None
         if data['mode'] != 'live' or skill['scope']['target_scope'] != 'retail_wow' or before['producer'] not in {'resident_wgc', 'recovery_printwindow'}:
             return False, None
         if effect['status'] != 'confirmed':
