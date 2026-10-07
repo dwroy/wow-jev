@@ -18,7 +18,7 @@ from game_database.store import ValidationError, canonical, canonical_sha256
 from game_database.ui_skills import UiSkills, validate_request
 
 SCOPE = {'target_scope': 'retail_wow', 'build': '12.1.0.69933', 'locale': 'zh_CN', 'size_bucket': '2560x1440', 'ui_scale': 1.0}
-TARGET = {'pid': 99, 'start_ticks': '123456', 'hwnd': '0xabc', 'class': 'waApplication Window', 'executable': 'C:\\Games\\_retail_\\Wow.exe', 'session_id': 1}
+TARGET = {'pid': 99, 'start_ticks': '639268827443062278', 'hwnd': '0xabc', 'class': 'waApplication Window', 'executable': 'C:\\Games\\_retail_\\Wow.exe', 'session_id': 1}
 BBOX = {'x': .25, 'y': .25, 'width': .5, 'height': .5}
 
 
@@ -478,7 +478,7 @@ def governed_attempt(store, root, number, *, run_id='offline-run-a', wrong_pixel
     return data
 
 
-def test_v2_independent_target_and_two_runs_remain_frozen_pending_explicit_report(tmp_path):
+def test_v2_independent_target_and_two_runs_activate_without_human_preapproval(tmp_path):
     with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
         store = UiSkills(db, create=True); prepare_governed(store, tmp_path)
         assert store.attempt(governed_attempt(store, tmp_path, 1))['live_confirmed']
@@ -486,7 +486,7 @@ def test_v2_independent_target_and_two_runs_remain_frozen_pending_explicit_repor
         assert same_run['governance']['metrics']['distinct_runs'] == 1 and not same_run['governance']['metrics']['ready']
         other_run = store.attempt(governed_attempt(store, tmp_path, 3, run_id='offline-run-b'))['skill']
         assert other_run['confirmed_count'] == 3 and other_run['governance']['metrics']['ready']
-        assert other_run['status'] == 'candidate' and other_run['governance']['activation_frozen']
+        assert other_run['status'] == 'active' and not other_run['governance']['activation_frozen']
         assert db.connection.execute('SELECT COUNT(*) FROM ui_skill_revision WHERE skill_id="reconnect"').fetchone()[0] == 4
         assert db.connection.execute('SELECT COUNT(*) FROM ui_knowledge_snapshot').fetchone()[0] >= 5
 

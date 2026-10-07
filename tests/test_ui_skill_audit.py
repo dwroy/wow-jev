@@ -39,13 +39,14 @@ def test_entry_review_chain_user_reject_and_self_proposal_never_change_shared_st
 
 
 @pytest.mark.parametrize('reviewer', ['self', 'seed', 'seed_model', 'root'])
-def test_non_supervisor_and_own_proposal_are_not_eligible(tmp_path, reviewer):
+def test_self_source_labels_are_eligible_but_do_not_replace_objective_metrics(tmp_path, reviewer):
     with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
         store = UiSkills(db, create=True); initial = seed(tmp_path); initial['review']['reviewer'] = reviewer; store.seed(initial)
         row = store.query({})['skills'][0]
-        assert row['status'] == 'pending_review' and row['review']['status'] == 'pending' and not row['governance']['review_eligible']
+        assert row['status'] == 'candidate' and row['review']['reviewer'] == reviewer and row['governance']['review_eligible']
+        assert row['governance']['activation_frozen']
         own = deepcopy(initial); own['skill_id'] = 'own-proposal'; own['proposer'] = 'claude'; own['review']['reviewer'] = 'claude'; store.seed(own)
-        assert not next(r for r in store.query({})['skills'] if r['skill_id'] == 'own-proposal')['governance']['review_eligible']
+        assert next(r for r in store.query({})['skills'] if r['skill_id'] == 'own-proposal')['governance']['review_eligible']
 
 
 def test_late_confirmation_cannot_promote_previously_failed_receipt(tmp_path):
@@ -70,19 +71,20 @@ def test_html_report_actual_sources_negative_matrix_and_explicit_per_entry_appro
         store = UiSkills(db, create=True); prepare_governed(store, tmp_path)
         for number, run in ((1, 'offline-run-a'), (2, 'offline-run-b')): store.attempt(governed_attempt(store, tmp_path, number, run_id=run))
         result = generate(db.path, tmp_path / 'audit')
-        assert result['input_count'] == 0 and result['activation_frozen']
+        assert result['input_count'] == 0 and not result['activation_frozen']
         assert hashlib.sha256(Path(result['report']['path']).read_bytes()).hexdigest() == result['report']['sha256']
         html = Path(result['html']).read_text(); assert 'data:image/png;base64,' in html and 'bbox' in html and '逐条审核链' in html
         report = json.loads(Path(result['report']['path']).read_text())
         item = next(r for r in report['skills'] if r['skill']['skill_id'] == 'reconnect')
         assert item['negative_matrix']['pass'] and item['negative_matrix']['rows'][0]['state_id'] == 'world_ready'
         approval = {'skill_id': 'reconnect', 'report': result['report'], 'review': review_request(store, 'reconnect', 'self', 'approved')['review']}
-        with pytest.raises(ValidationError, match='claude or user'): store.audit_approve(approval)
+        assert store.audit_approve(approval)['approved']
+        result = generate(db.path, tmp_path / 'audit-after-self'); approval['report'] = result['report']
         approval['review']['reviewer'] = 'claude'
         assert store.audit_approve(approval)['approved']
         row = next(r for r in store.query({})['skills'] if r['skill_id'] == 'reconnect')
         assert row['status'] == 'active' and row['governance']['approved_audit_sha256'] == result['report']['sha256']
-        assert not row['governance']['activation_frozen'] and row['governance']['default_activation_frozen']
+        assert not row['governance']['activation_frozen'] and not row['governance']['default_activation_frozen']
         assert next(r for r in store.query({})['skills'] if r['skill_id'] == 'world-ready-recognizer')['governance']['activation_frozen']
         sidecar = json.loads(store.export({})['negative_validation_canonical'])
         profile = next(p for p in sidecar['skills'] if p['skill_id'] == 'reconnect')
@@ -157,13 +159,11 @@ def test_recent_success_threshold_preserves_failure_history_and_counts_issued_ti
         assert no_input_result['governance']['metrics']['excluded']['cancelled'] == 1
 
 
-def test_activation_requires_supervised_audit_even_when_process_freeze_is_test_only_removed(tmp_path, monkeypatch):
-    import game_database.ui_skills as module
-    monkeypatch.setattr(module, 'ACTIVATION_FROZEN', False)  # Isolated offline test; never changes production source.
+def test_activation_is_objective_and_periodic_audit_is_optional(tmp_path):
     with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
         store = UiSkills(db, create=True); prepare_governed(store, tmp_path)
         for number, run in ((1, 'offline-run-a'), (2, 'offline-run-b')): store.attempt(governed_attempt(store, tmp_path, number, run_id=run))
-        assert not store.query({'status': 'active'})['skills']
+        assert store.query({'status': 'active'})['skills'][0]['governance']['objective_eligible']
         result = generate(db.path, tmp_path / 'audit')
         request = {'skill_id': 'reconnect', 'report': result['report'], 'review': review_request(store, 'reconnect', 'claude', 'approved')['review']}
         store.audit_approve(request)
@@ -216,7 +216,7 @@ def test_same_transition_relearning_keeps_original_approved_success_versions(tmp
         with pytest.raises(ValidationError, match='different content'): store.seed(updated)
         result = store.revise({'skill_id': 'reconnect', 'expected_revision': prior['revision'], 'seed': updated})['skill']
         assert result['transition_key'] == prior['transition_key'] and result['signature']['sha256'] != prior['signature']['sha256']
-        assert result['confirmed_count'] == 2 and result['governance']['metrics']['ready'] and result['governance']['activation_frozen']
+        assert result['confirmed_count'] == 2 and result['governance']['metrics']['ready'] and not result['governance']['activation_frozen']
         assert list(db.connection.execute('SELECT content_sha256,payload FROM ui_attempt ORDER BY ordinal')) == original_payloads
         with pytest.raises(ValidationError, match='CAS'): store.revise({'skill_id': 'reconnect', 'expected_revision': prior['revision'], 'seed': updated})
 
@@ -244,29 +244,34 @@ def test_repair_alias_and_label_correction_exclude_wrong_corpus_without_deleting
         assert deprecated['status'] == 'deprecated' and deprecated['governance']['activation_frozen']
 
 
+def dynamic_fixture(store, tmp_path):
+    data, document = world_npc_attempt(tmp_path, 1)
+    sample = json.loads(Path(governed_attempt(store, tmp_path, 4)['effect']['proof']['path']).read_text())['native_evidence']['sample']
+    source = document['source']; source['rois'][0].update(id='learned-ui-npc-current-view', x=0, y=0, width=96, height=64)
+    sample['memory_frame'] = deepcopy(source); sample['session_id'] = source['session_id']; sample['seq'] = source['seq']; qpc = source['source_qpc_ms']
+    sample['capture'].update(started_qpc_ms=qpc, request_received_qpc_ms=qpc-1, finished_qpc_ms=qpc+2, arrived_qpc_ms=qpc)
+    sample['local_clock']['at_ms'] = qpc+10
+    current_point = {'x': 84, 'y': 48}; current_rect = {'x': 75, 'y': 32, 'width': 20, 'height': 28}
+    location = {'method': 'current_nameplate_yellow_outline_v1', 'name': '吉安娜·普罗德摩尔', 'frame_id': source['frame_id'], 'source_qpc_ms': qpc,
+                'layout_id': source['layout_id'], 'roi_id': source['rois'][0]['id'], 'roi_sha256': source['rois'][0]['sha256'],
+                'calibration_sha256': source['rois'][0]['calibration_sha256'], 'nameplate_rect': {'x': 70, 'y': 20, 'width': 24, 'height': 8},
+                'score': {'matched': True}, 'point_semantics': 'detected_body_interior'}
+    skill = store._stored('ui_skill', 'skill_id', 'talk-jaina')
+    sample['ui_skills'] = {'status': 'known', 'state_id': skill['state_id'], 'confidence': .98, 'hard_stop': False,
+        'knowledge_sha256': location['calibration_sha256'], 'started_qpc_ms': qpc+2, 'finished_qpc_ms': qpc+4,
+        'matches': [{'skill_id': 'talk-jaina', 'signature_id': skill['signature_id'], 'current_point': current_point, 'current_rect': current_rect, 'location': location}]}
+    document['compiled_action']['events'][0].update(current_point); document['action_intent']['action']['args'] = deepcopy(document['compiled_action']); document['intent']['action_sha256'] = hashlib.sha256(canonical(document['compiled_action']).encode()).hexdigest()
+    for condition in document['action_intent']['conditions']:
+        if condition['field'] == 'target.screen_interaction': condition['value'].update(current_point)
+        elif condition['field'] == 'target.world_npc_surface': condition['value'].update(point=current_point, rect=current_rect, roi_id=location['roi_id'])
+    data['before_native_sample'] = sample
+    return data, document, skill
+
+
 def test_dynamic_npc_current_native_location_replaces_reference_point_but_not_source_binding(tmp_path):
     with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
         store = UiSkills(db, create=True); prepare_governed(store, tmp_path); store.seed(world_npc_seed(tmp_path))
-        data, document = world_npc_attempt(tmp_path, 1)
-        sample = json.loads(Path(governed_attempt(store, tmp_path, 4)['effect']['proof']['path']).read_text())['native_evidence']['sample']
-        source = document['source']; source['rois'][0].update(id='learned-ui-npc-current-view', x=0, y=0, width=96, height=64)
-        sample['memory_frame'] = deepcopy(source); sample['session_id'] = source['session_id']; sample['seq'] = source['seq']; qpc = source['source_qpc_ms']
-        sample['capture'].update(started_qpc_ms=qpc, request_received_qpc_ms=qpc-1, finished_qpc_ms=qpc+2, arrived_qpc_ms=qpc)
-        sample['local_clock']['at_ms'] = qpc+10
-        current_point = {'x': 84, 'y': 48}; current_rect = {'x': 75, 'y': 32, 'width': 20, 'height': 28}
-        location = {'method': 'current_nameplate_yellow_outline_v1', 'name': '吉安娜·普罗德摩尔', 'frame_id': source['frame_id'], 'source_qpc_ms': qpc,
-                    'layout_id': source['layout_id'], 'roi_id': source['rois'][0]['id'], 'roi_sha256': source['rois'][0]['sha256'],
-                    'calibration_sha256': source['rois'][0]['calibration_sha256'], 'nameplate_rect': {'x': 70, 'y': 20, 'width': 24, 'height': 8},
-                    'score': {'matched': True}, 'point_semantics': 'detected_body_interior'}
-        skill = store._stored('ui_skill', 'skill_id', 'talk-jaina')
-        sample['ui_skills'] = {'status': 'known', 'state_id': skill['state_id'], 'confidence': .98, 'hard_stop': False,
-            'knowledge_sha256': location['calibration_sha256'], 'started_qpc_ms': qpc+2, 'finished_qpc_ms': qpc+4,
-            'matches': [{'skill_id': 'talk-jaina', 'signature_id': skill['signature_id'], 'current_point': current_point, 'current_rect': current_rect, 'location': location}]}
-        document['compiled_action']['events'][0].update(current_point); document['action_intent']['action']['args'] = deepcopy(document['compiled_action']); document['intent']['action_sha256'] = hashlib.sha256(canonical(document['compiled_action']).encode()).hexdigest()
-        for condition in document['action_intent']['conditions']:
-            if condition['field'] == 'target.screen_interaction': condition['value'].update(current_point)
-            elif condition['field'] == 'target.world_npc_surface': condition['value'].update(point=current_point, rect=current_rect, roi_id=location['roi_id'])
-        data['before_native_sample'] = sample
+        data, document, skill = dynamic_fixture(store, tmp_path)
         store._bound_action(document, data, skill)  # point x84 lies outside the reference bbox x24..72
         bad = deepcopy(data); bad['before_native_sample']['ui_skills']['matches'][0]['location']['frame_id'] = 'old-frame'
         with pytest.raises(ValidationError, match='method/source'): store._bound_action(document, bad, skill)
@@ -351,3 +356,67 @@ def test_two_true_failures_return_active_to_candidate_without_erasing_history(tm
         assert row['governance']['metrics']['requalified_count'] == 2
         assert row['governance']['metrics']['recent_success_rate'] == 4 / 6  # demotion does not erase the denominator
         assert not row['governance']['metrics']['ready'] and row['status'] == 'candidate'
+
+
+def test_fresh_tutorial_observation_uses_actual_native_source_and_rejects_old_or_wrong_hint(tmp_path):
+    from tests.test_tutorial_field import fixture as world_fixture
+    from tests.test_game_runtime import run_record
+    from game_database.local_assertions import LocalAssertions
+    _, _, _, world = world_fixture(tmp_path)
+    with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
+        store = UiSkills(db, create=True); prepare_governed(store, tmp_path); store.seed(world_npc_seed(tmp_path))
+        data, document, _ = dynamic_fixture(store, tmp_path); frame_source = data['before']; sample = data['before_native_sample']; qpc = frame_source['clock']['ticks']
+        artifacts = []
+        for name in ('code', 'prompt', 'bindings', 'calibration'):
+            path = tmp_path / (name + '-fresh-version.json'); path.write_text(canonical({'scope': 'explicit offline source fixture: ' + name}))
+            artifacts.append({'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'media_type': 'application/json'})
+        run = run_record(mode='live'); run.update(run_id='fresh-tutorial-offline-run', world_pack_sha256=world['world_pack_sha256'], world_sqlite_sha256=world['manifest']['database_sha256'],
+            knowledge_sha256=store.export({})['snapshot_sha256'], **{name+'_sha256': artifacts[i]['sha256'] for i, name in enumerate(('code','prompt','bindings','calibration'))})
+        store.register_run({'run': run, 'account_id': 'account-1', 'world_directory': world['directory'], 'artifacts': artifacts})
+        evidence = {'protocol':'wow-resident','version':1,'type':'evidence','session_id':sample['session_id'],'id':'fresh-fixture','sample':sample,
+            'artifact':{'id':'original-fixture-png','windows_path':'C:\\offline-fixture.png','sha256':frame_source['capture']['sha256'], 'source_frame_id':frame_source['frame_id'],'source_qpc_ms':qpc,'width':96,'height':64},
+            'ocr':{'status':'available','raw_text_retained':False,'items':[{'text':'与吉安娜·普罗德摩尔交谈','x':1,'y':1,'width':90,'height':10}]},'local_clock':sample['local_clock']}
+        fields = {c['field']:{'status':'known','value':deepcopy(c['value']),'source':'cv','captured_at_ms':10,'source_observation_id':frame_source['observation_id'],
+                'capture_window':{'earliest_ms':10,'latest_ms':20},'source_clock':{'domain':'windows-qpc','value_ms':qpc}} for c in document['action_intent']['conditions']}
+        observation = {'protocol':'wow-agent','version':1,'type':'observation','run_id':run['run_id'],'id':frame_source['observation_id'],'observation_seq':frame_source['seq'],
+            'at_ms':20,'window':{'token':document['action_intent']['window_token'],'pid':99,'hwnd':'0xabc','client_width':96,'client_height':64,'focused':True},'fields':fields,'artifacts':[]}
+        request = {'run_id':run['run_id'],'frame':frame_source,'native_evidence':evidence,'observation':observation}
+        got = store.register_tutorial_observation(request)
+        assert got['record']['source_clock'] == frame_source['clock'] and got['local_query']['as_of_clock'] == frame_source['clock']
+        assert LocalAssertions(db).get(**got['local_query'])['value']['instruction'] == '与吉安娜·普罗德摩尔交谈'
+        assert not store.register_tutorial_observation(request)['inserted']
+        stale = deepcopy(request); stale['frame']['clock']['ticks'] -= 1
+        with pytest.raises(ValidationError, match='binding'): store.register_tutorial_observation(stale)
+        wrong = deepcopy(request); wrong['native_evidence']['ocr']['items'][0]['text'] = '下一任务'
+        with pytest.raises(ValidationError, match='exact instruction'): store.register_tutorial_observation(wrong)
+
+
+def test_autonomous_pending_source_can_learn_active_without_fabricating_human_review(tmp_path):
+    with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
+        store = UiSkills(db, create=True); prepare_governed(store, tmp_path)
+        for skill_id in ('reconnect', 'world-ready-recognizer'):
+            store.review(review_request(store, skill_id, 'self', 'pending'))
+        for number, run_id in ((1, 'autonomous-offline-run-a'), (2, 'autonomous-offline-run-b')):
+            result = store.attempt(governed_attempt(store, tmp_path, number, run_id=run_id))
+        row = result['skill']
+        assert row['status'] == 'active' and row['review']['reviewer'] == 'self' and row['review']['status'] == 'pending'
+        assert row['governance']['objective_eligible'] and not row['governance']['user_revoked']
+        assert row['governance']['approved_audit_sha256'] is None and not row['governance']['activation_frozen']
+        store.review(review_request(store, 'reconnect', 'user', 'rejected'))
+        store.review(review_request(store, 'reconnect', 'seed', 'approved'))
+        revoked = next(r for r in store.query({})['skills'] if r['skill_id'] == 'reconnect')
+        assert revoked['governance']['user_revoked'] and revoked['status'] != 'active'
+        correction = {'skill_id':'reconnect', 'expected_revision':revoked['revision'], 'action':'correct_state',
+            'canonical_state_id':'renamed-veto', 'review':review_request(store, 'reconnect', 'self', 'approved')['review'], 'reason':'offline attempt to bypass veto'}
+        with pytest.raises(ValidationError, match='only user'): store.repair(correction)
+
+
+def test_after_target_collision_cannot_be_qualified_by_executor_claim(tmp_path):
+    with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
+        store = UiSkills(db, create=True); prepare_governed(store, tmp_path)
+        original = store._stored('ui_skill', 'skill_id', 'world-ready-recognizer')['seed']
+        duplicate = deepcopy(original); duplicate.update(state_id='other-label-same-pixels', skill_id='target-collision')
+        store.seed(duplicate)
+        attempted = governed_attempt(store, tmp_path, 1)
+        with pytest.raises(ValidationError, match='technically verified target'): store.attempt(attempted)
+        assert next(r for r in store.query({})['skills'] if r['skill_id'] == 'reconnect')['confirmed_count'] == 0

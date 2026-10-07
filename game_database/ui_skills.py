@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 import base64
 from copy import deepcopy
+from contextvars import ContextVar
+from functools import wraps
 import hashlib
 import math
 from pathlib import Path
@@ -30,11 +32,24 @@ TABLES = LEGACY_TABLES + GOVERNANCE_TABLES
 LEGACY_META = {'schema': 'wow-ui-skill-learning-v1', 'sql_sha256': '328394193a10f1a585a4e781422965f4cb9e4abcd032fab92293ac188df4ce33',
                'wire_sha256': '96e51f4cbe8deece5c3b736621de30850f8249bf6a29ee1a088ada7a2f26a82b'}
 RECENT_WINDOW = 10
-SUPERVISORS = {'claude', 'user'}
 MATCH_ALGORITHM = {'id': 'ui-cell-center-rgb-32x16-v1', 'grid_width': 32, 'grid_height': 16, 'channel_order': 'RGB',
                    'bbox_rounding': 'floor-left-top-ceil-right-bottom', 'sampling': 'floor-cell-center', 'fraction_error_threshold': 24}
 MODAL_ALGORITHM_SHA = '3abbcfc4623027b9d89e1745259e350c80a2fde1b2851a03a4c2dd0e13a3f55c'
-ACTIVATION_FROZEN = True  # Default frozen; only a valid per-entry supervisor audit grants an exception.
+ACTIVATION_FROZEN = False  # No global human preapproval; each entry still needs all objective gates.
+READ_CONTEXT = ContextVar('ui_skill_bounded_read_context', default=None)
+
+
+def bounded_read_context(method):
+    @wraps(method)
+    def wrapped(*args, **kwargs):
+        if READ_CONTEXT.get() is not None: return method(*args, **kwargs)
+        cache = {'proofs': {}, 'artifacts': {}, 'images': {}, 'corpus': {}}
+        token = READ_CONTEXT.set(cache)
+        try: return method(*args, **kwargs)
+        finally:
+            for image in cache['images'].values(): image.close()
+            READ_CONTEXT.reset(token)
+    return wrapped
 
 
 def _validate(value: Any, schema: dict, root: dict | None = None, depth: int = 0) -> None:
@@ -120,11 +135,14 @@ def validate_request(value: Any) -> dict:
 
 def _read(proof: dict, maximum: int = 32 * 1024 * 1024) -> bytes:
     path = Path(proof['path'])
+    cache = READ_CONTEXT.get(); key = (str(path.absolute()), proof['sha256'])
+    if cache is not None and key in cache['proofs']: return cache['proofs'][key]
     if path.is_symlink() or not path.is_file() or path.stat().st_size > maximum:
         raise ValidationError('UI skill: regular bounded evidence required')
     raw = path.read_bytes()
     if hashlib.sha256(raw).hexdigest() != proof['sha256']:
         raise ValidationError('UI skill: evidence artifact hash changed')
+    if cache is not None: cache['proofs'][key] = raw
     return raw
 
 
@@ -242,15 +260,16 @@ class UiSkills:
             chain.append({**item, 'event_sha256': sha}); previous = sha
         return chain
 
-    def _review_eligible(self, skill: dict) -> bool:
-        review = skill['review']; proposer = skill.get('seed', {}).get('proposer', 'self')
-        if review['status'] != 'approved' or review['reviewer'] not in SUPERVISORS or review['reviewer'] == proposer:
-            return False
-        user_rejected = False
+    def _user_revoked(self, skill: dict) -> bool:
+        revoked = skill['review']['reviewer'] == 'user' and skill['review']['status'] == 'rejected'
         for entry in self._review_chain(skill['skill_id']):
-            r = entry['review']
-            if r['reviewer'] == 'user' and r['status'] in {'approved', 'rejected'}: user_rejected = r['status'] == 'rejected'
-        return not user_rejected
+            review = entry['review']
+            if review['reviewer'] == 'user' and review['status'] in {'approved', 'rejected'}: revoked = review['status'] == 'rejected'
+        return revoked
+
+    def _review_eligible(self, skill: dict) -> bool:
+        # Reviewer labels describe provenance, not an execution/activation grant.
+        return skill['review']['status'] != 'rejected' and not self._user_revoked(skill) and not skill.get('maintenance')
 
     def _revision(self, skill: dict) -> None:
         if self.legacy: return
@@ -285,7 +304,6 @@ class UiSkills:
             rejected = next((x['review']['status'] == 'rejected' for x in reversed(self._review_chain(old['skill_id'])) if x['review']['reviewer'] == 'user' and x['review']['status'] in {'approved', 'rejected'}), False)
             review = deepcopy(incoming['review'])
             if rejected and review['reviewer'] != 'user': review = deepcopy(old['review'])
-            elif review['status'] == 'approved' and (review['reviewer'] not in SUPERVISORS or review['reviewer'] == incoming.get('proposer', 'self')): review['status'] = 'pending'
             floor = old['stats']['requalify_after']  # A new frame of the same recipe does not erase previous qualifications.
             skill = {**old, 'seed': deepcopy(incoming), 'review': review, 'signature_id': signature['signature_id'], 'element_key': element_key,
                      'hard_stop': old['hard_stop'] or incoming['hard_stop'], 'expected_effect': incoming.get('expected_effect'), 'action': incoming.get('action')}
@@ -296,20 +314,22 @@ class UiSkills:
             return {'revised': True, 'previous_revision': data['expected_revision'], 'skill': self._row(skill['skill_id'])}
 
     def repair(self, data: dict) -> dict:
-        """Supervisor retirement/alias, preserving templates, attempts and labels."""
+        """Attributed retirement/alias, preserving templates, attempts and labels."""
         _validate(data, SCHEMA['definitions']['repair_request']); _review(data['review'])
         if self.legacy: raise ValidationError('UI skill: migrate explicitly before repair')
-        if data['review']['status'] != 'approved' or data['review']['reviewer'] not in SUPERVISORS:
-            raise ValidationError('UI skill: repair requires explicit claude/user review')
+        if data['review']['status'] != 'approved':
+            raise ValidationError('UI skill: repair requires an explicit attributed review')
         with self.runtime._transaction():
             self._verify_schema(); skill = self._stored('ui_skill', 'skill_id', data['skill_id'])
             if skill['stats']['revision'] != data['expected_revision']: raise ValidationError('UI skill: repair revision CAS mismatch')
+            if self._user_revoked(skill) and data['review']['reviewer'] != 'user' and data['action'] == 'correct_state':
+                raise ValidationError('UI skill: only user can clear a user revocation')
             canonical_skill = None
             if data['action'] == 'alias':
                 if data.get('canonical_skill_id') in {None, data['skill_id']}: raise ValidationError('UI skill: distinct canonical entry required')
                 canonical_skill = self._stored('ui_skill', 'skill_id', data['canonical_skill_id'])
                 if canonical_skill.get('maintenance') or canonical_skill['scope'] != skill['scope'] or not self._review_eligible(canonical_skill):
-                    raise ValidationError('UI skill: canonical entry must be supervised and same scope')
+                    raise ValidationError('UI skill: canonical entry must be eligible and same scope')
             elif data.get('canonical_skill_id'): raise ValidationError('UI skill: non-alias repair has no alias target')
             if data['action'] == 'clear_unverified_legacy_stop':
                 capture = skill['seed']['frame']['capture']['sha256']
@@ -343,7 +363,7 @@ class UiSkills:
                              seed={**skill['seed'], 'state_id': state['state_id']}, review=data['review'])
                 floor = self.runtime.connection.execute('SELECT COALESCE(MAX(ordinal),0) FROM ui_attempt WHERE skill_id=?', (skill['skill_id'],)).fetchone()[0]
                 skill['stats'] = {**skill['stats'], 'status': 'candidate', 'revision': skill['stats']['revision'] + 1, 'requalify_after': floor}
-                self._append_review(skill, data['review'], reason='same-image supervised label correction; original label retained in history')
+                self._append_review(skill, data['review'], reason='same-image attributed label correction; original label retained in history')
             else:
                 skill['maintenance'] = {'action': data['action'], 'canonical_skill_id': canonical_skill['skill_id'] if canonical_skill else None, 'event_sha256': sha, 'review': data['review'], 'reason': data['reason']}
                 skill['stats'] = {**skill['stats'], 'status': 'alias' if canonical_skill else 'deprecated', 'revision': skill['stats']['revision'] + 1}
@@ -363,7 +383,7 @@ class UiSkills:
         with self.runtime._transaction():
             for artifact in data['artifacts']: self._artifact(artifact, artifact['media_type'])
             for field in ('code_sha256', 'prompt_sha256', 'bindings_sha256', 'calibration_sha256'):
-                self.runtime.get_artifact(run[field])
+                self._verified_artifact(run[field])
             snapshot = self.runtime.connection.execute('SELECT payload FROM ui_knowledge_snapshot WHERE sha256=?', (run['knowledge_sha256'],)).fetchone()
             if snapshot is None or hashlib.sha256(snapshot[0].encode()).hexdigest() != run['knowledge_sha256']:
                 raise ValidationError('UI skill: run requires original registered full knowledge snapshot')
@@ -378,11 +398,93 @@ class UiSkills:
         if not self.runtime.connection.execute('SELECT 1 FROM run WHERE run_id=?', (data['run_id'],)).fetchone():
             return {'registered': False, 'run_id': data['run_id'], 'reason': 'not_registered'}
         run = self.runtime.get_run(data['run_id'])
-        for name in ('code_sha256', 'prompt_sha256', 'bindings_sha256', 'calibration_sha256'): self.runtime.get_artifact(run[name])
+        for name in ('code_sha256', 'prompt_sha256', 'bindings_sha256', 'calibration_sha256'): self._verified_artifact(run[name])
         snapshot = None if self.legacy or not self.available else self.runtime.connection.execute('SELECT payload FROM ui_knowledge_snapshot WHERE sha256=?', (run['knowledge_sha256'],)).fetchone()
         if snapshot is None or hashlib.sha256(snapshot[0].encode()).hexdigest() != run['knowledge_sha256']:
             raise ValidationError('UI skill: query run original knowledge missing or changed')
         return {'registered': True, 'run_id': run['run_id'], 'run': run, 'knowledge_snapshot_fixed': True}
+
+    def register_tutorial_observation(self, data: dict) -> dict:
+        """Index fresh Native tutorial evidence; never refresh an older fact."""
+        _validate(data, SCHEMA['definitions']['tutorial_observation'])
+        if self.legacy: raise ValidationError('UI skill: explicit v2 migration required')
+        from .local_assertions import LocalAssertions
+        frame, evidence, observation = data['frame'], data['native_evidence'], data['observation']
+        sample = evidence['sample']; source = sample['memory_frame']; artifact = evidence['artifact']; run = self.query_run({'run_id': data['run_id']})
+        if not run['registered']: raise ValidationError('UI tutorial: actual registered run required')
+        run = run['run']; target = {**source['target']}; target['session_id'] = target.pop('windows_session_id')
+        if frame['capture'] is None or frame['producer'] != 'resident_wgc' or source['target_scope'] != 'retail_wow' or target != frame['target'] or \
+                frame['frame_id'] != source['frame_id'] or frame['seq'] != source['seq'] or sample['seq'] != source['seq'] or \
+                frame['layout_id'] != source['layout_id'] or (frame['width'], frame['height']) != (source['client_width'], source['client_height']) or \
+                frame['clock'] != {'domain': 'windows-qpc', 'clock_id': source['windows_clock_id'], 'ticks': source['source_qpc_ms'], 'unit': 'ms'} or \
+                observation['run_id'] != run['run_id'] or artifact['sha256'] != frame['capture']['sha256'] or artifact['source_frame_id'] != source['frame_id'] or artifact['source_qpc_ms'] != source['source_qpc_ms'] or \
+                (artifact['width'], artifact['height']) != (frame['width'], frame['height']) or observation['id'] != frame['observation_id'] or observation['observation_seq'] != frame['seq']:
+            raise ValidationError('UI tutorial: original full Native frame/source binding mismatch')
+        window = observation['window']
+        if target['session_id'] != 1 or target['class'] != 'waApplication Window' or not target['executable'].replace('\\', '/').lower().endswith('/_retail_/wow.exe') or \
+                window['token'] != f'resident-ui-{target["pid"]}-{source["channel_generation"]}' or window['pid'] != target['pid'] or window['hwnd'] != target['hwnd'] or \
+                not window['focused'] or (window['client_width'], window['client_height']) != (frame['width'], frame['height']):
+            raise ValidationError('UI tutorial: original observation target/window binding mismatch')
+        fields = observation['fields']; instruction = '与吉安娜·普罗德摩尔交谈'
+        def known(name, expected=None):
+            value = fields.get(name)
+            if not value or value['status'] != 'known' or value['source'] != 'cv' or value['source_observation_id'] != observation['id'] or \
+                    value.get('source_clock') != {'domain': 'windows-qpc', 'value_ms': source['source_qpc_ms']} or expected is not None and value['value'] != expected:
+                raise ValidationError('UI tutorial: current original CV field missing: ' + name)
+            return value
+        hint = known('tutorial.instruction', instruction); known('target.signature', 'visible-name:吉安娜·普罗德摩尔'); known('ui.layout_id', source['layout_id'])
+        surface = known('target.world_npc_surface')['value']; point = known('target.screen_interaction')['value']
+        matched = []
+        for cv in sample.get('ui_skills', {}).get('matches', []):
+            if type(cv) is not dict or 'skill_id' not in cv: continue
+            skill = self._stored('ui_skill', 'skill_id', cv['skill_id'])
+            native_match = self._dynamic_npc_match({'source': source}, {'before': frame, 'before_native_sample': sample}, skill)
+            if native_match: matched.append((skill, native_match))
+        if len(matched) != 1: raise ValidationError('UI tutorial: unique current Native Jaina locator required')
+        skill, match = matched[0]; location = match['location']
+        if surface.get('frame_id') != frame['frame_id'] or surface.get('point') != match['current_point'] or surface.get('rect') != match['current_rect'] or \
+                surface.get('roi_id') != location['roi_id'] or surface.get('roi_sha256') != location['roi_sha256'] or surface.get('calibration_sha256') != location['calibration_sha256'] or \
+                point.get('x') != match['current_point']['x'] or point.get('y') != match['current_point']['y'] or point.get('layout_id') != source['layout_id']:
+            raise ValidationError('UI tutorial: fields do not match original current Native location')
+        raw_exact_hint = evidence['ocr']['status'] == 'available' and any(i['text'].strip() == instruction for i in evidence['ocr']['items'])
+        calibrated = sample.get('cv', {}).get('tutorial_interaction', {})
+        cv_hint = calibrated.get('verified') is True and calibrated.get('kind') == 'talk_jaina' and calibrated.get('npc_name') == '吉安娜·普罗德摩尔' and \
+            any(r['calibration_sha256'] == calibrated.get('calibration_sha256') for r in source['rois'])
+        if not raw_exact_hint and not cv_hint: raise ValidationError('UI tutorial: exact instruction needs independent same-frame OCR or Native tutorial proof')
+        bracket = hint.get('capture_window', {})
+        if bracket.get('earliest_ms') != hint['captured_at_ms'] or bracket.get('latest_ms') != observation['at_ms'] or any(
+                known(name)['captured_at_ms'] != hint['captured_at_ms'] or known(name).get('capture_window') != bracket
+                for name in ('target.signature', 'ui.layout_id', 'target.world_npc_surface', 'target.screen_interaction')):
+            raise ValidationError('UI tutorial: original coordinator bracket mismatch')
+        with self.runtime._transaction():
+            self._frame(frame, require_image=True)
+            descriptor = Path(str(self.runtime.path) + '.ui-assets') / ('tutorial-' + canonical_sha256(data) + '.json')
+            descriptor.parent.mkdir(exist_ok=True)
+            raw = (canonical(data) + '\n').encode()
+            if descriptor.exists() and descriptor.read_bytes() != raw: raise ValidationError('UI tutorial: immutable evidence descriptor changed')
+            if not descriptor.exists():
+                with descriptor.open('xb') as stream: stream.write(raw)
+            proof = {'path': str(descriptor), 'sha256': hashlib.sha256(raw).hexdigest()}; self._artifact(proof, 'application/json')
+            fact = {'local_key': 'exiles-reach.talk-jaina', 'kind': 'tutorial_step', 'predicate': 'interaction_instruction', 'state': 'known',
+                    'value': {'npc_name': '吉安娜·普罗德摩尔', 'instruction': instruction, 'target_signature': 'visible-name:吉安娜·普罗德摩尔'}}
+            existing = self.runtime.connection.execute('SELECT seq,payload,event_sha256 FROM event_index WHERE run_id=? AND event_id=?', (run['run_id'], observation['id'])).fetchone()
+            seq = existing[0] if existing else self.runtime.connection.execute('SELECT COALESCE(MAX(seq),0)+1 FROM event_index WHERE run_id=?', (run['run_id'],)).fetchone()[0]
+            event = {'seq': seq, 'event_id': observation['id'], 'kind': 'observation', 'source_clock': frame['clock'],
+                     'received_clock': {'domain': 'coordinator-monotonic', 'clock_id': observation['run_id'], 'ticks': observation['at_ms'], 'unit': 'ms'},
+                     'observed_at': run['started_at'], 'payload': {'evidence_scope': 'live_field', 'observation_id': observation['id'], 'session': target,
+                        'capture_sha256': frame['capture']['sha256'], 'calibration_sha256': proof['sha256'], 'producer': 'calibrated_cv', 'local_assertions': [fact],
+                        'current_native_location': location, 'evidence_descriptor_sha256': proof['sha256'], 'source_time_scope': 'original current Native QPC; run UTC only annotation, never capture-wallclock'},
+                     'artifact_sha256s': list(dict.fromkeys([frame['capture']['sha256'], proof['sha256']]))}
+            event['event_sha256'] = canonical_sha256(event); self.runtime.index_events(run['run_id'], [event])
+            record = {'schema_version': 1, 'world_pack_sha256': run['world_pack_sha256'], 'world_sqlite_sha256': run['world_sqlite_sha256'], 'client_version': run['client_version'],
+                'actor_id': run['actor_id'], 'session': target, 'fact': fact, 'observation_id': observation['id'],
+                'source_event': {'run_id': run['run_id'], 'seq': seq, 'event_sha256': event['event_sha256']}, 'source_clock': frame['clock'], 'observed_at': run['started_at'],
+                'capture_sha256': frame['capture']['sha256'], 'calibration_sha256': proof['sha256'], 'producer': 'calibrated_cv', 'rule_version': 'local-field-evidence-v1'}
+            result = LocalAssertions(self.runtime, create=True).put(record)
+        query = {'world_pack_sha256': run['world_pack_sha256'], 'client_version': run['client_version'], 'actor_id': run['actor_id'], 'session': target,
+                 'local_key': fact['local_key'], 'predicate': fact['predicate'], 'as_of_clock': frame['clock'], 'maximum_age': 600000}
+        return {'registered': True, **result, 'local_query': query, 'record': record, 'observation_id': observation['id'],
+                'source_clock': frame['clock'], 'actor_id': run['actor_id'], 'session': target, 'input_authorization': False}
 
     @staticmethod
     def transition_key(seed: dict) -> str:
@@ -396,6 +498,13 @@ class UiSkills:
         raw = _read(proof)
         self.runtime.register_artifact(proof['path'], media_type=media, expected_sha256=proof['sha256'])
         return raw
+
+    def _verified_artifact(self, sha: str) -> dict:
+        cache = READ_CONTEXT.get(); key = (str(self.runtime.path), sha)
+        if cache is not None and key in cache['artifacts']: return cache['artifacts'][key]
+        value = self.runtime.get_artifact(sha)
+        if cache is not None: cache['artifacts'][key] = value
+        return value
 
     def _frame(self, frame: dict, *, require_image: bool = False) -> None:
         if int(frame['target']['hwnd'], 16) == 0:
@@ -499,8 +608,6 @@ class UiSkills:
             # Text labels never classify security screens. Explicit stops remain
             # conservative; grounded image evidence also survives state renaming.
             effective_review = deepcopy(data['review'])
-            if effective_review['status'] == 'approved' and (effective_review['reviewer'] not in SUPERVISORS or effective_review['reviewer'] == data.get('proposer', 'self')):
-                effective_review['status'] = 'pending'
             state = {'state_id': data['state_id'], 'scope': data['scope'], 'hard_stop': hard, 'review': effective_review}
             previous = self.runtime.connection.execute('SELECT state_key FROM ui_state WHERE state_key=?', (state_key,)).fetchone()
             if previous:
@@ -544,11 +651,11 @@ class UiSkills:
             raw = base64.b64decode(part['rgb_base64'], validate=True)
             if len(raw) != 32 * 16 * 3 or hashlib.sha256(raw).hexdigest() != part['template_sha256']:
                 raise ValidationError('UI skill: template RGB hash mismatch')
-            _read(part['crop']); self.runtime.get_artifact(part['crop_sha256'])
+            _read(part['crop']); self._verified_artifact(part['crop_sha256'])
 
     def _frame_read(self, frame: dict) -> None:
         if frame['capture'] is not None:
-            _read(frame['capture']); self.runtime.get_artifact(frame['capture']['sha256'])
+            _read(frame['capture']); self._verified_artifact(frame['capture']['sha256'])
 
     def _dynamic_npc_match(self, document: dict, data: dict, skill: dict) -> dict | None:
         sample = data.get('before_native_sample')
@@ -734,12 +841,17 @@ class UiSkills:
             raise ValidationError('UI skill: compiled input events were not fully inserted')
 
     def _pixel_match(self, signature: dict, frame: dict) -> bool:
-        """Learning independently recomputes the approved target on after PNG."""
+        """Learning independently recomputes the technically verified target on after PNG."""
         self._verify_template(signature); _read(frame['capture'])
         from PIL import Image
-        with Image.open(frame['capture']['path']) as image:
-            if image.format != 'PNG' or image.size != (frame['width'], frame['height']): return False
-            image = image.convert('RGB')
+        cache = READ_CONTEXT.get(); key = (frame['capture']['path'], frame['capture']['sha256'])
+        image = cache['images'].get(key) if cache is not None else None
+        if image is None:
+            with Image.open(frame['capture']['path']) as opened:
+                if opened.format != 'PNG' or opened.size != (frame['width'], frame['height']): return False
+                image = opened.convert('RGB')
+            if cache is not None: cache['images'][key] = image
+        try:
             for part in [signature, *signature['anchors']]:
                 b = part['bbox']; left = math.floor(b['x'] * frame['width']); top = math.floor(b['y'] * frame['height'])
                 right = min(frame['width'], math.ceil((b['x'] + b['width']) * frame['width'])); bottom = min(frame['height'], math.ceil((b['y'] + b['height']) * frame['height']))
@@ -751,7 +863,9 @@ class UiSkills:
                 errors = [abs(a - b) for a, b in zip(pixels, template)]
                 if sum(errors) / len(errors) > part['max_mean_abs_error'] or sum(e > 24 for e in errors) / len(errors) > part['max_fraction_above_24']:
                     return False
-        return True
+            return True
+        finally:
+            if cache is None: image.close()
 
     @staticmethod
     def _receipt_key(data: dict) -> str | None:
@@ -774,7 +888,7 @@ class UiSkills:
         return False
 
     def _governed_confirmation(self, data: dict, skill: dict, *, historical: bool = False) -> bool:
-        eligible = skill['review']['status'] == 'approved' and skill['review']['reviewer'] in SUPERVISORS and skill['review']['reviewer'] != skill['seed'].get('proposer', 'self') if historical else self._review_eligible(skill)
+        eligible = skill['review']['status'] != 'rejected' if historical else self._review_eligible(skill)
         if self.legacy or data.get('governance_version') != 2 or not eligible or self._failed_receipt(data): return False
         provenance = data.get('provenance')
         if provenance is None: return False
@@ -791,7 +905,7 @@ class UiSkills:
         if version_tuple['branch'] != 'retail' or f'{version_tuple["patch"]}.{version_tuple["build"]}' != skill['scope']['build'] or version_tuple['locale'] != skill['scope']['locale']:
             raise ValidationError('UI skill: actual run client/build/locale scope mismatch')
         for name in ('code_sha256', 'prompt_sha256'):
-            self.runtime.get_artifact(provenance[name])
+            self._verified_artifact(provenance[name])
         version = self.runtime.connection.execute('SELECT payload FROM ui_knowledge_snapshot WHERE sha256=?', (provenance['knowledge_sha256'],)).fetchone()
         if version is None or hashlib.sha256(version[0].encode()).hexdigest() != provenance['knowledge_sha256']:
             raise ValidationError('UI skill: original knowledge snapshot missing or changed')
@@ -799,25 +913,25 @@ class UiSkills:
             (skill['skill_id'], provenance['skill_revision'])).fetchone()
         if revision is None or canonical_sha256(parse_json(revision[1])) != revision[0] or parse_json(revision[1])['seed'] != skill['seed']:
             raise ValidationError('UI skill: original skill revision not registered')
-        historical = parse_json(revision[1]); prior_review = historical['review']
+        original_revision = parse_json(revision[1]); prior_review = original_revision['review']
         prior = [r for r in parse_json(version[0])['skills'] if r['skill_id'] == skill['skill_id']]
-        signature = self._stored('ui_signature', 'signature_id', historical['signature_id'])
+        signature = self._stored('ui_signature', 'signature_id', original_revision['signature_id'])
         if len(prior) != 1 or prior[0]['revision'] != provenance['skill_revision'] or \
-                prior[0]['signature']['signature_id'] != historical['signature_id'] or prior[0]['signature']['sha256'] != signature['sha256'] or \
-                prior[0]['action'] != historical['action'] or prior[0]['expected_effect'] != historical['expected_effect'] or \
-                prior_review['status'] != 'approved' or prior_review['reviewer'] not in SUPERVISORS or prior_review['reviewer'] == historical['seed'].get('proposer', 'self'):
-            raise ValidationError('UI skill: original knowledge does not contain supervised skill revision')
+                prior[0]['signature']['signature_id'] != original_revision['signature_id'] or prior[0]['signature']['sha256'] != signature['sha256'] or \
+                prior[0]['action'] != original_revision['action'] or prior[0]['expected_effect'] != original_revision['expected_effect'] or \
+                prior_review['status'] == 'rejected':
+            raise ValidationError('UI skill: original knowledge does not contain bound skill revision')
         desired = skill['expected_effect']; effect = data['effect']; after = data['after']
         if desired is None or desired['signature_sha256'] is None: return False
         entry_signature = self._stored('ui_signature', 'signature_id', skill['signature_id'])
         if desired['state_id'] == skill['state_id'] and desired['signature_sha256'] == entry_signature['sha256']:
             return False  # A new frame with the unchanged entry is not an effect.
         if effect.get('state_id') != desired['state_id'] or effect.get('signature_sha256') != desired['signature_sha256']:
-            raise ValidationError('UI skill: expected approved target signature not bound')
+            raise ValidationError('UI skill: expected target signature not bound')
         targets = []
         if historical:
             for target in parse_json(version[0])['skills']:
-                if target['scope'] == skill['scope'] and target['state_id'] == desired['state_id'] and target['review']['status'] == 'approved' and target['review']['reviewer'] in SUPERVISORS:
+                if target['scope'] == skill['scope'] and target['state_id'] == desired['state_id'] and target['review']['status'] != 'rejected':
                     signature = self._stored('ui_signature', 'signature_id', target['signature']['signature_id'])
                     if signature['sha256'] == desired['signature_sha256']: targets.append(signature)
         else:
@@ -825,9 +939,9 @@ class UiSkills:
                 target = self._stored('ui_skill', 'skill_id', target_id)
                 if target['scope'] == skill['scope'] and target['state_id'] == desired['state_id'] and self._review_eligible(target):
                     signature = self._stored('ui_signature', 'signature_id', target['signature_id'])
-                    if signature['sha256'] == desired['signature_sha256']: targets.append(signature)
+                    if signature['sha256'] == desired['signature_sha256'] and self.negative_matrix(target)['pass']: targets.append(signature)
         if not targets or any(not self._pixel_match(target, after) for target in targets):
-            raise ValidationError('UI skill: independent after PNG does not match approved target signature')
+            raise ValidationError('UI skill: independent after PNG does not match technically verified target signature')
         original = parse_json(_read(effect['proof']))
         if original.get('version') != 2 or type(original.get('native_evidence')) is not dict:
             return False
@@ -911,6 +1025,8 @@ class UiSkills:
                                  'review_chain': self._review_chain(skill['skill_id']), 'review': skill['review'], 'maintenance': skill.get('maintenance'), 'legacy_stop_clear_review': skill.get('legacy_stop_clear_review')})
 
     def _corpus(self) -> list[dict]:
+        cache = READ_CONTEXT.get(); key = str(self.runtime.path)
+        if cache is not None and key in cache['corpus']: return cache['corpus'][key]
         frames = []; seen = set()
         for skill_id, in self.runtime.connection.execute('SELECT skill_id FROM ui_skill ORDER BY skill_id'):
             try:
@@ -943,6 +1059,7 @@ class UiSkills:
                 seen.add(identity); frames.append({'state_id': attempt['effect']['state_id'], 'scope': skill['scope'], 'frame': after})
             except (ValidationError, OSError, ValueError) as error:
                 self._read_quarantine.append(self._quarantine(text.encode(), str(error), context='known-state after-frame'))
+        if cache is not None: cache['corpus'][key] = frames
         return frames
 
     def negative_matrix(self, skill: dict, corpus: list[dict] | None = None) -> dict:
@@ -965,11 +1082,12 @@ class UiSkills:
             if value.get('approval_sha256') != canonical_sha256({k: v for k, v in value.items() if k != 'approval_sha256'}):
                 raise ValidationError('UI skill: audit approval content hash mismatch')
             if value['definition_sha256'] != definition or value['corpus_sha256'] != corpus_sha: continue
-            _read(value['report']); self.runtime.get_artifact(report_sha)
-            if value['review']['status'] == 'approved' and value['review']['reviewer'] in SUPERVISORS:
+            _read(value['report']); self._verified_artifact(report_sha)
+            if value['review']['status'] == 'approved':
                 return report_sha
         return None
 
+    @bounded_read_context
     def audit_manifest(self) -> dict:
         snapshot = self.export({}); corpus = self._corpus(); rows = []
         for row in snapshot['snapshot']['skills']:
@@ -984,31 +1102,34 @@ class UiSkills:
                 'quarantine': self.quarantine_records(), 'scope': 'offline audit generation; never authorizes or emits input'}
 
     def audit_approve(self, data: dict) -> dict:
+        """Record an attributable periodic audit; never substitute for metrics."""
         _validate(data, SCHEMA['definitions']['audit_approval']); _review(data['review'])
         if self.legacy: raise ValidationError('UI skill: explicit backed-up v2 migration required')
-        if data['review']['reviewer'] not in SUPERVISORS or data['review']['status'] != 'approved':
-            raise ValidationError('UI skill: audit must be explicitly approved by claude or user')
-        manifest = parse_json(self._artifact(data['report'], 'application/json'))
-        if manifest != self.audit_manifest(): raise ValidationError('UI skill: audit report differs from current recomputed source')
-        if manifest['quarantine']: raise ValidationError('UI skill: quarantined evidence must be resolved before activation audit approval')
-        skill = self._stored('ui_skill', 'skill_id', data['skill_id'])
-        if self._stored('ui_element', 'element_key', skill['element_key'])['purpose'] == 'talk_jaina_layered' and self._activation_metrics(skill, skill['stats']['requalify_after'])['dynamic_locator_count'] < 2:
-            raise ValidationError('UI skill: fixed NPC points cannot receive reflex activation approval')
-        entry = next((r for r in manifest['skills'] if r['skill']['skill_id'] == data['skill_id']), None)
-        if entry is None or not entry['negative_matrix']['pass'] or not self._review_eligible(skill) or not entry['skill']['governance']['metrics']['ready']:
-            raise ValidationError('UI skill: supervised review, negative matrix and multi-run reliability required')
-        approval = {'skill_id': skill['skill_id'], 'report': data['report'], 'review': data['review'],
-                    'definition_sha256': self._definition_sha(skill), 'corpus_sha256': manifest['corpus_sha256'], 'snapshot_sha256': manifest['snapshot_sha256'],
-                    'revision': skill['stats']['revision']}
-        approval['approval_sha256'] = canonical_sha256(approval)
-        self.runtime.connection.execute('INSERT OR IGNORE INTO ui_audit_approval VALUES (?,?,?,?,?)',
-            (skill['skill_id'], data['report']['sha256'], manifest['snapshot_sha256'], skill['stats']['revision'], canonical(approval)))
-        skill['stats'] = {**skill['stats'], 'status': 'active', 'revision': skill['stats']['revision'] + 1}
-        self.runtime.connection.execute('UPDATE ui_skill SET status=?,revision=?,content_sha256=?,payload=? WHERE skill_id=?',
-            ('active', skill['stats']['revision'], canonical_sha256(skill), canonical(skill), skill['skill_id']))
-        self._revision(skill); self._snapshot()
-        return {'approved': True, 'report_sha256': data['report']['sha256'], 'activation_frozen': False,
-                'default_activation_frozen': ACTIVATION_FROZEN, 'scope': 'explicit audit exception for this skill only', 'automatic_input_authorization': False}
+        with self.runtime._transaction():
+            manifest = parse_json(self._artifact(data['report'], 'application/json'))
+            if manifest != self.audit_manifest(): raise ValidationError('UI skill: audit report differs from current recomputed source')
+            skill = self._stored('ui_skill', 'skill_id', data['skill_id'])
+            entry = next((r for r in manifest['skills'] if r['skill']['skill_id'] == data['skill_id']), None)
+            if entry is None: raise ValidationError('UI skill: audit entry absent')
+            original_definition = self._definition_sha(skill); user_revoked = self._user_revoked(skill)
+            self._append_review(skill, data['review'], reason='periodic audit review, never a qualification substitute')
+            if not user_revoked or data['review']['reviewer'] == 'user': skill['review'] = deepcopy(data['review'])
+            metrics = self._activation_metrics(skill, skill['stats']['requalify_after'])
+            ready = metrics['ready'] and self.negative_matrix(skill)['pass'] and self._review_eligible(skill)
+            element = self._stored('ui_element', 'element_key', skill['element_key'])
+            if element['purpose'] == 'talk_jaina_layered' and metrics['dynamic_locator_count'] < 2: ready = False
+            approval = {'skill_id': skill['skill_id'], 'report': data['report'], 'review': data['review'],
+                        'report_definition_sha256': original_definition, 'definition_sha256': self._definition_sha(skill),
+                        'corpus_sha256': manifest['corpus_sha256'], 'snapshot_sha256': manifest['snapshot_sha256'], 'revision': skill['stats']['revision']}
+            approval['approval_sha256'] = canonical_sha256(approval)
+            self.runtime.connection.execute('INSERT OR IGNORE INTO ui_audit_approval VALUES (?,?,?,?,?)',
+                (skill['skill_id'], data['report']['sha256'], manifest['snapshot_sha256'], skill['stats']['revision'], canonical(approval)))
+            skill['stats'] = {**skill['stats'], 'status': 'hard_stop' if skill['hard_stop'] else 'active' if ready else 'candidate', 'revision': skill['stats']['revision'] + 1}
+            self._save_current(skill); self._snapshot()
+            row = self._row(skill['skill_id'])
+            return {'approved': data['review']['status'] == 'approved', 'report_sha256': data['report']['sha256'],
+                    'activation_frozen': row['governance']['activation_frozen'], 'default_activation_frozen': ACTIVATION_FROZEN,
+                    'scope': 'periodic audit; objective qualification and user revocation remain authoritative', 'automatic_input_authorization': False}
 
     def _quarantine(self, raw: bytes, reason: str, *, context: str) -> dict:
         value = {'raw_sha256': hashlib.sha256(raw).hexdigest(), 'reason': reason[:512], 'context': context,
@@ -1051,13 +1172,14 @@ class UiSkills:
                     self._frame_read(frame)
             for proof in [attempt['native_receipt'], attempt['effect']['proof']]:
                 if proof:
-                    _read(proof); self.runtime.get_artifact(proof['sha256'])
+                    _read(proof); self._verified_artifact(proof['sha256'])
         qualified = self._qualified_history(skill)
         status = row[0]
         metrics = self._activation_metrics(skill, row[5])
         approved_report = self._approved_audit(skill)
         maintenance = skill.get('maintenance')
-        frozen = approved_report is None or not metrics['ready'] or not self._review_eligible(skill) or bool(maintenance)
+        technical = self.negative_matrix(skill)['pass']
+        frozen = not metrics['ready'] or not technical or not self._review_eligible(skill) or bool(maintenance)
         dynamic_npc = element['purpose'] == 'talk_jaina_layered' and metrics.get('dynamic_locator_count', 0) >= 2
         if element['purpose'] == 'talk_jaina_layered' and not dynamic_npc: frozen = True
         if status == 'active' and frozen:
@@ -1068,7 +1190,7 @@ class UiSkills:
         guard = deepcopy(skill['seed'].get('modal_guard'))
         if guard:
             if guard['source_capture_sha256'] != signature['source_capture_sha256']: raise ValidationError('UI skill: modal guard current signature binding mismatch')
-            for proof in guard['negative_artifacts']: _read(proof); self.runtime.get_artifact(proof['sha256'])
+            for proof in guard['negative_artifacts']: _read(proof); self._verified_artifact(proof['sha256'])
             if approved_report:
                 approval = parse_json(self.runtime.connection.execute('SELECT payload FROM ui_audit_approval WHERE skill_id=? AND report_sha256=?', (skill_id, approved_report)).fetchone()[0])
                 guard['review'] = {'status': 'approved', 'reviewer': approval['review']['reviewer'], 'report_sha256': approved_report}
@@ -1081,7 +1203,7 @@ class UiSkills:
                 'reflex_block_reason': 'fixed_point_world_npc_requires_audited_dynamic_locator' if element['purpose'] == 'talk_jaina_layered' and not dynamic_npc else None,
                 'modal_guard': guard,
                 'governance': {'version': 1 if self.legacy else 2, 'activation_frozen': frozen, 'default_activation_frozen': ACTIVATION_FROZEN,
-                               'review_eligible': self._review_eligible(skill), 'metrics': metrics, 'approved_audit_sha256': approved_report},
+                               'review_eligible': self._review_eligible(skill), 'user_revoked': self._user_revoked(skill), 'objective_eligible': metrics['ready'] and technical, 'metrics': metrics, 'approved_audit_sha256': approved_report},
                 'review_chain': self._review_chain(skill_id)}
 
     def _confirmed(self, data: dict, skill: dict, *, historical: bool = False) -> tuple[bool, str | None]:
@@ -1103,7 +1225,7 @@ class UiSkills:
             raise ValidationError('UI skill: unmatched clock domains')
         if _source_key(before) == _source_key(after) or before['observation_id'] == after['observation_id'] or after['clock']['ticks'] <= before['clock']['ticks']:
             raise ValidationError('UI skill: after frame is not independent/new')
-        receipt_document = parse_json(_read(data['native_receipt'])); self.runtime.get_artifact(data['native_receipt']['sha256'])
+        receipt_document = parse_json(_read(data['native_receipt'])); self._verified_artifact(data['native_receipt']['sha256'])
         receipt = receipt_document.get('native', receipt_document)
         _validate(receipt, NATIVE['definitions']['receipt'], NATIVE)
         if receipt['op'] != 'execute' or receipt['status'] != 'completed' or receipt['input']['events_inserted'] < 1 or receipt['input']['released'] is not True:
@@ -1125,7 +1247,7 @@ class UiSkills:
         last = timing['last_send_finished_ms'] if timing else receipt['timing']['finished_ms']
         if first is None or last is None or not before['clock']['ticks'] <= first <= last < after['clock']['ticks']:
             raise ValidationError('UI skill: input/effect source order')
-        original = parse_json(_read(effect['proof'])); self.runtime.get_artifact(effect['proof']['sha256'])
+        original = parse_json(_read(effect['proof'])); self._verified_artifact(effect['proof']['sha256'])
         expected = {'protocol': 'wow-ui-skill-effect-proof', 'version': 2 if data.get('governance_version') == 2 else 1, 'status': 'confirmed', 'source_observation_id': after['observation_id'],
                     'frame_id': after['frame_id'], 'capture_sha256': after['capture']['sha256'], 'verifier': effect['verifier']}
         if effect['source_observation_id'] != after['observation_id'] or any(original.get(k) != v for k, v in expected.items()):
@@ -1201,7 +1323,7 @@ class UiSkills:
                 status = 'hard_stop'
             elif not self._review_eligible(skill):
                 status = 'pending_review'
-            elif metrics['ready'] and self._approved_audit(skill):
+            elif metrics['ready'] and self.negative_matrix(skill)['pass']:
                 status = 'active'
             elif status == 'active':
                 status = 'candidate'
@@ -1225,11 +1347,10 @@ class UiSkills:
             chain = self._review_chain(skill['skill_id'])
             user_rejected = next((entry['review']['status'] == 'rejected' for entry in reversed(chain) if entry['review']['reviewer'] == 'user' and entry['review']['status'] in {'approved', 'rejected'}), False)
             self._append_review(skill, data['review'])
-            authority = data['review']['reviewer'] in SUPERVISORS and data['review']['reviewer'] != skill['seed'].get('proposer', 'self')
-            if authority and (not user_rejected or data['review']['reviewer'] == 'user'):
+            if not user_rejected or data['review']['reviewer'] == 'user':
                 skill['review'] = deepcopy(data['review'])
-            # Self/Seed proposals remain visible in the append-only chain but
-            # cannot replace supervisor approval/rejection or other entries.
+            # Autonomous labels remain attributable; only user can clear its veto.
+            # Review changes never grant qualification or modify other entries.
             floor = self.runtime.connection.execute('SELECT requalify_after FROM ui_skill WHERE skill_id=?', (data['skill_id'],)).fetchone()[0]
             metrics = self._activation_metrics(skill, floor)
             status = 'hard_stop' if skill['hard_stop'] else 'pending_review' if not self._review_eligible(skill) else 'candidate'
@@ -1239,6 +1360,7 @@ class UiSkills:
             self._revision(skill); self._snapshot()
             return {'skill': self._row(data['skill_id'])}
 
+    @bounded_read_context
     def query(self, data: dict) -> dict:
         _validate(data, SCHEMA['definitions']['query'])
         with self.runtime._mutex:
@@ -1257,10 +1379,11 @@ class UiSkills:
                 rows.append(row)
             return {'skills': rows, 'review_queue': [r for r in rows if r['status'] == 'pending_review'], 'quarantine': self.quarantine_records(), 'automatic_input_authorization': False}
 
+    @bounded_read_context
     def export(self, data: dict) -> dict:
         result = self.query(data); rows = result['skills']
         body = {'protocol': 'wow-ui-skill-snapshot', 'version': 1, 'skills': rows,
-                'promotion_rule': 'supervisor entry review; independent approved target; two live confirmations across runs; recent success >= .8; explicit approved audit SHA',
+                'promotion_rule': 'independent technically verified target; all known-state negatives; two live confirmations across runs; recent success >= .8; user veto retained',
                 'governance_version': 2, 'activation_frozen': ACTIVATION_FROZEN, 'input_authorization': False}
         text = canonical(body); sha = hashlib.sha256(text.encode()).hexdigest()
         corpus = self._corpus() if self.available else []; validation_profiles = []
@@ -1275,7 +1398,7 @@ class UiSkills:
                 'signature_sha256': row['signature']['sha256'], 'own_positive': matrix['own_positive'], 'negatives': matrix['rows'],
                 'complete': True, 'pass': matrix['pass'], 'review_eligible': row['governance']['review_eligible'],
                 'approved_audit_sha256': row['governance']['approved_audit_sha256'], 'audit_reviewer': reviewer,
-                'activation_frozen': row['governance']['activation_frozen']}
+                'activation_frozen': row['governance']['activation_frozen'], 'user_revoked': row['governance']['user_revoked'], 'objective_eligible': row['governance']['objective_eligible'], 'metrics': row['governance']['metrics']}
             if row['status'] == 'active' and row['governance']['review_eligible'] and not row['governance']['activation_frozen']:
                 profile.update(source_skill_canonical=canonical(row), source_skill_sha256=canonical_sha256(row),
                     signature_original_canonical=canonical({k: v for k, v in self._stored('ui_signature', 'signature_id', row['signature']['signature_id']).items() if k not in {'sha256', 'signature_id'}}))
@@ -1355,7 +1478,7 @@ class UiSkills:
                 with self.runtime._transaction():
                     try:
                         request = validate_request(parse_json(line))
-                        if request['op'] not in {'seed', 'attempt', 'review', 'revise', 'repair', 'register_run'}:
+                        if request['op'] not in {'seed', 'attempt', 'review', 'revise', 'repair', 'register_run', 'register_tutorial_observation'}:
                             raise ValidationError('UI skill: queue mutation operations only')
                         self.apply(request)
                     except (ValidationError, OSError, ValueError) as error:
@@ -1371,7 +1494,7 @@ class UiSkills:
 def main() -> None:
     import sys
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('seed', 'attempt', 'review', 'query', 'learn', 'export', 'report', 'migrate', 'audit_approve', 'revise', 'repair', 'register_run', 'query_run'))
+    parser.add_argument('command', choices=('seed', 'attempt', 'review', 'query', 'learn', 'export', 'report', 'migrate', 'audit_approve', 'revise', 'repair', 'register_run', 'query_run', 'register_tutorial_observation'))
     parser.add_argument('--database', required=True)
     args = parser.parse_args()
     try:

@@ -34,7 +34,8 @@
         "revise",
         "repair",
         "register_run",
-        "query_run"
+        "query_run",
+        "register_tutorial_observation"
       ]
     },
     "data": {
@@ -232,6 +233,22 @@
         "properties": {
           "data": {
             "$ref": "#/definitions/query_run"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "register_tutorial_observation"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/definitions/tutorial_observation"
           }
         }
       }
@@ -1351,6 +1368,30 @@
       "properties": {
         "run_id": {
           "$ref": "#/definitions/id"
+        }
+      }
+    },
+    "tutorial_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "frame",
+        "native_evidence",
+        "observation"
+      ],
+      "properties": {
+        "run_id": {
+          "$ref": "#/definitions/id"
+        },
+        "frame": {
+          "$ref": "#/definitions/frame"
+        },
+        "native_evidence": {
+          "$ref": "urn:wow-resident:protocol:session-v1#/definitions/evidence"
+        },
+        "observation": {
+          "$ref": "urn:wow-agent:protocol:agent-v1#/definitions/observation"
         }
       }
     }
