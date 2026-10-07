@@ -1,3 +1,9 @@
+**2026-10-07 最新冻结验收7112147：Python983 passed＋3项既有strict xfail，TS768/768、typecheck、Windows编译及81项纯原生检查通过（0普通跳过/失败）。角色当前由独立62新帧确认安全选角；“热身”仍0/1，尚未发出W靠近。**
+
+55已有限进世界，56当前双脚RGB模板因站姿变化未匹配，0W；57/58/59宿主退出原因已定位为知识请求合并263,848字符超过旧JSON解析262,144上限。7112147将整个wire解析上限对齐既有1MiB有界读取，各canonical字段262,144与输入源750ms限制不变；不绕过执行闸。旧EOF/超时/清理未确认回执保留，独立原生释放/退出证据另记。60实际ESC2/2、61登出3/3均释放，62新帧确认char_select（QPC267220908.274）；临时任务删除及独立回查、空账本、执行端退出与capture关闭已确认。55→60约15.6分钟再次超过十分钟前防挂机要求，如实列为未达标；后续地面识别改进在选角离线进行，未发W、未确认伤害。
+
+完整原日志主out/integration/7112147-{python.log,ts.tap,typecheck.log,native-build.log,native-pure.json}。更新审计JSON SHA 9c948adb32a38a14b3e40a788d61b69be3765bc8ccfe345956e7f6a900917ba3；HTML17,259,147字节、JPEG长边≤512，保留全部记录、负例与原图链接，23技能/0active/0治理合格确认。入口主out/acceptance/ui-skill-learning-20261007/audit-checkpoint-62/。人工首交谈验收仍只在独立manual事件中，不计晋升。下个目标：可运行地面/有限150ms靠近→当前帧重定位假人→有限攻击→独立1/1确认；不以选中/输入回执替代摧毁。详见[热身验收](docs/acceptance/autonomous-training-dummy.md)。
+
 **2026-10-07 最新里程碑：联盟战士“小呵”首任务（与吉安娜交谈）已完成，reviewer=claude 人工验收confirmed，后续“热身”已接受；当前任务进度0/1摧毁作战假人。已安全回选角开发下一攻击入口，不因已定位并修好的bug重复询问。**
 
 首交谈经当帧姓名板/黄色躯干→局部世界事实→L4→L3 talk_to→Body统一闸→hand，有限右键3/3并释放。原后图`out/acceptance/ui-skill-learning-20261007/autonomous-jaina-34/frame-3-evidence-10.png` SHA e27f11852045c7aa6b36c86d6aaca2d7034eeb5896bf9571264706917be0e85c显示吉安娜“热身”任务对话框；`autonomous-safe-logout-42/frame-1-evidence-5.png` SHA 3b2c37291efafd720ceec1a223573d88dd73d03ba4c93afa62fe11a072a0b69b显示已接受“热身”和攻击提示。人工验收原件`first-conversation-claude-acceptance.json`写入agent.sqlite原run的独立manual_effect_acceptance事件seq2（2812eda29037e574780debfc1a7e3f928cc52497d4177961b33fcd6741fac6ab），回读confirmed；不改原failed回执、学习计数0、不授active。

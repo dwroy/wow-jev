@@ -15,3 +15,13 @@
 防挂机时限本轮未达标：47最后UP263912135.4861到50首输入约264832741，相差约15.34分钟，超过用户要求的十分钟前。该超时如实记录；以后先安全退出再开发，不能靠输入已发出或未断线宣称已防挂机。
 
 冻结c905740全量Python983 passed+3原有strict xfail、TS765/765、typecheck，0普通skip/fail；常驻宿主编译通过。新增原生模块后的旧NPC/治理fixture仍可构建，纯治理32/32（0桌面/0输入，不代表现场确认）。验收日志在主`out/integration/`；真实帧、原生回执、trace与任务删除回查在主`out/acceptance/ui-skill-learning-20261007/`。
+
+## 7112147冻结验收与安全回程62
+
+完整Python983 passed＋3项既有strict xfail，TS768/768、typecheck通过，0普通skip/fail/cancel。Windows宿主和纯fixture编译通过，原生81项检查（0真实输入、0桌面窗口、0capture），不能外推现场效果。主out/integration/7112147-*保留完整日志，初次fixture路径/参数错误另保留，修正后实际81项通过。
+
+55实际进世界3/3并释放；56未通过当前ground站姿/甲板RGB校准，W输入0。57/58/59为relay解析异常，execute输入0：组合转义知识请求263,848字符超过旧MaxJsonLength262,144，单字段未超过上限。7112147仅将总解析上限对齐既有wire有界读取1,048,576；canonical字段仍262,144、递归64、普通输入750ms。修复不放宽任何动作/地面闸。旧coordinator丢ACK的cleanup未确认保持原样；原生EOF→取消→释放、空账本、退出/captureDispose为独立证据。
+
+60实际ESC2/2、61实际登出3/3均释放，62独立只读新帧确认选角（QPC267220908.274）。61释放账本、执行端退出、capture关闭与临时任务删除回查均确认。55→60约15.6分钟，仍违反十分钟前安全回程要求；这一事实不因未断线而改写。角色现留选角离线修双靴/地面识别，0W、0已确认伤害、目标仍0/1。
+
+审计audit-checkpoint-62的HTML17,259,147字节，JPEG预览长边≤512，原图链接/全部负例/尝试与审核链保留；精确JSON SHA9c948adb32a38a14b3e40a788d61b69be3765bc8ccfe345956e7f6a900917ba3。23技能，0active、0治理合格确认；旧late-review隔离记录不得计入晋升。首次交谈manual confirmed与热身accept发生不变。
