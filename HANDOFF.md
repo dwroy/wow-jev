@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-07人工审核优先轮次：重连按钮当前像素匹配，但管理员遮挡窗最小化被Windows拒绝，切换复核失败后停止。** 用户最新指令暂停OCR/模板与耗时研究，使用reviewer=claude对seed-recovery/initial/evidence-2.png的人工审核：原SHA f60daaacd71fc016cf6dbc53dc7d876305326eb0e49ad56769fd477e57498737，reconnect normalized bbox x.431–.569/y.474–.526、center(.5,.5)，不能点logout y.603。新readonly-01成功：session1 inputDefault/UOI_IO=true，Wow22072/start639268827443062278/HWND0x904a6/2560×1440/DPI144一致；按钮ROI与审核图mean absRGB .00065264、独立logo .686516，仍为重连界面，未授权把旧图改称当前源。
+
+现场前台0x3607de/PID32924是“管理员: Windows PowerShell”WindowsTerminal，实际覆盖WoW且高Z。独立manual-first-task树新增固定单遮挡窗最小化闸（会话/身份/正面遮挡/空闲>5s/人类按钮检查，一次ShowWindowAsync SW_MINIMIZE，不含键鼠输入/SetForegroundWindow/系统设置），当前用户least-privilege /IT执行返回false/GetLastError5；窗口未最小化，1.5s后FG仍0x3607de，立即停止，未尝试第二切换。游戏/键鼠输入0，未取得输入执行器；不能冒称物理release ACK。两项临时任务均删除且独立GetTask80070002回查。编译通过，实测权限拒绝；不声称成功焦点恢复、重连/选角/首任务或完整套件复验。
+
+新帧与reviewer=claude审核记录、真实权限拒绝/任务名/源码与payload SHA在主out/acceptance/manual-first-task-20261007；业务稳定基线3acb376。seed-recovery独立树中的慢视觉/候选匹配与未完成接线均暂停，不能当已验收路径；方舟凭据由用户另行放置，禁止继续搜索或读取其它密钥文件。本轮到此停止。需要用户解决前台管理员遮挡窗权限（本机最小化并点击WoW，或明确选择用现有管理员上下文执行此固定动作）；不继续研究OCR/11.2s或游戏输入。
+
 **2026-10-07现场立即复测：会话/焦点已可用，发送一次确定后遇恢复识别阻塞并停止。** 源码12948ec，初始Resident只读确认session1 WTSActive/WinSta0 Default/UOI_IO=true、自由光标、用户空闲170453ms，FG0x904a6=WowPID22072，start/class/正式服path一致、2560×1440物理/DPI144。没有焦点切换、搬窗或系统设置改动。原恢复闸完成一次中心“确定”有限60ms鼠标点击，3/3事件、原生released/empty ledger/executor exited；后图保持WoW前台，弹窗已关且重新连接按钮可见，但OCR输出漏掉该按钮，程序unknown→disconnect_ack_effect_unconfirmed。程序效果0；root对同源图确认弹窗已关闭另记，不刷新或伪装程序CV。按最新“阻塞即汇报”停止，未重连、选角、进世界或L4/L3交谈，首任务未完成，不接下一任务。
 
 QPC实测冷capture API66.248ms、PNG344.780、CV1319.312、OCR987.116、native spawn→ready1933.234、原生闸→首SendInput开始17.951；捕获API→输入11186.133–11199.632ms n=1，仅冷恢复ACK，不能当常驻分层交谈成绩。初始只读WGC ROI74.910/CV25.761/响应117.122ms n=1。热分层输入/效果n=0、150ms目标及命中率/有效任务动作率/单层对照未测；应用模型0。五项临时任务（1Resident/4SessionRecovery）全删除且GetTask80070002独立回查，项目Windows助手无残留，真实正常释放证据不外推强杀。完整原件/任务名/源码SHA与trace见docs/acceptance/first-task-resume.md和主out/acceptance/first-task-resume-20261007-01。
