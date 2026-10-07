@@ -259,7 +259,9 @@ def dynamic_fixture(store, tmp_path):
     skill = store._stored('ui_skill', 'skill_id', 'talk-jaina')
     sample['ui_skills'] = {'status': 'known', 'state_id': skill['state_id'], 'confidence': .98, 'hard_stop': False,
         'knowledge_sha256': location['calibration_sha256'], 'started_qpc_ms': qpc+2, 'finished_qpc_ms': qpc+4,
-        'matches': [{'skill_id': 'talk-jaina', 'signature_id': skill['signature_id'], 'current_point': current_point, 'current_rect': current_rect, 'location': location}]}
+        'matches': [{'skill_id': 'talk-jaina', 'state_id': skill['state_id'], 'signature_id': skill['signature_id'], 'status': 'candidate',
+                     'hard_stop': False, 'roi_sha256': location['roi_sha256'], 'scores': {'nameplate': deepcopy(location['score'])},
+                     'current_point': current_point, 'current_rect': current_rect, 'location': location}]}
     document['compiled_action']['events'][0].update(current_point); document['action_intent']['action']['args'] = deepcopy(document['compiled_action']); document['intent']['action_sha256'] = hashlib.sha256(canonical(document['compiled_action']).encode()).hexdigest()
     for condition in document['action_intent']['conditions']:
         if condition['field'] == 'target.screen_interaction': condition['value'].update(current_point)
