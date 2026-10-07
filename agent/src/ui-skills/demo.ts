@@ -1,0 +1,35 @@
+import type {Collected} from '../eye/runtime.js';
+import type {Observation,ObservedField} from '../core/protocol.js';
+import type {UiAttempt,UiFrame,UiPorts,UiScope,UiSkill,HardStop,UiReviewRequest} from './types.js';
+import {UiSkillRuntime} from './runtime.js';
+export const DEMO_SCOPE:UiScope={target_scope:'recording_fixture',build:'synthetic-ui-v1',locale:'enUS',size_bucket:'1000x800',ui_scale:1};
+export function demoSkill(id:string,from:string,to:string,purpose=id):UiSkill{
+  return{skill_id:id,state_id:from,scope:DEMO_SCOPE,revision:1,status:'candidate',confirmed_count:0,failure_streak:0,last_failure:null,hard_stop:false,review:{status:'approved',reviewer:'synthetic_fixture',reviewed_at:'2026-10-07T00:00:00Z',reason:'offline_port_fixture'},element:{id,purpose,label:id,bbox:{x:.1,y:.1,width:.2,height:.1},button:'left',duration_ms:60},signature:{sha256:'a'.repeat(64)},expected_effect:{state_id:to,signature_sha256:null}};
+}
+/** Deterministic ports only. No database, Windows, model, or hand is launched. */
+export function createUiDemo(options:{unknown?:boolean;hardStop?:HardStop;effectFails?:boolean;unconfirmedRelease?:boolean;active?:boolean}={}){
+  let time=0,seq=0,state='character_select',unknown=options.unknown??false,executions=0,releases=0;const skills=[demoSkill('enter_world','character_select','world'),demoSkill('open_menu','world','logout_menu'),demoSkill('logout','logout_menu','character_select')];
+  if(options.active)for(const s of skills){s.status='active';s.confirmed_count=2;}
+  const attempts:UiAttempt[]=[],reviews:UiReviewRequest[]=[],events:Array<{kind:string;data:unknown}>=[];const authentic=new WeakSet<UiFrame>();
+  const collect=async():Promise<UiFrame>=>{
+    const id=`simulation-${++seq}`,at=time,fields:Record<string,ObservedField>={};
+    const source={observation_id:id,frame_id:id,seq,width:1000,height:800,layout_id:'synthetic-layout',target:{pid:42,start_ticks:'638900000000000000',hwnd:'0x123',class:'SyntheticUiFixture',executable:'synthetic://no-process',session_id:1},clock:{domain:'coordinator-monotonic' as const,clock_id:'synthetic-ui-clock',ticks:time,unit:'ms' as const},capture:{path:'/tmp/synthetic-ui-frame.png',sha256:'b'.repeat(64)},producer:'simulation' as const};
+    const fstate=unknown?null:{id:state,confidence:1,signature_sha256:'c'.repeat(64),hard_stop:options.hardStop??null};
+    const element=skills.find(s=>s.state_id===state),elements=element?[{id:element.element.id,x:100,y:100,layout_id:source.layout_id,enabled:true,signature_sha256:element.signature.sha256}]:[];
+    const add=(name:string,value:ObservedField['value'])=>fields[name]={status:'known',value,source:'simulated',captured_at_ms:at,source_observation_id:id};
+    if(fstate)add('ui.state',fstate);add('ui.layout_id',source.layout_id);add('input.mouse_mode','ui');add('window.focused',true);add('ui.elements',elements.map(({signature_sha256,...e})=>e));add('ui.control_signatures',elements.map(e=>({id:e.id,signature_sha256:e.signature_sha256})));
+    const observation:Observation={protocol:'wow-agent',version:1,type:'observation',id,run_id:'ui-demo',at_ms:at,observation_seq:seq,window:{token:'synthetic-window',hwnd:'0x123',pid:42,client_width:1000,client_height:800,focused:true},fields,artifacts:[]};
+    // This placeholder is accepted only by simulated ports; production adapter
+    // rejects it because it has no authenticated resident registry entry.
+    const c={observation,bracket:{sample:{protocol:'synthetic-fixture'},started_at_ms:at,received_at_ms:at},artifact:null} as unknown as Collected;
+    const f:UiFrame={collected:c,source,state:fstate,elements,hard_stop:options.hardStop??null,scope:DEMO_SCOPE};authentic.add(f);return f;
+  };
+  const ports:UiPorts={now:()=>time,sleep:async(ms,signal)=>{if(signal.aborted)throw new Error('cancelled');time+=ms;},collect:async()=>collect(),owns:f=>authentic.has(f),query:async()=>structuredClone(skills),
+    chooseJev:async request=>({status:'selected',skill_id:request.candidates[0]!.skill_id,source_observation_id:request.source.observation_id,source_frame_id:request.source.frame_id}),chooseSeed:async()=>({status:'unavailable',reason:'offline_no_models'}),
+    installProposal:async proposal=>{unknown=false;const s=demoSkill(proposal.skill_id,proposal.state_id,proposal.expected_to_state??'unknown');s.element=proposal.element;skills.push(s);return s;},
+    execute:async(skill,before,attemptId,signal)=>{if(signal.aborted)throw new Error('cancelled');executions++;time+=60;if(!options.effectFails)state=skill.expected_effect?.state_id??state;return{status:'completed',reason:null,started_at_ms:time-60,finished_at_ms:time,before_observation_id:before.source.observation_id,after_observation_id:null,receipt:null,release:'confirmed',game_effect:'unverified',evidence_observation_ids:[before.source.observation_id],real_inputs:0,dispatch_frame:before};},
+    release:async()=>{releases++;return options.unconfirmedRelease?'unconfirmed':'confirmed';},
+    saveEffectProof:async()=>({path:'/tmp/synthetic-ui-effect-proof.json',sha256:'d'.repeat(64)}),recordAttempt:async a=>{attempts.push(structuredClone(a));const s=skills.find(s=>s.skill_id===a.skill_id)!;if(a.effect.status==='confirmed'){s.confirmed_count++;s.failure_streak=0;s.last_failure=null;}else{s.failure_streak++;s.last_failure={attempt_id:a.attempt_id,reason:a.failure_reason??'unverified'};if(s.failure_streak>=2)s.status='pending_review';}},queueReview:async r=>{reviews.push(structuredClone(r));},append:async(kind,data)=>{events.push({kind,data:structuredClone(data)});}};
+  return{ports,skills,attempts,reviews,events,get executions(){return executions;},get releases(){return releases;},setUnknown:(value:boolean)=>{unknown=value;}};
+}
+export async function runUiOfflineDemo(rounds:2|5=2){const d=createUiDemo();const runtime=new UiSkillRuntime({run_id:'ui-offline-demo',mode:'simulated',authorized:true,scope:DEMO_SCOPE,max_actions:rounds*3+2},d.ports);const result=await runtime.practice(rounds,'character_select','world',new AbortController().signal);return{protocol:'wow-ui-skill-runtime-demo',version:1,evidence_scope:'simulated_ports',...result,simulated_actions:d.executions,native_inputs:0,network_calls:0,database_written:false,game_effect:'unverified',skills:d.skills.map(s=>({skill_id:s.skill_id,status:s.status,confirmed_simulated_count:s.confirmed_count,live_promotion_eligible:false})),events:d.events,attempts:d.attempts};}
