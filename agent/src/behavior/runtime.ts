@@ -1,6 +1,7 @@
 import type { ActionCondition, JsonValue, Observation } from '../core/protocol.js';
 import type { BehaviorPorts, BehaviorResult, BehaviorSpec, BodyAction, ExecutionContext, MovementAxis, TargetScopeVerifier, BoundTargetScope } from '../layers/contracts.js';
 import { RunLease, cleanupBound } from './lease.js';
+import {uiStateRecognized} from '../actions/ui-recognition.js';
 import { bindingError, conditionError, validateConditions, hash, observationError, readKnown, validateBehavior, value, resolveTargetScope, targetScopeKey, type FieldPolicy } from './validation.js';
 
 export interface BehaviorExecutionResult extends BehaviorResult { input_count_scope: 'known' | 'lower_bound'; scenario_effect: 'confirmed' | 'unverified'; }
@@ -167,7 +168,7 @@ export class BehaviorRuntime {
     if(!layout||layout.value!==spec.params.layout_id||p.mode==='live'&&layout.source!=='cv')return finish('blocked',prefix+'_layout_unknown_or_changed');
     const current=(f:typeof field)=>f!==null&&f.captured_at_ms===layout.captured_at_ms&&(p.mode!=='live'||f.source==='cv');
     const row=field?.value;
-    const ui=current(field)&&row!==null&&typeof row==='object'&&!Array.isArray(row)&&Object.keys(row).length===4&&typeof row.id==='string'&&typeof row.confidence==='number'&&row.confidence>=.95&&row.confidence<=1&&typeof row.signature_sha256==='string'&&/^[a-f0-9]{64}$/.test(row.signature_sha256)&&(row.hard_stop===null||row.hard_stop===false)?row:null;
+    const ui=current(field)&&row!==null&&typeof row==='object'&&!Array.isArray(row)&&Object.keys(row).length===4&&typeof row.id==='string'&&typeof row.confidence==='number'&&uiStateRecognized(o,row.confidence)&&typeof row.signature_sha256==='string'&&/^[a-f0-9]{64}$/.test(row.signature_sha256)&&(row.hard_stop===null||row.hard_stop===false)?row:null;
     const text=instruction?.value;
     const label=current(instruction)&&text!==null&&typeof text==='object'&&!Array.isArray(text)&&typeof text.id==='string'&&text.id.length>0&&!['unknown','unsupported','unavailable'].includes(text.id)&&typeof text.signature_sha256==='string'&&/^[a-f0-9]{64}$/.test(text.signature_sha256)?{id:text.id,signature_sha256:text.signature_sha256}:null;
     const hardStop=readKnown(o,'ui.hard_stop',p,true,s.lastActionAt);
@@ -322,7 +323,7 @@ export class BehaviorRuntime {
     const uiConditions:ActionCondition[]=[];
     if(Object.hasOwn(o.fields,'ui.state')){
       const state=readKnown(o,'ui.state',p,true),row=state?.value;
-      if(!current(state)||!row||Array.isArray(row)||typeof row!=='object'||Object.keys(row).length!==4||typeof row.id!=='string'||!row.id||['unknown','unsupported','unavailable'].includes(row.id)||typeof row.confidence!=='number'||!Number.isFinite(row.confidence)||row.confidence<.95||row.confidence>1||typeof row.signature_sha256!=='string'||!/^[a-f0-9]{64}$/.test(row.signature_sha256)||row.hard_stop!==null)return finish('blocked','positive_screen_talk_ui_state_unbound');
+      if(!current(state)||!row||Array.isArray(row)||typeof row!=='object'||Object.keys(row).length!==4||typeof row.id!=='string'||!row.id||['unknown','unsupported','unavailable'].includes(row.id)||typeof row.confidence!=='number'||!Number.isFinite(row.confidence)||!uiStateRecognized(o,row.confidence)||typeof row.signature_sha256!=='string'||!/^[a-f0-9]{64}$/.test(row.signature_sha256)||row.hard_stop!==null)return finish('blocked','positive_screen_talk_ui_state_unbound');
       uiConditions.push(condition('ui.state',row,p.maxAgeMs));
     }
     const hardStop=readKnown(o,'ui.hard_stop',p,true);

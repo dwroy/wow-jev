@@ -3,6 +3,7 @@ import type { NativeTimeline } from '../hand/protocol.js';
 import type { BodyAction } from '../layers/contracts.js';
 import { BODY_MODES, type BodyBinding, type BodyCapability, type BodyMode, type BodyProfile, type BodySemantic } from './profile.js';
 import { clickTiming, TimelineBuilder } from './timeline.js';
+import {uiStateRecognized} from './ui-recognition.js';
 
 export type BodyCompilation =
   | { status: 'ready'; action: NativeTimeline | null; conditions: ActionCondition[]; resources: string[]; duration_ms: number }
@@ -65,7 +66,7 @@ export function compileBodyAction(action: BodyAction, profile: BodyProfile, obse
     if(capability('mouse_turn')||profile.mouse_look_button!=='right'||action.duration_ms!==950||sweep.steps!==4||sweep.return_to_origin!==true||!window||
       Object.keys(sweep).sort().join(',')!=='origin,return_to_origin,steps'||Object.keys(sweep.origin).sort().join(',')!=='x,y'||
       sweep.origin.x!==Math.floor(window.client_width*.70)||sweep.origin.y!==Math.floor(window.client_height*.62)||action.dx!==Math.round(window.client_width*.12)||
-      state?.status!=='known'||state.source!=='cv'||state.source_observation_id!==observation.id||!state.value||Array.isArray(state.value)||typeof state.value!=='object'||state.value.id!=='tutorial_look_around'||Number(state.value.confidence)<.95||state.value.hard_stop!==null||
+      state?.status!=='known'||state.source!=='cv'||state.source_observation_id!==observation.id||!state.value||Array.isArray(state.value)||typeof state.value!=='object'||state.value.id!=='tutorial_look_around'||!uiStateRecognized(observation,state.value.confidence)||state.value.hard_stop!==null||
       layout?.status!=='known'||layout.source!=='cv'||layout.value!==profile.layout_id||layout.source_observation_id!==observation.id||state.captured_at_ms!==layout.captured_at_ms||
       known(observation,'input.cursor_free')!==true||known(observation,'input.mouse_buttons_held')!==false)return reject('blocked','tutorial_camera_sweep_not_current_or_reviewed');
     conditions.push(condition('ui.state',state.value),condition('ui.layout_id',layout.value),condition('input.cursor_free',true),condition('input.mouse_buttons_held',false));
