@@ -16,8 +16,8 @@ export interface UiSource {
 }
 export interface UiState {id:string;confidence:number;signature_sha256:string;hard_stop:HardStop|null}
 export interface UiElement {id:string;x:number;y:number;layout_id:string;enabled:boolean;signature_sha256:string}
-export interface UiRecognition {status:'known'|'unknown'|'hard_stop';route_eligibility:'candidate'|'slow_path'|'hard_stop';confidence_basis:string;modal_status:'clear'|'unknown'|'present'}
-export interface UiFrame {collected:Collected;source:UiSource;state:UiState|null;elements:UiElement[];hard_stop:HardStop|null;scope:UiScope;skill_matches?:Array<{skill_id:string;signature_sha256:string}>;recognition?:UiRecognition;native_evidence?:ResidentEvidence}
+export interface UiRecognition {status:'known'|'unknown'|'hard_stop';route_eligibility:'candidate'|'slow_path'|'hard_stop';confidence_basis:string;modal_status:'clear'|'unknown'|'present';match_margin?:{positive_distance:number;acceptance_threshold:number;next_state_distance:number|null}}
+export interface UiFrame {collected:Collected;source:UiSource;state:UiState|null;elements:UiElement[];hard_stop:HardStop|null;scope:UiScope;skill_matches?:Array<{skill_id:string;signature_sha256:string;active_qualified?:boolean;negative_validation_sha256?:string}>;recognition?:UiRecognition;native_evidence?:ResidentEvidence}
 export interface UiAttemptProvenance {run_id:string;code_sha256:string;prompt_sha256:string;prompt_version:string;knowledge_sha256:string;skill_revision:number}
 export type UiSkillAction={kind:'key';keys:['ESC'|'ENTER'];duration_ms:number}|{kind:'wait';duration_ms:number}|{kind:'drag'|'move';duration_ms:number;compiled_action:NativeAction};
 export interface UiSkill {
@@ -31,7 +31,7 @@ export interface UiSkill {
 }
 export interface UiProposal {
   source_observation_id:string;source_frame_id:string;state_id:string;skill_id:string;hard_stop:HardStop|null;
-  element:UiSkill['element'];signature_bbox:Bbox;signature_anchors?:Array<{id:string;bbox:Bbox}>;expected_to_state:string|null;confidence:number;
+  element:UiSkill['element'];signature_bbox:Bbox;signature_anchors?:Array<{id:string;bbox:Bbox;label?:string;origin?:'model_anchor'|'other_control'}>;expected_to_state:string|null;confidence:number;
   prompt_sha256:string;prompt_version?:string;result_sha256:string;provider:'Seed'|'manual_review';
 }
 export interface UiChoiceRequest {run_id:string;mode:UiMode;scope:UiScope;source:UiSource;state:UiState|null;candidates:UiSkill[];failure_streak:number;goal_state_id:string|null}
@@ -65,11 +65,11 @@ export interface UiPorts {
   /** Persistence plus native signature installation; never an input permission. */
   installProposal?(proposal:UiProposal,source:UiFrame,signal:AbortSignal):Promise<UiSkill>;
   verifyProposal?(proposal:UiProposal,source:UiFrame,signal:AbortSignal):Promise<{status:'passed'|'failed';source_observation_id:string;source_frame_id:string;capture_sha256:string;reason:string}>;
-  execute(skill:UiSkill,before:UiFrame,attemptId:string,signal:AbortSignal):Promise<UiBodyOutcome>;
+  execute(skill:UiSkill,before:UiFrame,attemptId:string,signal:AbortSignal,dispatch?:{route:'reflex'|'slow_path'}):Promise<UiBodyOutcome>;
   release(reason:string):Promise<'confirmed'|'unconfirmed'>;
   confirmEffect?(skill:UiSkill,before:UiFrame,after:UiFrame,signal:AbortSignal):Promise<UiEffect>;
   saveNativeReceipt?(outcome:UiBodyOutcome):Promise<{path:string;sha256:string}|null>;
   saveEffectProof(effect:Omit<UiEffect,'proof'>,after:UiFrame):Promise<{path:string;sha256:string}>;
   recordAttempt(attempt:UiAttempt):Promise<void>;queueReview(request:UiReviewRequest):Promise<void>;append(kind:string,data:unknown):Promise<void>;
 }
-export interface UiRuntimeOptions {run_id:string;mode:UiMode;authorized:boolean;scope:UiScope;reviewed_candidate_trial_authorized?:boolean;max_actions?:number;max_duration_ms?:number;max_source_age_ms?:number;effect_check_ms?:number[];model_timeout_ms?:number}
+export interface UiRuntimeOptions {run_id:string;mode:UiMode;authorized:boolean;scope:UiScope;autonomous_trial_authorized?:boolean;reviewed_candidate_trial_authorized?:boolean;max_actions?:number;max_duration_ms?:number;max_source_age_ms?:number;effect_check_ms?:number[];model_timeout_ms?:number}

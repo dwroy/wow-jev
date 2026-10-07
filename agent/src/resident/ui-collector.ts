@@ -35,13 +35,14 @@ export class UiResidentCollector {
     if(s.input_state.status==='known'){add('input.cursor_free',s.input_state.cursor_free===true,'window',s.input_state.sampled_qpc_ms);add('input.mouse_buttons_held',s.input_state.mouse_buttons_held===true,'window',s.input_state.sampled_qpc_ms);}
     let state:UiState|null=null;const elements:UiElement[]=[];const matched=s.ui_skills,skills=this.options.skills();
     const stopKind=(raw:unknown):HardStop=>typeof raw==='string'&&['credentials','two_factor','terms','update'].includes(raw)?raw as HardStop:'unclassified';
-    const skillMatches:Array<{skill_id:string;signature_sha256:string}>=[];
+    const skillMatches:NonNullable<UiFrame['skill_matches']>=[];
     if(matched&&matched.knowledge_sha256===this.options.knowledgeSha()) {
       if(matched.started_qpc_ms<m.source_qpc_ms||matched.finished_qpc_ms<matched.started_qpc_ms||matched.finished_qpc_ms>s.local_clock.at_ms)throw new Error('ui_native_match_timing');
       for(const match of matched.matches){
         const skill=skills.find(k=>k.skill_id===match.skill_id);if(!skill||match.signature_id!==skill.signature.signature_id)throw new Error('ui_native_signature_not_current_knowledge');
         const roi=m.rois.find(r=>r.id==='learned-ui-'+skill.skill_id);if(!roi||roi.sha256!==match.roi_sha256||roi.calibration_sha256!==matched.knowledge_sha256)throw new Error('ui_native_roi_not_bound');
-        skillMatches.push({skill_id:skill.skill_id,signature_sha256:skill.signature.sha256});
+        const governanceMatch=match as unknown as Record<string,unknown>;
+        skillMatches.push({skill_id:skill.skill_id,signature_sha256:skill.signature.sha256,active_qualified:governanceMatch.active_qualified===true,...(typeof governanceMatch.negative_validation_sha256==='string'?{negative_validation_sha256:governanceMatch.negative_validation_sha256}:{})});
         if(matched.status==='known'&&match.state_id===matched.state_id){
           // Same state may expose multiple independently matched elements; route chooses among them.
           if(!state||skill.action?.kind==='key')state={id:match.state_id,confidence:matched.confidence,signature_sha256:skill.signature.sha256,hard_stop:match.hard_stop?stopKind((match as unknown as Record<string,unknown>).hard_stop_kind):null};
@@ -54,10 +55,10 @@ export class UiResidentCollector {
     const tutorial=s.cv.tutorial_interaction as Record<string,unknown>|undefined;
     // A specific tutorial template is never a general playable-world proof.
     // Unknown or modal recognition stays on the slow path.
-    const recognitionRaw=matched as unknown as {recognition_status?:string;route_eligibility?:string;confidence_basis?:string;modal?:{status?:string}}|undefined;
+    const recognitionRaw=matched as unknown as {recognition_status?:string;route_eligibility?:string;confidence_basis?:string;modal?:{status?:string};match_margin?:{positive_distance:number;acceptance_threshold:number;next_state_distance:number|null}}|undefined;
     const recognition={status:recognitionRaw?.recognition_status==='known'?'known' as const:recognitionRaw?.recognition_status==='hard_stop'?'hard_stop' as const:'unknown' as const,
       route_eligibility:recognitionRaw?.route_eligibility==='candidate'?'candidate' as const:recognitionRaw?.route_eligibility==='hard_stop'?'hard_stop' as const:'slow_path' as const,
-      confidence_basis:recognitionRaw?.confidence_basis??'unverified',modal_status:recognitionRaw?.modal?.status==='clear'?'clear' as const:recognitionRaw?.modal?.status==='present'?'present' as const:'unknown' as const};
+      confidence_basis:recognitionRaw?.confidence_basis??'unverified',modal_status:recognitionRaw?.modal?.status==='clear'?'clear' as const:recognitionRaw?.modal?.status==='present'?'present' as const:'unknown' as const,...(recognitionRaw?.match_margin?{match_margin:recognitionRaw.match_margin}:{})};
     add('ui.recognition',recognition,'cv');
     const hardStop=matched?.hard_stop?stopKind((matched as unknown as Record<string,unknown>).hard_stop_kind):state?.hard_stop??null;
     if(hardStop)add('ui.hard_stop',hardStop,'cv');
@@ -88,7 +89,7 @@ export class UiResidentCollector {
         add('dialog.paired_ocr_proof',{...dialog.dialog_proof,capture_sha256:evidence.artifact.sha256,source_frame_id:m.frame_id,source_qpc_ms:m.source_qpc_ms},'local_ocr');
       }
     }
-    const observation:Observation={protocol:'wow-agent',version:1,type:'observation',run_id:this.options.runId,id,at_ms:this.options.now(),observation_seq:s.seq,window:{token:'resident-ui-'+m.target.pid+'-'+m.channel_generation,hwnd:s.window.hwnd,pid:s.window.pid,client_width:s.window.client_width,client_height:s.window.client_height,focused:s.window.focused},fields,artifacts:[]};
+    const observation:Observation={protocol:'wow-agent',version:1,type:'observation',run_id:this.options.runId,id,at_ms:bracket.received_at_ms,observation_seq:s.seq,window:{token:'resident-ui-'+m.target.pid+'-'+m.channel_generation,hwnd:s.window.hwnd,pid:s.window.pid,client_width:s.window.client_width,client_height:s.window.client_height,focused:s.window.focused},fields,artifacts:[]};
     let capture:UiSource['capture']=null;
     if(evidence){const filename='frame-'+ ++this.serial+'-'+basename(evidence.artifact.windows_path.replaceAll('\\','/')),path=join(this.options.directory,filename);await copyFile(join(client.runDir,basename(evidence.artifact.windows_path.replaceAll('\\','/'))),path).catch(async()=>{const {execFile}=await import('node:child_process');const {promisify}=await import('node:util');const {stdout}=await promisify(execFile)('/usr/bin/wslpath',['-u',evidence.artifact.windows_path]);await copyFile(stdout.trim(),path);});if(sha(await readFile(path))!==evidence.artifact.sha256)throw new Error('ui_full_png_sha');capture={path,sha256:evidence.artifact.sha256};}
     const collected=this.options.registry.register(bracket,()=>observation);
@@ -96,7 +97,7 @@ export class UiResidentCollector {
     const {windows_session_id,...target}=m.target;
     const source:UiSource={observation_id:id,frame_id:m.frame_id,seq:m.seq,width:m.client_width,height:m.client_height,layout_id:m.layout_id,target:{...target,session_id:windows_session_id},clock:{domain:'windows-qpc',clock_id:m.windows_clock_id,ticks:m.source_qpc_ms,unit:'ms'},capture,producer:'resident_wgc',roi_sha256:m.roi_sha256};
     const nativeEvidence=evidence?structuredClone(evidence):undefined;if(nativeEvidence)delete (nativeEvidence as unknown as Record<string,unknown>).bracket;
-    const frame:UiFrame={collected,source,state,elements,hard_stop:hardStop,scope:this.options.scope,recognition,...(nativeEvidence?{native_evidence:nativeEvidence}:{} )};this.frames.set(collected,frame);
+    const frame:UiFrame={collected,source,state,elements,hard_stop:hardStop,scope:this.options.scope,recognition,skill_matches:skillMatches,...(nativeEvidence?{native_evidence:nativeEvidence}:{} )};this.frames.set(collected,frame);
     await writeFile(join(this.options.directory,id+'.json'),JSON.stringify({source,native:s,observation})+'\n',{flag:'wx'});return frame;
   }
 }

@@ -5,7 +5,7 @@ export interface UiDatabaseOptions {python:string;repository:string;database:str
 /** JSON service contract owned by game_database.ui_skills; no game input path. */
 export class UiSkillDatabase {
   constructor(readonly options:UiDatabaseOptions){}
-  async request<T>(op:'seed'|'attempt'|'review'|'query'|'learn'|'export'|'report',data:unknown):Promise<T>{
+  async request<T>(op:'seed'|'attempt'|'review'|'query'|'learn'|'export'|'report'|'revise'|'audit_approve'|'register_run'|'query_run'|'register_tutorial_observation',data:unknown):Promise<T>{
     const timeout=this.options.timeout_ms??5000;if(!Number.isSafeInteger(timeout)||timeout<1||timeout>10000)throw new Error('ui_database_timeout');
     return new Promise<T>((resolve,reject)=>{
       const child=spawn(this.options.python,['-B','-m','game_database.ui_skills',op,'--database',this.options.database],{cwd:this.options.repository,shell:false,stdio:['pipe','pipe','pipe']});let stdout='',stderr='',settled=false;
@@ -21,7 +21,7 @@ export class UiSkillDatabase {
   async query(scope:UiScope):Promise<UiSkill[]>{const reply=await this.request<{skills:UiSkill[]}>('query',{scope,status:'all'});if(!Array.isArray(reply.skills))throw new Error('ui_database_skill_rows');return reply.skills;}
   async attempt(attempt:UiAttempt):Promise<void>{await this.request('attempt',attempt);}
   async seedProposal(proposal:UiProposal,frame:UiFrame):Promise<UiSkill>{
-    await this.request('seed',{state_id:proposal.state_id,skill_id:proposal.skill_id,element:proposal.element,scope:frame.scope,signature_bbox:proposal.signature_bbox,frame:frame.source,review:{status:'approved',reviewer:proposal.provider==='Seed'?'seed':'self',reviewed_at:new Date().toISOString(),reason:`source_bound_${proposal.provider}`},hard_stop:Boolean(proposal.hard_stop),...(proposal.expected_to_state?{expected_effect:{state_id:proposal.expected_to_state,signature_sha256:null}}:{})});
+    await this.request('seed',{state_id:proposal.state_id,skill_id:proposal.skill_id,element:proposal.element,scope:frame.scope,signature_bbox:proposal.signature_bbox,frame:frame.source,proposer:proposal.provider==='Seed'?'seed':'self',review:{status:'pending',reviewer:'unreviewed',reviewed_at:new Date().toISOString(),reason:`source_bound_${proposal.provider}_requires_supervisor`},hard_stop:Boolean(proposal.hard_stop),...(proposal.expected_to_state?{expected_effect:{state_id:proposal.expected_to_state,signature_sha256:null}}:{})});
     const skill=(await this.query(frame.scope)).find(s=>s.skill_id===proposal.skill_id);if(!skill)throw new Error('ui_database_seed_row_missing');return skill;
   }
 }

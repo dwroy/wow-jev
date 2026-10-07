@@ -25,7 +25,7 @@ export class ResidentClient extends EventEmitter implements ResidentSourceOwner 
   readonly runDir:string;ready:NativeReady|null=null;hostReady:ResidentHostReady|null=null;
   private readonly child:ChildProcessWithoutNullStreams;private readonly now:()=>number;
   private state:'starting'|'ready'|'closing'|'closed'|'failed'='starting';private pending=new Map<string,Pending>();private counter=0;
-  private decoder=new StringDecoder('utf8');private buffer='';private stderrBytes=0;private heartbeat:ReturnType<typeof setInterval>|null=null;
+  private decoder=new StringDecoder('utf8');private buffer='';private stderrBytes=0;private stderrSummary='';private heartbeat:ReturnType<typeof setInterval>|null=null;
   private startTimer:ReturnType<typeof setTimeout>;private started:Promise<void>;private startResolve!:()=>void;private startReject!:(error:Error)=>void;
   private original=new WeakMap<ResidentMemorySample,string>();private readyHash:string|null=null;private brackets=new WeakMap<ResidentMemorySample,{started_at_ms:number;received_at_ms:number}>();private current:{sample:ResidentMemorySample;hash:string;received:number;nativeSentQpc:number}|null=null;
   private bound:{source:ResidentMemoryFrame;intent:ResidentIntentBinding;commandId:string}|null=null;
@@ -37,10 +37,11 @@ export class ResidentClient extends EventEmitter implements ResidentSourceOwner 
     this.started=new Promise((resolve,reject)=>{this.startResolve=resolve;this.startReject=reject;});this.exitPromise=new Promise(resolve=>{this.exitResolve=resolve;});
     this.startTimer=setTimeout(()=>this.fail(new Error('resident_startup_timeout')),options.startupTimeoutMs??35000);
     this.child.stdout.on('data',(chunk:Buffer)=>this.receive(chunk));
-    this.child.stderr.on('data',(chunk:Buffer)=>{this.stderrBytes+=chunk.length;if(this.stderrBytes>65536)this.fail(new Error('resident_stderr_limit'));});
+    this.child.stderr.on('data',(chunk:Buffer)=>{this.stderrBytes+=chunk.length;if(this.stderrBytes<=65536)this.stderrSummary+=chunk.toString('utf8');else this.fail(new Error('resident_stderr_limit'));});
     this.child.stdin.on('error',()=>this.fail(new Error('resident_stdin_disconnected')));
     this.child.on('error',(error:NodeJS.ErrnoException)=>this.fail(new Error('resident_launch_failed:'+(error.code??'unknown'))));
-    this.child.on('exit',(code)=>{this.exitCode=code;this.exitResolve();if(this.state!=='closing'&&this.state!=='closed')this.fail(new Error('resident_launcher_disconnected'));});
+    this.child.on('exit',(code)=>{this.exitCode=code;this.exitResolve();});
+    this.child.on('close',(code)=>{this.exitCode=code;this.exitResolve();if(this.state!=='closing'&&this.state!=='closed'){const reason=this.stderrSummary.match(/\b(resident_[a-z][a-z0-9_]{1,90})\b/);this.fail(new Error('resident_launcher_disconnected'+(reason?':'+reason[1]:'')));}});
   }
   static async start(options:ResidentClientOptions,validator:ValidateFunction,nativeValidator:NativeValidator):Promise<ResidentClient>{
     if(options.signal?.aborted)throw new Error('resident_startup_cancelled');
@@ -68,7 +69,7 @@ export class ResidentClient extends EventEmitter implements ResidentSourceOwner 
     this.child.stdin.end();this.emit('disconnect',{error:error.message,release:'unconfirmed'});
   }
   private receive(chunk:Buffer):void{
-    try{this.buffer+=this.decoder.write(chunk);if(Buffer.byteLength(this.buffer)>524288)throw new Error('resident_line_limit');let at:number;
+    try{this.buffer+=this.decoder.write(chunk);if(Buffer.byteLength(this.buffer)>1048576)throw new Error('resident_line_limit');let at:number;
       while((at=this.buffer.indexOf('\n'))>=0){const line=this.buffer.slice(0,at).replace(/\r$/,'');this.buffer=this.buffer.slice(at+1);if(!line)continue;
         const value:unknown=JSON.parse(line);assertResident(value,this.validator);if(value.type==='command')throw new Error('resident_unexpected_command');this.message(value);
       }
@@ -121,14 +122,17 @@ export class ResidentClient extends EventEmitter implements ResidentSourceOwner 
     const started=this.now(),reply=await this.request('observe');if(reply.type!=='sample')throw new Error('resident_sample_reply');const bracket={sample:reply,started_at_ms:started,received_at_ms:this.now()};this.brackets.set(reply,{started_at_ms:bracket.started_at_ms,received_at_ms:bracket.received_at_ms});return bracket;
   }
   async evidence(options:{ocr?:boolean}={}):Promise<ResidentEvidence&{bracket:{sample:ResidentMemorySample;started_at_ms:number;received_at_ms:number}}>{const started=this.now(),reply=await this.request('evidence',{ocr:options.ocr??false},12000);if(reply.type!=='evidence')throw new Error('resident_evidence_reply');const bracket={sample:reply.sample,started_at_ms:started,received_at_ms:this.now()};this.brackets.set(reply.sample,{started_at_ms:bracket.started_at_ms,received_at_ms:bracket.received_at_ms});return Object.assign(reply,{bracket});}
-  async bindSource(before:Collected,intent:ActionIntent,context:ExecutionContext):Promise<void>{
+  async bindSource(before:Collected,intent:ActionIntent,context:ExecutionContext,uiSkill?:NonNullable<ResidentIntentBinding['ui_skill']>):Promise<void>{
     const sample=before.bracket.sample as unknown as ResidentMemorySample;
     if(sample.protocol!=='wow-resident'||!this.isFrameActive(sample.memory_frame)||intent.mode!=='live'||context.mode!=='live'||context.signal.aborted||
       intent.based_on_observation_id!==before.observation.id||intent.id!==context.command_id||intent.plan.id!==context.task_id||intent.plan.revision!==context.task_revision)
       throw new Error('resident_intent_source_binding');
     if(intent.action?.name!=='native_input')throw new Error('resident_intent_not_native');
+    if(uiSkill){const current=sample.ui_skills,match=current?.matches.find(m=>m.skill_id===uiSkill.skill_id),raw=match as unknown as Record<string,unknown>|undefined;
+      if(!current||uiSkill.knowledge_sha256!==current.knowledge_sha256||!match||!['reflex','slow_path'].includes(uiSkill.route)||uiSkill.route==='reflex'&&(raw?.active_qualified!==true||(current as unknown as {modal?:{status:string}}).modal?.status!=='clear'))throw new Error('resident_ui_dispatch_not_current');
+    }
     const binding:ResidentIntentBinding={observation_id:before.observation.id,intent_id:intent.id,actor:intent.actor,plan_id:intent.plan.id,plan_revision:intent.plan.revision,
-      task_id:context.task_id,task_revision:context.task_revision,run_epoch:context.run_epoch,gate_id:digest({intent,context:{...context,signal:undefined}}),action_sha256:actionDigest(intent.action.args)};
+      task_id:context.task_id,task_revision:context.task_revision,run_epoch:context.run_epoch,gate_id:digest({intent,context:{...context,signal:undefined},ui_skill:uiSkill??null}),action_sha256:actionDigest(intent.action.args),...(uiSkill?{ui_skill:structuredClone(uiSkill)}:{})};
     this.bound={source:structuredClone(sample.memory_frame),intent:binding,commandId:context.command_id};
   }
   async execute(action:NativeAction,options:{id?:string}={}):Promise<NativeReceipt>{
