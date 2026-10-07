@@ -20,7 +20,7 @@ resident_common=("$(wslpath -w native/windows/InputCommon.cs)" "$(wslpath -w nat
 "$resident_csc" /nologo /codepage:65001 /utf8output /optimize+ /platform:x64 /target:winexe /main:ResidentSessionHost \
   "${resident_refs[@]}" /out:"$(wslpath -w "$resident_build/ResidentSessionHost.exe")" \
   "${resident_common[@]}" "$(wslpath -w native/windows/WgcCapture.cs)" \
-  "$(wslpath -w native/windows/ResidentNativeHand.cs)" "$(wslpath -w native/windows/TrainingDummyVision.cs)" "$(wslpath -w native/windows/UiSkillVision.cs)" "$(wslpath -w native/windows/ResidentSessionHost.cs)" \
+  "$(wslpath -w native/windows/ResidentNativeHand.cs)" "$(wslpath -w native/windows/TrainingDummyVision.cs)" "$(wslpath -w native/windows/TrainingGroundVision.cs)" "$(wslpath -w native/windows/UiSkillVision.cs)" "$(wslpath -w native/windows/ResidentSessionHost.cs)" \
   "$(wslpath -w native/windows/ResidentRecordingCv.cs)" \
   "$(wslpath -w tools/RecoveryTutorialCv.cs)" "$(wslpath -w tools/RecoveryOcr.cs)" \
   "$(wslpath -w tools/InteractiveSessionHost.cs)" </dev/null

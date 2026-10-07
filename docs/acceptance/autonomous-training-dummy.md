@@ -25,3 +25,5 @@
 60实际ESC2/2、61实际登出3/3均释放，62独立只读新帧确认选角（QPC267220908.274）。61释放账本、执行端退出、capture关闭与临时任务删除回查均确认。55→60约15.6分钟，仍违反十分钟前安全回程要求；这一事实不因未断线而改写。角色现留选角离线修双靴/地面识别，0W、0已确认伤害、目标仍0/1。
 
 审计audit-checkpoint-62的HTML17,259,147字节，JPEG预览长边≤512，原图链接/全部负例/尝试与审核链保留；精确JSON SHA9c948adb32a38a14b3e40a788d61b69be3765bc8ccfe345956e7f6a900917ba3。23技能，0active、0治理合格确认；旧late-review隔离记录不得计入晋升。首次交谈manual confirmed与热身accept发生不变。
+
+同一Windows QPC域细分47最新观察→首SendInput完成237.6951ms：帧到ROI开始0.0933、ROI复制/Hash84.4199、ROI→CV0.0001、CV9.4725、CV完成→响应49.4900、响应→原生dispatch64.9290（含WSL往返）、dispatch→SendInput开始28.4490（含原生排队/闸）、SendInput调用0.8413ms。后几项为组合区间，不伪造更细分层；协调器L2编译1ms/三次闸4+2+2ms分别在其单调钟域报告，不加入QPC总数。完整源SHA与边界见主out/acceptance/ui-skill-learning-20261007/training-engage-47-latency.json，SHA21661aa41bcde3dae3ae518cba08512e7e93a8884d4693117a38e08e4cfd0bf7。n=1、p50未知，150ms目标未达；仅选中未确认伤害，不包含较早规划/模型和未对时WGC compositor延迟。
