@@ -73,7 +73,7 @@ def test_html_report_actual_sources_negative_matrix_and_explicit_per_entry_appro
         result = generate(db.path, tmp_path / 'audit')
         assert result['input_count'] == 0 and not result['activation_frozen']
         assert hashlib.sha256(Path(result['report']['path']).read_bytes()).hexdigest() == result['report']['sha256']
-        html = Path(result['html']).read_text(); assert 'data:image/png;base64,' in html and 'bbox' in html and '逐条审核链' in html
+        html = Path(result['html']).read_text(); assert 'data:image/jpeg;base64,' in html and 'bbox' in html and '逐条审核链' in html
         report = json.loads(Path(result['report']['path']).read_text())
         item = next(r for r in report['skills'] if r['skill']['skill_id'] == 'reconnect')
         assert item['negative_matrix']['pass'] and item['negative_matrix']['rows'][0]['state_id'] == 'world_ready'

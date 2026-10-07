@@ -10,6 +10,8 @@
 
 详见[本次治理验收](docs/acceptance/ui-skill-governance-v2.md)、[真实交谈/性能记录](docs/acceptance/ui-skill-learning.md)。主out的audit-report提供HTML及精确JSON，报告SHA b2ff1380b4e4d4e55ba0b1328a690f43cc11f722213e346379e84ec7787147d2。下次恢复先核验当前会话/身份/帧，补选角模态场景证据或有效慢路，再进世界→当前局部事实→L4/L3交谈；成功后按最新授权继续教程。长时间开发先留选角或安全登出，不发送无意义保活输入。
 
+**2026-10-07 审计 HTML 展示更新：** 独立离线重渲染既有 b2ff1380… 报告，旧 199,711,810 字节 HTML 保留；新 thumb-v2 为 6,986,882 字节（约 6.99 MB），151 张 SHA 核验 JPEG 长边≤640，原图相对链接/原 SHA/元素框、16 技能/84 负例/9 尝试及审核链完整。原 JSON 241,834 字节逐字节保留。入口及 27 项专项验收见 [审计缩略图验收](docs/acceptance/ui-audit-thumbnails.md)，新 HTML 位于主 out 的 audit-report-thumbnails-v2；本步骤为展示更新，现场进度沿用负责人最新记录。
+
 # WoW Agent 当前交接
 
 更新：2026-10-07。用户最新授权和项目规则见 `AGENTS.md`，实施计划见 `docs/agent-roadmap.md`。历史3.3.5a像素桥任务原文已保留在 `docs/handoff-pixel-bridge.md`；当前测试目标为用户指定的正式服客户端。
