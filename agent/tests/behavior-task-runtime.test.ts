@@ -57,6 +57,10 @@ test('screen engage schema permits one bounded action without arbitrary inputs',
   const base=spec('engage_target',{target_signature:'visible-name:作战假人',action_duration_ms:80},{max_actions:1});validateBehavior(base);
   for(const bad of [{...base,max_actions:2},{...base,params:{...base.params,action_duration_ms:79}},{...base,params:{...base.params,action_duration_ms:151}},{...base,params:{...base.params,key:'1'}}])assert.throws(()=>validateBehavior(bad),/schema/);
 });
+test('approach schema permits one150ms movement and cannot retag the tutorial',()=>{
+  const base=spec('approach_target',{target_signature:'visible-name:作战假人',action_duration_ms:150},{max_actions:1});validateBehavior(base);
+  for(const bad of [{...base,max_actions:2},{...base,params:{...base.params,action_duration_ms:151}},{...base,params:{...base.params,action_duration_ms:149}},{...base,params:{...base.params,state_id:'tutorial_move_around'}}])assert.throws(()=>validateBehavior(bad),/schema/);
+});
 function positiveNpcSurface():Simulation {
   const s=new Simulation();s.values={
     'target.signature':'jaina','tutorial.instruction':'与吉安娜·普罗德摩尔交谈','ui.layout_id':'b'.repeat(64),

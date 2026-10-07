@@ -36,6 +36,55 @@
               "maxLength": 256
             },
             "kind": {
+              "const": "approach_target"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "target_signature",
+                "action_duration_ms"
+              ],
+              "properties": {
+                "target_signature": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "action_duration_ms": {
+                  "type": "integer",
+                  "const": 150
+                }
+              }
+            },
+            "max_duration_ms": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 30000
+            },
+            "max_actions": {
+              "type": "integer",
+              "const": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "kind",
+            "params",
+            "max_duration_ms",
+            "max_actions"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "kind": {
               "const": "engage_target"
             },
             "params": {

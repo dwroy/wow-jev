@@ -18,6 +18,10 @@ a73f5a0已正常推送唯一codex/agent-system，远端SHA核验一致；Windows
 
 c905740已完成profile原件/177前景mask及算法SHA、Collector同源实体/目标栏、field L4/L3入口；全量Python983 passed+3原strict xfail/TS765/765/typecheck、常驻宿主编译通过。新2项profile拒伪原件/错源，helper4项与Collector2项关键检查通过。旧NPC/治理fixture编译列表同步新依赖，纯治理32/32（0桌面、0输入、非live确认）。现场45在任务创建前被旧宿主schema产物校验拒绝（0输入/0任务），已在本树重编译，按已知环境修复续46，不计未知三失败。当前唯一执行端继续只读/进世界/有限engage，效果与任务摧毁另以实际后图确认。
 
+最新现场47一次动态假人右键3/3释放，Windows最新源→首MOVE237.6951ms。较晚48新图确认等级1机械假人选中、满血/0/1及AFK，没有攻击伤害确认。49被Root提前导入未落盘函数挡在加载前（0任务/0输入），已修接口竞态。50/51实际ESC取消目标/开菜单，52登出3/3释放，53独立新帧确认选角；临时任务删除/回查、空账本、执行端退出与capture关闭均已确认。47UP→50首输入约15.34分钟，违反十分钟前规则，不声称按时防挂机；后续先安全退出再开发。原程序超时/存储失败回执不追认晋升成功。
+
+09962aa新增有限approach helper，缺ground/错帧/错layout/seed来源严格拒绝；Root标准L3 approach_target只允许一次150ms，经Body.move和原闸，后验不称靠近/伤害成功。W绑定引用原键位图作为持续配置，当前ground须独立玩家双脚/甲板Native校准；当前尚未实现该producer/field接线，未发W。实测与遗留见[热身验收](docs/acceptance/autonomous-training-dummy.md)。
+
 **先前治理v2软件阶段：现场未完成交谈时曾停在选角，历史数字如下。**
 
 最新授权允许游戏内自主执行，self/Seed无需逐点预审；active按独立原后图重算、全已知状态负例、至少两次跨run live确认、最近成功率≥80%晋升，HTML供Claude/user定期抽查与撤销。user拒绝/撤销不能被self覆盖；同一步三次失败/十分钟无进展及凭据、协议、更新、真钱账号/玩家交互/销毁、管理员系统设置仍停止。普通输入保留当前帧、身份、前台、有限时长、取消和释放闸。

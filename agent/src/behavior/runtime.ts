@@ -2,7 +2,7 @@ import type { ActionCondition, JsonValue, Observation } from '../core/protocol.j
 import type { BehaviorPorts, BehaviorResult, BehaviorSpec, BodyAction, ExecutionContext, MovementAxis, TargetScopeVerifier, BoundTargetScope } from '../layers/contracts.js';
 import { RunLease, cleanupBound } from './lease.js';
 import {uiStateRecognized} from '../actions/ui-recognition.js';
-import {nextScreenEngage} from './screen-engage.js';
+import {nextScreenEngage,nextScreenApproach} from './screen-engage.js';
 import { bindingError, conditionError, validateConditions, hash, observationError, readKnown, validateBehavior, value, resolveTargetScope, targetScopeKey, type FieldPolicy } from './validation.js';
 
 export interface BehaviorExecutionResult extends BehaviorResult { input_count_scope: 'known' | 'lower_bound'; scenario_effect: 'confirmed' | 'unverified'; }
@@ -67,7 +67,7 @@ export class BehaviorRuntime {
         const confirmingTalk = spec.kind === 'talk_to' && state.lastActionAt !== undefined;
         const confirmingLesson = tutorialLesson && state.lastActionAt !== undefined;
         const confirmingQuest = (spec.kind==='accept_quest'||spec.kind==='turn_in_quest') && state.questSubmitted===true;
-        const confirmingEngage = spec.kind==='engage_target' && state.lastActionAt!==undefined;
+        const confirmingEngage = (spec.kind==='engage_target'||spec.kind==='approach_target') && state.lastActionAt!==undefined;
         const confirmingReadonly = confirmingTalk || confirmingLesson || confirmingQuest || confirmingEngage;
         // Relax source age only for terminal, read-only effect verification.
         // No action decision uses this policy after an input has completed.
@@ -99,7 +99,7 @@ export class BehaviorRuntime {
           else decision=this.confirmTalk(spec,o,effectPolicy,state);
         } else if(confirmingLesson) decision=hazardous?finish('blocked',spec.kind==='tutorial_move'?'tutorial_movement_hazard_observed':'tutorial_orientation_hazard_observed'):this.tutorialLesson(spec,o,effectPolicy,state);
         else if(confirmingQuest) decision=hazardous?finish('blocked','post_action_hazard_observed'):this.dialog(spec,o,effectPolicy,state,80);
-        else if(confirmingEngage) decision=hazardous?finish('blocked','post_action_hazard_observed'):nextScreenEngage(spec.params,o,effectPolicy,state);
+        else if(confirmingEngage) decision=hazardous?finish('blocked','post_action_hazard_observed'):(spec.kind==='approach_target'?nextScreenApproach:nextScreenEngage)(spec.params,o,effectPolicy,state);
         else if(hazardous&&(spec.kind==='activate_control'||tutorialLesson)) decision=finish('blocked',tutorialLesson?spec.kind==='tutorial_move'?'tutorial_movement_hazard_observed':'tutorial_orientation_hazard_observed':'control_activation_hazard_observed');
         else if (hazardous && spec.kind !== 'avoid_hazard') {
           const released = await lease.wait(() => this.ports.release('hazard_preempt'));
@@ -165,6 +165,7 @@ export class BehaviorRuntime {
     if (spec.kind === 'tutorial_orient'||spec.kind==='tutorial_move') return this.tutorialLesson(spec,o,p,s);
     if (spec.kind === 'kill_target') return this.kill(spec, o, p, s, duration);
     if (spec.kind === 'engage_target') return nextScreenEngage(spec.params,o,p,s);
+    if (spec.kind === 'approach_target') return nextScreenApproach(spec.params,o,p,s);
     if (spec.kind === 'loot_target') return this.loot(spec, o, p, s, duration);
     if (['talk_to', 'accept_quest', 'turn_in_quest'].includes(spec.kind)) return this.dialog(spec, o, p, s, duration);
     if (spec.kind === 'move_to' || spec.kind === 'fly_to') return this.navigate(spec, o, p, s, duration);
