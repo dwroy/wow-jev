@@ -380,3 +380,5 @@ UI 和世界屏幕交互仍使用原同帧目标、布局、自由光标条件�
 针对controls19原输出，仅将明确v4 xyxy的ASCII十进制数字串机械转整数，dialog_state精确open/closed+null简写转known/同词，记录原SHA、逐字段操作与canonical-wire原件；不修坐标、置信度、矛盾值或重叠锚点。原件尚有两个anchor与control重叠，规范化后仍拒绝。按最新用户决定，无明确硬停声明的模型schema失败也可同原图重试一次，语法/契约共享总2请求/15s预算；auth/verification/terms/update声明、不安全回显、重复键/NaN及传输错误不重试，不刷新QPC、不授权输入。UI promptv6，模型schema4不变。契约真实fixture+104项专项Python、py_compile、diffcheck通过；只做离线，无真实模型、密钥、桌面或输入/推送。
 
 **2026-10-07证据帧候选刷新修复：controls21的新模板在原Native证据帧匹配成功，正距离0.00056966、锚点均通过；错误是路由仍沿用首个未知热帧的空候选。现于新证据采集后重算候选，后续Body仍独立取新帧验证，不改原观察时间。新增冷热帧变化回归，场景/OCR/候选三项及typecheck通过。已集成JSON模式、同图一次语法/契约重试、严格数值串/对话状态机械转换及640px JPEG审计（真实旧报告6,986,882字节）。当前仍停止于普通教程弹窗、0该弹窗点击/0吉安娜交谈。准备完整回归后推送。**
+
+**2026-10-07用户恢复且补充已定位修好的bug直接继续，无需重复问；只有原因不明的连续失败才停止。controls24经Seed正常选角+当前Native按钮候选发进入世界；controls27代码/同帧OCR一次3/3且释放，独立后图关闭键位说明。旧purpose为confirm_controls_intro，已支持别名；Native私有技能/控件签名继续绑定，confidence仅遥测不比较整浮点state。orient29当前截图黄色文字/鼠标锚点修订candidate后经L4/L3一次950ms、11/11释放，独立后图为与吉安娜交谈；动作模型0。当前尚未交谈，世界中会话1前台，原图autonomous-orient-29/frame-3-evidence-12.png。等待/开发前10分钟内须有限无害输入或安全回选角；原失败历史保留、active0。**

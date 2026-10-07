@@ -16,7 +16,7 @@ test('Seed normal scene selects existing current candidate without modal guard o
 });
 test('known controls panel requires same-frame OCR in its Native-matched button and never grants reflex',async()=>{
  const d=createUiDemo(),f=await d.ports.collect('evidence',new AbortController().signal),s=d.skills[0]!;
- f.state!.id='controls_position_hint';s.state_id=f.state!.id;s.element.purpose='tutorial_confirm';s.element.label='确定';s.status='candidate';f.recognition!.modal_status='unknown';
+ f.state!.id='controls_position_hint';s.state_id=f.state!.id;s.element.purpose='confirm_controls_intro';s.element.label='确定';s.status='candidate';f.recognition!.modal_status='unknown';
  const b=s.element.bbox;f.native_evidence={artifact:{sha256:f.source.capture!.sha256},sample:{memory_frame:{frame_id:f.source.frame_id}},ocr:{status:'available',items:[{text:'确定',x:b.x*f.source.width,y:b.y*f.source.height,width:b.width*f.source.width,height:b.height*f.source.height}]}} as unknown as NonNullable<typeof f.native_evidence>;
  const r={run_id:'test',mode:'live' as const,scope:f.scope,source:f.source,state:f.state,candidates:[s],failure_streak:0,goal_state_id:'in_world'};
  assert.equal(selectKnownTutorialControl(r,f)?.decision_owner,'code');assert.equal(s.status,'candidate');

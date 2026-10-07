@@ -91,7 +91,9 @@ export function createResidentUiPorts(options:UiResidentAdapterOptions):UiPorts{
       const identity=options.body.currentIdentity();const state=before.collected.observation.fields['ui.state'];const signatures=before.collected.observation.fields['ui.control_signatures'];
       if(state?.status!=='known'||!skill.action&&signatures?.status!=='known')throw new Error('ui_current_state_unknown');
       const matches=before.collected.observation.fields['ui.skill_matches'];if(skill.action&&matches?.status!=='known')throw new Error('ui_current_skill_match_unknown');
-      const result=await body.execute(action,{command_id:attemptId,...identity,mode:'live',conditions:[...uiCharacterConditions(skill,before),{field:'ui.state',op:'eq',value:structuredClone(state.value),max_age_ms:750},...(skill.action?[{field:'ui.skill_matches',op:'eq' as const,value:structuredClone(matches!.value),max_age_ms:750}]:[{field:'ui.control_signatures',op:'eq' as const,value:structuredClone(signatures!.value),max_age_ms:750}])],signal});
+      // Match confidence varies with rendering. Native's private skill binding
+      // and the exact control signature bind the state; confidence is telemetry.
+      const result=await body.execute(action,{command_id:attemptId,...identity,mode:'live',conditions:[...uiCharacterConditions(skill,before),{field:'ui.state',op:'exists',max_age_ms:750},...(skill.action?[{field:'ui.skill_matches',op:'eq' as const,value:structuredClone(matches!.value),max_age_ms:750}]:[{field:'ui.control_signatures',op:'eq' as const,value:structuredClone(signatures!.value),max_age_ms:750}])],signal});
       // Registry latest-frame validity may already have advanced during Body's
       // after-collect. This is the actual authenticated source kept at collect.
       const plan=plans.get(attemptId);plans.delete(attemptId);expectedMotion.delete(attemptId);dispatches.delete(attemptId);
