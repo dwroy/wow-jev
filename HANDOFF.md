@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-07现场立即复测：会话/焦点已可用，发送一次确定后遇恢复识别阻塞并停止。** 源码12948ec，初始Resident只读确认session1 WTSActive/WinSta0 Default/UOI_IO=true、自由光标、用户空闲170453ms，FG0x904a6=WowPID22072，start/class/正式服path一致、2560×1440物理/DPI144。没有焦点切换、搬窗或系统设置改动。原恢复闸完成一次中心“确定”有限60ms鼠标点击，3/3事件、原生released/empty ledger/executor exited；后图保持WoW前台，弹窗已关且重新连接按钮可见，但OCR输出漏掉该按钮，程序unknown→disconnect_ack_effect_unconfirmed。程序效果0；root对同源图确认弹窗已关闭另记，不刷新或伪装程序CV。按最新“阻塞即汇报”停止，未重连、选角、进世界或L4/L3交谈，首任务未完成，不接下一任务。
+
+QPC实测冷capture API66.248ms、PNG344.780、CV1319.312、OCR987.116、native spawn→ready1933.234、原生闸→首SendInput开始17.951；捕获API→输入11186.133–11199.632ms n=1，仅冷恢复ACK，不能当常驻分层交谈成绩。初始只读WGC ROI74.910/CV25.761/响应117.122ms n=1。热分层输入/效果n=0、150ms目标及命中率/有效任务动作率/单层对照未测；应用模型0。五项临时任务（1Resident/4SessionRecovery）全删除且GetTask80070002独立回查，项目Windows助手无残留，真实正常释放证据不外推强杀。完整原件/任务名/源码SHA与trace见docs/acceptance/first-task-resume.md和主out/acceptance/first-task-resume-20261007-01。
+
+本轮仅记录现场、无业务代码修改；独立field-resume-record树提交、ff-only主集成，不重复全量、不推送。当前需要修实际重新连接图的识别或接同源低频审核再取新帧；Python recover包装器漏转发focus-visibility-mode亦登记待修，本轮用原TS CLI且已前台。旧console不可交互阻塞不再当当前事实，不要求用户再次搬桌面；等待新指示后再继续。
+
 **2026-10-07本轮收尾：全量全绿，console首交谈因输入桌面阻塞而停止。** 实现a251575及断线诊断修补1b35c7d，最终完整Git快照TS680/680、Python820passed+3原有strict xfail（收集823，0fail/普通skip）、typecheck；原644TS全部保留、新增36。原生纯Resident78/78、visible-point24/24通过，编译和离屏验证不替代游戏成功。首次TS679/680为stdin写失败竞态消息未明确unconfirmed，补实际客户端错误信息后完整重跑，不改/删/skip用例，全部原失败保留。
 
 最新原生事实：活动console是session3且LogonUI18948/winlogon18172；WoW仍session1 WTSActive/RDP-Tcp#0/protocol2/unlocked。WinSta0/Default但UOI_IO=false，GetCursorInfo错误5，FG0；Claude0x2106a0与Chrome0x400ce实际遮挡WoW，坐标与3840×2160物理显示器覆盖已确认。未观察到session1已转物理console。需要用户在物理显示器登录/解锁正确会话，或重连会话1且RDP可见、点击WoW、留>5s空闲并通知；不读/输入凭据，不改系统设置，不在不可核验的输入桌面发AltTab或盲目搬窗。
