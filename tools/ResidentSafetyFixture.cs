@@ -17,6 +17,15 @@ static class ResidentSafetyFixture
     static int Main(string[] args){try{
         if(args.Length!=1)throw new Exception("fixed_fixture_directory_required");var schema=new ResidentSchema(Path.Combine(args[0],"resident-session-v1.schema.json"),Path.Combine(args[0],"native-input-v1.schema.json"));
         schema.Definition(Config(),"launch_config");checks++;
+        var original=new byte[6*4*4];for(int i=0;i<original.Length;i++)original[i]=(byte)i;
+        var cropped=ResidentRoiBytes.Slice(original,6,4,new Rectangle(2,1,3,2));
+        Need(cropped.Length==24&&cropped[0]==32&&cropped[11]==43&&cropped[12]==56&&cropped[23]==67,"batched_roi_exact_origin_rows");
+        Reject(()=>ResidentRoiBytes.Slice(original,6,4,new Rectangle(5,1,3,2)),"batched_roi_outside_rejected");
+        Need(ResidentFrameClock.Fresh(100,110,120,130,-1),"future_render_stamp_kept_separate");
+        Need(!ResidentFrameClock.Fresh(100,90,120,130,-1),"cached_arrival_rejected");
+        Need(!ResidentFrameClock.Fresh(100,110,120,130,130),"duplicate_render_rejected");
+        Need(!ResidentFrameClock.Fresh(100,125,120,130,-1),"future_arrival_rejected");
+        Need(!ResidentFrameClock.Fresh(100,110,120,Double.NaN,-1),"invalid_render_rejected");
         foreach(string field in new[]{"nonce","pipe_name","session_id","channel_generation"}){var invalid=Config();invalid[field]="bad";Reject(()=>schema.Definition(invalid,"launch_config"),field);}
         foreach(int value in new[]{0,300001}){var invalid=Config();invalid["duration_ms"]=value;Reject(()=>schema.Definition(invalid,"launch_config"),"run_budget");}
         var unsafeConfig=Config();unsafeConfig["arbitrary_executable"]="cmd.exe";Reject(()=>schema.Definition(unsafeConfig,"launch_config"),"unowned_launch");

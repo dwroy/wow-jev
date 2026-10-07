@@ -76,7 +76,7 @@ static class InteractiveSessionHost
         }
     }
     static Dictionary<string,object> Window(WindowInfo window) {
-        return Obj("client_width",window.Width,"client_height",window.Height,"dpi",GetDpiForWindow(window.Hwnd),"focused",window.Focused,"visible",IsWindowVisible(window.Hwnd),"minimized",IsIconic(window.Hwnd),"recovery_safety",Native.GetRecoverySafety(window.Hwnd));
+        return Obj("client_width",window.Width,"client_height",window.Height,"dpi",GetDpiForWindow(window.Hwnd),"focused",window.Focused,"visible",IsWindowVisible(window.Hwnd),"minimized",IsIconic(window.Hwnd),"recovery_safety",Native.GetRecoverySafety(window.Hwnd),"recovery_focus_candidates",Native.GetRecoveryFocusCandidates(window.Hwnd));
     }
     static Dictionary<string,object> Signature(string path) {
         Need(File.Exists(path)&&String.Equals(Path.GetFileName(path),"Battle.net.exe",StringComparison.OrdinalIgnoreCase),"launcher_basename_or_file_invalid");
@@ -158,6 +158,24 @@ static class InteractiveSessionHost
     static void Input(Dictionary<string,object> request,Dictionary<string,object> envelope,Dictionary<string,object> result) {
         var target=Map(Field(request,"target"));WindowInfo window=Identity(target);var prior=Source(request,window);result["target"]=target;result["window"]=Window(window);result["source_observation_id"]=Text(prior,"observation_id");
         var action=Map(Field(request,"action"));string kind=Text(action,"kind");Need(kind=="key"||kind=="mouse_click"||kind=="focus_click","one_finite_action_required");int duration=Number(action,"duration_ms");Need(duration>=1&&duration<=150,"finite_action_1_to_150ms_required");
+        if(kind=="focus_click"&&action.ContainsKey("visibility_mode")) {
+            string mode=Text(action,"visibility_mode");Need(mode=="complete_client"||mode=="visible_point","focus_visibility_mode_invalid");
+            if(mode=="visible_point") {
+                int x=Number(action,"x"),y=Number(action,"y");Need(RecoverySafety.FocusCandidate(x,y,window.Width,window.Height),"focus_background_candidate_required");
+                var priorWindow=Map(Field(prior,"window"));var candidates=Field(priorWindow,"recovery_focus_candidates") as object[];Need(candidates!=null,"source_focus_candidates_missing");bool matched=false;
+                foreach(object row in candidates) {var candidate=Map(row);var point=Map(Field(candidate,"point"));if(Number(point,"x")!=x||Number(point,"y")!=y)continue;
+                    matched=Text(candidate,"mode")=="visible_point"&&Convert.ToBoolean(Field(candidate,"allowed"))&&Text(candidate,"reason")=="safe"&&
+                        Convert.ToBoolean(Field(candidate,"point_visible"))&&Convert.ToBoolean(Field(candidate,"point_owned"))&&Convert.ToBoolean(Field(candidate,"on_monitor"))&&
+                        Convert.ToBoolean(Field(candidate,"cursor_free"))&&!Convert.ToBoolean(Field(candidate,"mouse_buttons_held"))&&!Convert.ToBoolean(Field(candidate,"owned_click_started"))&&
+                        Numeric(candidate,"user_idle_ms")>5000&&Number(candidate,"idle_threshold_ms")==5000&&Number(candidate,"patch_radius")==2&&
+                        Number(candidate,"pid")==Number(target,"pid")&&Text(candidate,"process_start_ticks")==Text(target,"start_ticks")&&Text(candidate,"hwnd")==Text(target,"hwnd")&&Text(candidate,"class")==Text(target,"class")&&
+                        String.Equals(Text(candidate,"executable"),Text(target,"executable"),StringComparison.OrdinalIgnoreCase)&&Number(candidate,"session_id")==1&&Number(candidate,"probe_session_id")==1&&
+                        Number(candidate,"client_width")==window.Width&&Number(candidate,"client_height")==window.Height&&Numeric(candidate,"checked_at_ms")>=Numeric(prior,"started_windows_qpc_ms")&&Numeric(candidate,"checked_at_ms")<=Numeric(prior,"finished_windows_qpc_ms");
+                    if(matched)break;
+                }
+                Need(matched,"source_focus_point_proof_invalid");var current=Native.GetRecoveryPointSafety(window.Hwnd,x,y);Need(Convert.ToBoolean(Field(current,"allowed")),"current_focus_point_not_safe");
+            }
+        }
         Need(kind=="focus_click"||window.Focused,"target_unfocused");var job=JobSafety();result["guardian_job_safety"]=job;Need(Convert.ToBoolean(Field(job,"allowed")),"guardian_job_kill_on_close_unsafe");
         var hashes=Map(Field(envelope,"payload_hashes"));string root=AppDomain.CurrentDomain.BaseDirectory;string input=Path.Combine(root,"WinInput.exe"),watchdog=Path.Combine(root,"WinInputWatchdog.exe");
         Need(Hash(input)==Text(hashes,"WinInput.exe")&&Hash(watchdog)==Text(hashes,"WinInputWatchdog.exe"),"native_payload_changed");

@@ -30,11 +30,209 @@
         "observation_path": {"type": "string", "minLength": 1}
       }
     },
+    "recovery_focus_point_safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "allowed",
+        "reason",
+        "hwnd",
+        "checked_at_ms",
+        "visible",
+        "minimized",
+        "focused",
+        "point",
+        "patch_radius",
+        "on_monitor",
+        "point_owned",
+        "point_visible",
+        "cursor_free",
+        "mouse_buttons_held",
+        "idle_threshold_ms",
+        "user_idle_scope",
+        "input_source_distinguishable",
+        "visibility_method",
+        "owned_click_started"
+      ],
+      "properties": {
+        "mode": {
+          "const": "visible_point"
+        },
+        "allowed": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "hwnd": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{1,16}$"
+        },
+        "checked_at_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "minimized": {
+          "type": "boolean"
+        },
+        "focused": {
+          "type": "boolean"
+        },
+        "on_monitor": {
+          "type": "boolean"
+        },
+        "point_owned": {
+          "type": "boolean"
+        },
+        "point_visible": {
+          "type": "boolean"
+        },
+        "cursor_free": {
+          "type": "boolean"
+        },
+        "mouse_buttons_held": {
+          "type": "boolean"
+        },
+        "input_source_distinguishable": {
+          "type": "boolean"
+        },
+        "owned_click_started": {
+          "type": "boolean"
+        },
+        "point": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x",
+            "y"
+          ],
+          "properties": {
+            "x": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "y": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            }
+          }
+        },
+        "screen_point": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "x",
+            "y"
+          ],
+          "properties": {
+            "x": {
+              "type": "integer"
+            },
+            "y": {
+              "type": "integer"
+            }
+          }
+        },
+        "patch_screen_rect": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "left",
+            "top",
+            "right",
+            "bottom"
+          ],
+          "properties": {
+            "left": {
+              "type": "integer"
+            },
+            "top": {
+              "type": "integer"
+            },
+            "right": {
+              "type": "integer"
+            },
+            "bottom": {
+              "type": "integer"
+            }
+          }
+        },
+        "pid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "session_id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "probe_session_id": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "client_width": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "client_height": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_input_tick": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "current_tick": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "user_idle_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        },
+        "class": {
+          "type": "string"
+        },
+        "executable": {
+          "type": "string"
+        },
+        "process_name": {
+          "type": "string"
+        },
+        "failure_detail": {
+          "type": "string"
+        },
+        "process_start_ticks": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        },
+        "patch_radius": {
+          "const": 2
+        },
+        "idle_threshold_ms": {
+          "const": 5000
+        },
+        "user_idle_scope": {
+          "const": "calling-session-only"
+        },
+        "visibility_method": {
+          "const": "physical_patch_monitor_union_and_each_pixel_root_hit_test"
+        }
+      }
+    },
     "action": {
       "oneOf": [
         {"type": "object", "additionalProperties": false, "required": ["kind", "keys", "duration_ms"], "properties": {"kind": {"const": "key"}, "keys": {"type": "array", "minItems": 1, "maxItems": 60, "uniqueItems": true, "items": {"type": "string", "pattern": "^(?:[A-Z0-9]|F(?:[1-9]|1[0-2])|SPACE|SHIFT|CTRL|ALT|ESC|TAB|ENTER|BACKSPACE|UP|DOWN|LEFT|RIGHT)$"}}, "duration_ms": {"type": "integer", "minimum": 1, "maximum": 150}}},
         {"type": "object", "additionalProperties": false, "required": ["kind", "button", "x", "y", "duration_ms"], "properties": {"kind": {"const": "mouse_click"}, "button": {"enum": ["left", "right", "middle"]}, "x": {"type": "integer", "minimum": 0, "maximum": 65535}, "y": {"type": "integer", "minimum": 0, "maximum": 65535}, "duration_ms": {"type": "integer", "minimum": 1, "maximum": 150}}},
-        {"type": "object", "additionalProperties": false, "required": ["kind", "x", "y", "duration_ms"], "properties": {"kind": {"const": "focus_click"}, "x": {"type": "integer", "minimum": 0, "maximum": 65535}, "y": {"type": "integer", "minimum": 0, "maximum": 65535}, "duration_ms": {"type": "integer", "minimum": 1, "maximum": 150}}}
+        {"type": "object", "additionalProperties": false, "required": ["kind", "x", "y", "duration_ms"], "properties": {"kind": {"const": "focus_click"}, "visibility_mode": {"type":"string", "enum":["complete_client", "visible_point"]}, "x": {"type": "integer", "minimum": 0, "maximum": 65535}, "y": {"type": "integer", "minimum": 0, "maximum": 65535}, "duration_ms": {"type": "integer", "minimum": 1, "maximum": 150}}}
       ]
     },
     "request": {
@@ -68,7 +266,7 @@
         "schema_version": {"const": 1}, "session_id": {"const": 1},
         "status": {"enum": ["discovered", "observed", "input_released", "launched", "blocked", "cancelled"]},
         "reason": {"type": "string"}, "input_sent": {"type": "boolean"}, "release_confirmed": {"type": "boolean"},
-        "effect_status": {"const": "unknown"}, "target": {"$ref": "#/definitions/target"}, "capture": {"$ref": "#/definitions/capture"}, "ocr": {"$ref": "#/definitions/ocr"},
+        "effect_status": {"const": "unknown"}, "window": {"type":"object", "properties":{"recovery_focus_candidates":{"type":"array", "maxItems":4, "items":{"$ref":"#/definitions/recovery_focus_point_safety"}}}}, "target": {"$ref": "#/definitions/target"}, "capture": {"$ref": "#/definitions/capture"}, "ocr": {"$ref": "#/definitions/ocr"},
         "launch_requested": {"type": "boolean"}, "launch_effect": {"const": "unknown"}, "wow_process_started_confirmed": {"const": false}, "world_entered": {"const": false},
         "started_windows_qpc_ms": {"type": "number", "minimum": 0}, "finished_windows_qpc_ms": {"type": "number", "minimum": 0},
         "observation_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},

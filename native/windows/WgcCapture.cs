@@ -35,7 +35,7 @@ sealed class WgcCapture : IDisposable
     readonly object sync=new object();readonly AutoResetEvent wake=new AutoResetEvent(false);
     readonly Dictionary<string,IntPtr> staging=new Dictionary<string,IntPtr>();
     IntPtr device,context;IDirect3DDevice projected;GraphicsCaptureItem item;Direct3D11CaptureFramePool pool;GraphicsCaptureSession session;
-    Direct3D11CaptureFrame latest;double latestArrived,lastSource,lastArrival,lastRequest;long onFrameCalls,framesReceived,staleDiscarded;int lastWidth,lastHeight;string callbackError;bool disposed,closed;SizeInt32 poolSize;
+    Direct3D11CaptureFrame latest;double latestArrived,lastSource,lastArrival,lastRequest,previousUsedRender=-1;long onFrameCalls,framesReceived,staleDiscarded;int lastWidth,lastHeight;string callbackError;bool disposed,closed;SizeInt32 poolSize;
     CreateTexture createTexture;CopyRegion copy;MapResource map;UnmapResource unmap;
     public WgcCapture(IntPtr hwnd){
         try{
@@ -63,7 +63,7 @@ sealed class WgcCapture : IDisposable
             double arrived=Clock.PreciseMs;lock(sync){framesReceived++;lastSource=frame.SystemRelativeTime.TotalMilliseconds;lastArrival=arrived;lastWidth=frame.ContentSize.Width;lastHeight=frame.ContentSize.Height;if(disposed){frame.Dispose();return;}if(latest!=null)latest.Dispose();latest=frame;latestArrived=arrived;}wake.Set();
         }}catch(Exception error){lock(sync){closed=true;callbackError=error.GetType().Name+":"+error.HResult;}try{wake.Set();}catch(ObjectDisposedException){}}
     }
-    public Dictionary<string,object> Diagnostic(double request=0){lock(sync)return ResidentWire.Obj("on_frame_calls",Interlocked.Read(ref onFrameCalls),"frames_received",framesReceived,"stale_frames_discarded",staleDiscarded,"last_content_width",lastWidth,"last_content_height",lastHeight,"last_system_relative_time_qpc_ms",lastSource,"last_frame_arrived_qpc_ms",lastArrival,"request_qpc_ms",request==0?lastRequest:request,"latest_frame_present",latest!=null,"closed",closed,"disposed",disposed,"callback_error",callbackError,"caller_apartment",Thread.CurrentThread.GetApartmentState().ToString(),"source_clock_policy","frame_system_relative_time_must_be_at_or_after_request");}
+    public Dictionary<string,object> Diagnostic(double request=0){lock(sync)return ResidentWire.Obj("on_frame_calls",Interlocked.Read(ref onFrameCalls),"frames_received",framesReceived,"stale_frames_discarded",staleDiscarded,"last_content_width",lastWidth,"last_content_height",lastHeight,"last_system_relative_time_raw_ms",lastSource,"last_frame_arrived_qpc_ms",lastArrival,"request_qpc_ms",request==0?lastRequest:request,"latest_frame_present",latest!=null,"closed",closed,"disposed",disposed,"callback_error",callbackError,"caller_apartment",Thread.CurrentThread.GetApartmentState().ToString(),"source_clock_policy","actual_arrival_qpc_after_request_and_new_render_stamp");}
     public Snapshot Fresh(double requestedMs,int timeoutMs,Func<bool> stop,IntPtr hwnd,Dictionary<string,object> window){
         lock(sync)lastRequest=requestedMs;
         double deadline=Clock.PreciseMs+timeoutMs;
@@ -77,7 +77,10 @@ sealed class WgcCapture : IDisposable
                     continue;
                 }
                 double source=frame.SystemRelativeTime.TotalMilliseconds;
-                if(source>=requestedMs&&source<=arrived&&source>=0){try{return new Snapshot(this,frame,source,arrived,hwnd,window,stop);}catch{frame.Dispose();throw;}}
+                if(ResidentFrameClock.Fresh(requestedMs,arrived,Clock.PreciseMs,source,previousUsedRender)){
+                    previousUsedRender=source;
+                    try{return new Snapshot(this,frame,source,arrived,hwnd,window,stop);}catch{frame.Dispose();throw;}
+                }
                 lock(sync)staleDiscarded++;frame.Dispose();
             }
             wake.WaitOne(5);
@@ -87,10 +90,10 @@ sealed class WgcCapture : IDisposable
     public sealed class Roi : IDisposable {public Rectangle Rectangle;public Bitmap Bitmap;public byte[] Pixels;public string Hash;public void Dispose(){if(Bitmap!=null)Bitmap.Dispose();}}
     public sealed class Snapshot : IDisposable {
         readonly WgcCapture owner;readonly Func<bool> stop;Direct3D11CaptureFrame frame;IntPtr texture;readonly int xOffset,yOffset,width,height;readonly TextureDescription description;
-        public readonly double SourceMs,ArrivedMs;public readonly string ClientMapping;
+        public readonly double SourceMs,ArrivedMs,RenderMs;public readonly string ClientMapping;
         public Snapshot(WgcCapture owner,Direct3D11CaptureFrame frame,double source,double arrived,IntPtr hwnd,Dictionary<string,object> window,Func<bool> stop){
             try{
-            this.owner=owner;this.stop=stop;this.frame=frame;SourceMs=source;ArrivedMs=arrived;width=ResidentWire.Int(window,"client_width");height=ResidentWire.Int(window,"client_height");
+            this.owner=owner;this.stop=stop;this.frame=frame;RenderMs=source;SourceMs=arrived;ArrivedMs=arrived;width=ResidentWire.Int(window,"client_width");height=ResidentWire.Int(window,"client_height");
             var surface=(DxgiAccess)frame.Surface;Guid guid=TextureGuid;Marshal.ThrowExceptionForHR(surface.GetInterface(ref guid,out texture));
             Method<TextureDesc>(texture,10)(texture,out description);
             ResidentWire.Need(description.Format==87&&description.SampleCount==1,"wgc_surface_format_unsupported");
@@ -127,6 +130,21 @@ sealed class WgcCapture : IDisposable
                 try{for(int y=0;y<rect.Height;y++)Marshal.Copy(bytes,y*rect.Width*4,IntPtr.Add(locked.Scan0,y*locked.Stride),rect.Width*4);}finally{bitmap.UnlockBits(locked);}
                 return new Roi{Rectangle=rect,Bitmap=bitmap,Pixels=bytes,Hash=ResidentWire.Hash(bytes)};
             }catch{bitmap.Dispose();throw;}
+        }
+        // One GPU synchronization for the requested ROI union. All individual
+        // witnesses still hash their exact original pixels, never a rescale.
+        public List<Roi> ReadMany(List<RecoveryCvRegion> regions){
+            ResidentWire.Need(regions!=null&&regions.Count>0,"wgc_regions_missing");
+            Rectangle area=regions[0].Rectangle;foreach(var region in regions)area=Rectangle.Union(area,region.Rectangle);
+            var result=new List<Roi>();
+            try{using(var union=Read(area)){
+                foreach(var region in regions){
+                    var rect=region.Rectangle;var local=new Rectangle(rect.X-area.X,rect.Y-area.Y,rect.Width,rect.Height);
+                    var pixels=ResidentRoiBytes.Slice(union.Pixels,area.Width,area.Height,local);
+                    var bitmap=union.Bitmap.Clone(local,PixelFormat.Format32bppArgb);
+                    result.Add(new Roi{Rectangle=rect,Bitmap=bitmap,Pixels=pixels,Hash=ResidentWire.Hash(pixels)});
+                }
+            }return result;}catch{foreach(var roi in result)roi.Dispose();throw;}
         }
         public void Dispose(){if(texture!=IntPtr.Zero){Marshal.Release(texture);texture=IntPtr.Zero;}if(frame!=null){frame.Dispose();frame=null;}}
     }

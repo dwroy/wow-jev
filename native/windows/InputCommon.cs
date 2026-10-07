@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -292,6 +293,18 @@ namespace WowJev.Input
     public static class RecoverySafety
     {
         public const uint IdleThresholdMs = 5000;
+        public const int FocusPointRadius = 2;
+        public static bool PointPatchWithinClient(int x, int y, int width, int height)
+        { return x >= FocusPointRadius && y >= FocusPointRadius && x < width - FocusPointRadius && y < height - FocusPointRadius; }
+        public static bool FocusCandidate(int x, int y, int width, int height)
+        { return (x == (int)Math.Floor(width * .6) || x == (int)Math.Floor(width * .75)) &&
+            (y == (int)Math.Floor(height * .25) || y == (int)Math.Floor(height * .75)); }
+        public static bool RetailWowIdentity(string name, string executable, string windowClass)
+        { return String.Equals(name, "Wow", StringComparison.OrdinalIgnoreCase) && executable != null &&
+            executable.EndsWith(@"\_retail_\Wow.exe", StringComparison.OrdinalIgnoreCase) &&
+            (windowClass == "GxWindowClass" || windowClass == "GxWindowClassD3d" || windowClass == "waApplication Window"); }
+        public static bool CursorFree(bool known, bool visible, bool handleKnown, bool captureFree, bool anyButton)
+        { return known && visible && handleKnown && captureFree && !anyButton; }
         public static bool WindowVisible(bool visible, bool minimized) { return visible && !minimized; }
         public static string OccluderGeometry(bool succeeded, bool windowExists, RecoveryRect rect)
         {
@@ -365,6 +378,18 @@ namespace WowJev.Input
         [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr context);
         [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
         [StructLayout(LayoutKind.Sequential)] struct LastInput { public uint Size, Tick; }
+        [StructLayout(LayoutKind.Sequential)] struct RecoveryCursor { public uint Size, Flags; public IntPtr Handle; public Point Position; }
+        [StructLayout(LayoutKind.Sequential)] struct RecoveryGui { public uint Size, Flags; public IntPtr Active, Focus, Capture, Menu, MoveSize, Caret; public Rect CaretRect; }
+        [DllImport("user32.dll", SetLastError = true)] static extern bool GetCursorInfo(ref RecoveryCursor cursor);
+        [DllImport("user32.dll", SetLastError = true)] static extern bool GetGUIThreadInfo(uint thread, ref RecoveryGui gui);
+        [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+        [DllImport("user32.dll", SetLastError = true)] static extern IntPtr GetThreadDesktop(uint thread);
+        [DllImport("user32.dll", SetLastError = true)] static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
+        [DllImport("user32.dll", SetLastError = true)] static extern bool CloseDesktop(IntPtr desktop);
+        [DllImport("user32.dll")] static extern IntPtr GetProcessWindowStation();
+        [DllImport("user32.dll", EntryPoint = "GetUserObjectInformationW", SetLastError = true)] static extern bool DiagnosticUserObjectInformation(IntPtr handle, int index, IntPtr value, uint bytes, out uint needed);
+        [DllImport("user32.dll")] static extern IntPtr GetThreadDpiAwarenessContext();
+        [DllImport("user32.dll")] static extern int GetAwarenessFromDpiAwarenessContext(IntPtr context);
         [DllImport("user32.dll", SetLastError = true)] static extern bool GetLastInputInfo(ref LastInput value);
         [DllImport("kernel32.dll")] static extern uint GetTickCount();
         [DllImport("kernel32.dll")] static extern void SetLastError(uint code);
@@ -544,6 +569,178 @@ namespace WowJev.Input
         {
             WindowInfo window = GetWindow(hwnd); Point point = new Point { X = x, Y = y };
             return x >= 0 && y >= 0 && x < window.Width && y < window.Height && ClientToScreen(hwnd, ref point) && GetAncestor(WindowFromPoint(point), 2) == hwnd;
+        }
+        public static string WindowClassName(IntPtr hwnd)
+        { var value = new StringBuilder(256); return GetClassName(hwnd, value, value.Capacity) > 0 ? value.ToString() : ""; }
+        // Explicit recovery-only alternative. The default complete-client probe is
+        // unchanged. No input is issued here; the hand rechecks under its lease.
+        public static Dictionary<string, object> GetRecoveryPointSafety(IntPtr hwnd, int x, int y)
+        { return GetRecoveryPointSafety(hwnd, x, y, false); }
+        public static Dictionary<string, object> GetRecoveryPointSafety(IntPtr hwnd, int x, int y, bool ownedClickStarted)
+        {
+            var result = RecoveryObject("mode", "visible_point", "allowed", false, "reason", "unverified", "hwnd", "0x" + hwnd.ToInt64().ToString("x"),
+                "checked_at_ms", Clock.PreciseMs, "visible", false, "minimized", false, "focused", false,
+                "point", RecoveryObject("x", x, "y", y), "patch_radius", RecoverySafety.FocusPointRadius,
+                "on_monitor", false, "point_owned", false, "point_visible", false, "cursor_free", false, "mouse_buttons_held", true,
+                "idle_threshold_ms", RecoverySafety.IdleThresholdMs, "user_idle_scope", "calling-session-only", "input_source_distinguishable", false,
+                "visibility_method", "physical_patch_monitor_union_and_each_pixel_root_hit_test", "owned_click_started", ownedClickStarted);
+            try
+            {
+                if (hwnd == IntPtr.Zero || !IsWindow(hwnd) || GetAncestor(hwnd, 2) != hwnd) return RecoveryDenied(result, "invalid_window");
+                result["visible"] = IsWindowVisible(hwnd); result["minimized"] = IsIconic(hwnd); result["focused"] = GetForegroundWindow() == hwnd;
+                if (!RecoverySafety.WindowVisible((bool)result["visible"], (bool)result["minimized"])) return RecoveryDenied(result, "window_not_visible");
+                uint pid; uint thread = GetWindowThreadProcessId(hwnd, out pid);
+                if (thread == 0) return RecoveryDenied(result, "window_identity_unknown");
+                int session = Process.GetCurrentProcess().SessionId; string windowClass = WindowClassName(hwnd);
+                using (Process process = Process.GetProcessById(checked((int)pid)))
+                {
+                    result["pid"] = pid; result["process_start_ticks"] = process.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture);
+                    result["session_id"] = process.SessionId; result["probe_session_id"] = session; result["class"] = windowClass;
+                    result["process_name"] = process.ProcessName; result["executable"] = process.MainModule.FileName;
+                    if (process.SessionId != 1 || session != 1) return RecoveryDenied(result, "wrong_interactive_session");
+                    if (!RecoverySafety.RetailWowIdentity(process.ProcessName, (string)result["executable"], windowClass)) return RecoveryDenied(result, "focus_recovery_target_unsupported");
+                }
+                Rect raw; Point origin = new Point();
+                if (!GetClientRect(hwnd, out raw) || !ClientToScreen(hwnd, ref origin)) return RecoveryDenied(result, "client_geometry_unknown");
+                result["client_width"] = raw.Right; result["client_height"] = raw.Bottom;
+                if (!RecoverySafety.PointPatchWithinClient(x, y, raw.Right, raw.Bottom)) return RecoveryDenied(result, "point_patch_outside_client");
+                int sx = checked(origin.X + x), sy = checked(origin.Y + y), radius = RecoverySafety.FocusPointRadius;
+                result["screen_point"] = RecoveryObject("x", sx, "y", sy);
+                var patch = new RecoveryRect(sx - radius, sy - radius, sx + radius + 1, sy + radius + 1);
+                result["patch_screen_rect"] = RecoveryObject("left", patch.Left, "top", patch.Top, "right", patch.Right, "bottom", patch.Bottom);
+                var monitors = new List<RecoveryRect>();
+                if (!EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, delegate(IntPtr monitor, IntPtr dc, ref Rect rect, IntPtr unused)
+                    { monitors.Add(new RecoveryRect(rect.Left, rect.Top, rect.Right, rect.Bottom)); return true; }, IntPtr.Zero)) return RecoveryDenied(result, "monitor_geometry_unknown");
+                if (!RecoverySafety.CoveredByMonitors(patch, monitors)) return RecoveryDenied(result, "point_patch_outside_monitors");
+                result["on_monitor"] = true;
+                for (int py = patch.Top; py < patch.Bottom; py++) for (int px = patch.Left; px < patch.Right; px++)
+                    if (GetAncestor(WindowFromPoint(new Point { X = px, Y = py }), 2) != hwnd) return RecoveryDenied(result, "point_patch_not_target");
+                result["point_owned"] = true; result["point_visible"] = true;
+                var cursor = new RecoveryCursor { Size = (uint)Marshal.SizeOf(typeof(RecoveryCursor)) };
+                var gui = new RecoveryGui { Size = (uint)Marshal.SizeOf(typeof(RecoveryGui)) };
+                bool known = GetCursorInfo(ref cursor) && GetGUIThreadInfo(thread, ref gui), captureFree = gui.Capture == IntPtr.Zero;
+                IntPtr foreground = GetForegroundWindow();
+                if (foreground != IntPtr.Zero && foreground != hwnd)
+                { uint fgPid; uint fgThread = GetWindowThreadProcessId(foreground, out fgPid); var fgGui = new RecoveryGui { Size = (uint)Marshal.SizeOf(typeof(RecoveryGui)) }; known = known && fgThread > 0 && GetGUIThreadInfo(fgThread, ref fgGui); captureFree = captureFree && fgGui.Capture == IntPtr.Zero; }
+                bool held = IsMouseDown(1) || IsMouseDown(2) || IsMouseDown(4); result["mouse_buttons_held"] = held;
+                bool free = RecoverySafety.CursorFree(known, (cursor.Flags & 1) != 0, cursor.Handle != IntPtr.Zero, captureFree, held); result["cursor_free"] = free;
+                // The hand's registered LEFT_DOWN can itself change capture/idle.
+                // Only its bounded hold may omit first-DOWN pointer/idle checks;
+                // target visibility/identity and other human buttons still apply.
+                if (!ownedClickStarted && !free) return RecoveryDenied(result, held ? "user_button_held" : "cursor_not_free");
+                if (ownedClickStarted && (IsMouseDown(2) || IsMouseDown(4))) return RecoveryDenied(result, "user_button_held");
+                LastInput input = new LastInput { Size = (uint)Marshal.SizeOf(typeof(LastInput)) };
+                if (!GetLastInputInfo(ref input)) return RecoveryDenied(result, "last_input_unknown");
+                uint now = GetTickCount(), idle; result["last_input_tick"] = input.Tick; result["current_tick"] = now;
+                if (!RecoverySafety.TryIdle(now, input.Tick, out idle)) return RecoveryDenied(result, "last_input_clock_invalid");
+                result["user_idle_ms"] = idle;
+                if (!ownedClickStarted && idle <= RecoverySafety.IdleThresholdMs) return RecoveryDenied(result, "user_recent_input");
+                result["allowed"] = true; result["reason"] = "safe"; return result;
+            }
+            catch (Exception error) { result["failure_detail"] = error.Message; return RecoveryDenied(result, "recovery_safety_unverified"); }
+        }
+        public static List<object> GetRecoveryFocusCandidates(IntPtr hwnd)
+        {
+            var candidates = new List<object>(); WindowInfo window = GetWindow(hwnd);
+            double[,] ratios = { { .6, .25 }, { .75, .25 }, { .6, .75 }, { .75, .75 } };
+            for (int i = 0; i < ratios.GetLength(0); i++) candidates.Add(GetRecoveryPointSafety(hwnd, (int)Math.Floor(window.Width * ratios[i, 0]), (int)Math.Floor(window.Height * ratios[i, 1])));
+            return candidates;
+        }
+        static string DiagnosticHandle(IntPtr value) { return "0x" + value.ToInt64().ToString("x"); }
+        static Dictionary<string, object> DiagnosticWindow(IntPtr hwnd, IList<IntPtr> order)
+        {
+            uint pid; uint thread = GetWindowThreadProcessId(hwnd, out pid); Rect bounds = new Rect(); SetLastError(0);
+            bool rectKnown = hwnd != IntPtr.Zero && GetWindowRect(hwnd, out bounds); int rectError = rectKnown ? 0 : Marshal.GetLastWin32Error();
+            // Definite assignment also covers a null HWND without calling USER32.
+            if (!rectKnown) bounds = new Rect();
+            var title = new StringBuilder(261); int titleLength = hwnd == IntPtr.Zero ? 0 : GetWindowText(hwnd, title, title.Capacity);
+            var value = RecoveryObject("hwnd", DiagnosticHandle(hwnd), "root_hwnd", DiagnosticHandle(GetAncestor(hwnd, 2)), "exists", IsWindow(hwnd),
+                "thread_id", thread, "pid", pid, "class", WindowClassName(hwnd), "title", titleLength > 0 ? (object)title.ToString() : null,
+                "visible", IsWindowVisible(hwnd), "minimized", IsIconic(hwnd), "z_index", order == null ? -1 : order.IndexOf(hwnd),
+                "rect_known", rectKnown, "rect_error", rectError, "rect", rectKnown ? (object)RecoveryObject("left", bounds.Left, "top", bounds.Top, "right", bounds.Right, "bottom", bounds.Bottom) : null);
+            try { using (Process process = Process.GetProcessById(checked((int)pid)))
+                { value["process_name"] = process.ProcessName; value["process_start_ticks"] = process.StartTime.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture); value["session_id"] = process.SessionId; } }
+            catch (Exception error) { value["process_identity_error"] = error.GetType().Name; }
+            return value;
+        }
+        static Dictionary<string, object> DiagnosticDesktop(IntPtr desktop, int openError)
+        {
+            var value = RecoveryObject("handle", DiagnosticHandle(desktop), "open_error", openError, "name_known", false, "name", null,
+                "receives_input_known", false, "receives_input", null);
+            if (desktop == IntPtr.Zero) return value;
+            IntPtr buffer = Marshal.AllocHGlobal(512);
+            try {
+                uint needed; SetLastError(0); bool named = DiagnosticUserObjectInformation(desktop, 2, buffer, 512, out needed); int nameError = named ? 0 : Marshal.GetLastWin32Error();
+                value["name_known"] = named; value["name_error"] = nameError; value["name"] = named ? (object)Marshal.PtrToStringUni(buffer) : null;
+                Marshal.WriteInt32(buffer, 0); SetLastError(0); bool ioKnown = DiagnosticUserObjectInformation(desktop, 6, buffer, 4, out needed); int ioError = ioKnown ? 0 : Marshal.GetLastWin32Error();
+                value["receives_input_known"] = ioKnown; value["receives_input_error"] = ioError; value["receives_input"] = ioKnown ? (object)(Marshal.ReadInt32(buffer) != 0) : null;
+            } finally { Marshal.FreeHGlobal(buffer); }
+            return value;
+        }
+        // Independent read-only diagnostic, deliberately not an input permission.
+        // Titles are read only for the target, actual hit owners and intersecting
+        // visible Z-order entries requested by this field investigation.
+        public static Dictionary<string, object> GetRecoveryVisibilityDiagnostic(IntPtr hwnd)
+        {
+            var result = RecoveryObject("version", 1, "kind", "recovery_visibility_diagnostic", "input_permission", false,
+                "started_windows_qpc_ms", Clock.PreciseMs, "status", "unknown", "target_hwnd", DiagnosticHandle(hwnd));
+            try {
+                uint currentThread = GetCurrentThreadId(); SetLastError(0); IntPtr threadDesktop = GetThreadDesktop(currentThread); int threadError = threadDesktop == IntPtr.Zero ? Marshal.GetLastWin32Error() : 0;
+                result["thread_id"] = currentThread; result["thread_desktop"] = DiagnosticDesktop(threadDesktop, threadError);
+                SetLastError(0); IntPtr inputDesktop = OpenInputDesktop(0, false, 1); int inputError = inputDesktop == IntPtr.Zero ? Marshal.GetLastWin32Error() : 0;
+                try { result["input_desktop"] = DiagnosticDesktop(inputDesktop, inputError); } finally { if (inputDesktop != IntPtr.Zero) CloseDesktop(inputDesktop); }
+                // Name only: UOI_IO applies to desktop handles, not stations.
+                IntPtr station = GetProcessWindowStation(), stationBuffer = Marshal.AllocHGlobal(512);
+                try { uint needed; SetLastError(0); bool stationKnown = station != IntPtr.Zero && DiagnosticUserObjectInformation(station, 2, stationBuffer, 512, out needed);
+                    result["window_station"] = RecoveryObject("name_known", stationKnown, "name", stationKnown ? (object)Marshal.PtrToStringUni(stationBuffer) : null, "error", stationKnown ? 0 : Marshal.GetLastWin32Error()); }
+                finally { Marshal.FreeHGlobal(stationBuffer); }
+                var gui = new RecoveryGui { Size = (uint)Marshal.SizeOf(typeof(RecoveryGui)) }; SetLastError(0); bool guiKnown = GetGUIThreadInfo(0, ref gui); int guiError = guiKnown ? 0 : Marshal.GetLastWin32Error();
+                result["foreground_gui"] = RecoveryObject("requested_thread", 0, "known", guiKnown, "error", guiError, "flags", guiKnown ? (object)gui.Flags : null,
+                    "active_hwnd", guiKnown ? (object)DiagnosticHandle(gui.Active) : null, "focus_hwnd", guiKnown ? (object)DiagnosticHandle(gui.Focus) : null, "capture_hwnd", guiKnown ? (object)DiagnosticHandle(gui.Capture) : null);
+                var cursor = new RecoveryCursor { Size = (uint)Marshal.SizeOf(typeof(RecoveryCursor)) }; SetLastError(0); bool cursorKnown = GetCursorInfo(ref cursor); int cursorError = cursorKnown ? 0 : Marshal.GetLastWin32Error();
+                result["cursor"] = RecoveryObject("known", cursorKnown, "error", cursorError, "visible", cursorKnown ? (object)((cursor.Flags & 1) != 0) : null,
+                    "handle", cursorKnown ? (object)DiagnosticHandle(cursor.Handle) : null, "flags", cursorKnown ? (object)cursor.Flags : null,
+                    "screen_point", cursorKnown ? (object)RecoveryObject("x", cursor.Position.X, "y", cursor.Position.Y) : null,
+                    "left_button_down", IsMouseDown(1), "right_button_down", IsMouseDown(2), "middle_button_down", IsMouseDown(4));
+                var lastInput = new LastInput { Size = (uint)Marshal.SizeOf(typeof(LastInput)) }; SetLastError(0); bool idleRead = GetLastInputInfo(ref lastInput); int idleError = idleRead ? 0 : Marshal.GetLastWin32Error();
+                uint now = GetTickCount(), idle = 0; bool idleKnown = idleRead && RecoverySafety.TryIdle(now, lastInput.Tick, out idle);
+                result["last_input"] = RecoveryObject("read_succeeded", idleRead, "error", idleError, "idle_known", idleKnown, "user_idle_ms", idleKnown ? (object)idle : null,
+                    "current_tick", now, "last_input_tick", idleRead ? (object)lastInput.Tick : null, "calling_session_only", true);
+                try { IntPtr context = GetThreadDpiAwarenessContext(); result["thread_dpi_awareness"] = RecoveryObject("context", DiagnosticHandle(context), "awareness", GetAwarenessFromDpiAwarenessContext(context)); }
+                catch (EntryPointNotFoundException) { result["thread_dpi_awareness"] = null; }
+                var monitors = new List<RecoveryRect>(); var monitorRows = new List<object>();
+                SetLastError(0); bool monitorsKnown = EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, delegate(IntPtr monitor, IntPtr dc, ref Rect rect, IntPtr unused)
+                    { monitors.Add(new RecoveryRect(rect.Left, rect.Top, rect.Right, rect.Bottom)); monitorRows.Add(RecoveryObject("handle", DiagnosticHandle(monitor), "left", rect.Left, "top", rect.Top, "right", rect.Right, "bottom", rect.Bottom)); return true; }, IntPtr.Zero);
+                result["monitors_known"] = monitorsKnown; result["monitors_error"] = monitorsKnown ? 0 : Marshal.GetLastWin32Error(); result["monitors"] = monitorRows;
+                List<IntPtr> order = ReadWindowOrder(); result["target"] = DiagnosticWindow(hwnd, order); result["foreground"] = DiagnosticWindow(GetForegroundWindow(), order);
+                Rect raw; Point origin = new Point(); if (!GetClientRect(hwnd, out raw) || !ClientToScreen(hwnd, ref origin)) throw new InvalidOperationException("client_geometry_unknown");
+                var client = new RecoveryRect(origin.X, origin.Y, checked(origin.X + raw.Right), checked(origin.Y + raw.Bottom));
+                result["client_screen_rect"] = RecoveryObject("left", client.Left, "top", client.Top, "right", client.Right, "bottom", client.Bottom);
+                result["client_covered_by_monitors"] = monitorsKnown && RecoverySafety.CoveredByMonitors(client, monitors);
+                var owners = new Dictionary<string, object>(); var points = new List<object>(); double[,] ratios = { { .6, .25 }, { .75, .25 }, { .6, .75 }, { .75, .75 } };
+                for (int i = 0; i < ratios.GetLength(0); i++) {
+                    int x = (int)Math.Floor(raw.Right * ratios[i, 0]), y = (int)Math.Floor(raw.Bottom * ratios[i, 1]); var screen = new Point { X = checked(origin.X + x), Y = checked(origin.Y + y) };
+                    IntPtr hit = WindowFromPoint(screen), root = GetAncestor(hit, 2); var patchOwners = new Dictionary<string, int>();
+                    for (int py = screen.Y - 2; py <= screen.Y + 2; py++) for (int px = screen.X - 2; px <= screen.X + 2; px++) {
+                        IntPtr patchRoot = GetAncestor(WindowFromPoint(new Point { X = px, Y = py }), 2); string id = DiagnosticHandle(patchRoot);
+                        if (!owners.ContainsKey(id)) owners.Add(id, DiagnosticWindow(patchRoot, order)); if (!patchOwners.ContainsKey(id)) patchOwners.Add(id, 0); patchOwners[id]++;
+                    }
+                    if (!owners.ContainsKey(DiagnosticHandle(hit))) owners.Add(DiagnosticHandle(hit), DiagnosticWindow(hit, order));
+                    points.Add(RecoveryObject("client_point", RecoveryObject("x", x, "y", y), "screen_point", RecoveryObject("x", screen.X, "y", screen.Y),
+                        "hit_hwnd", DiagnosticHandle(hit), "root_hwnd", DiagnosticHandle(root), "root_is_target", root == hwnd,
+                        "patch_on_monitor", monitorsKnown && RecoverySafety.CoveredByMonitors(new RecoveryRect(screen.X - 2, screen.Y - 2, screen.X + 3, screen.Y + 3), monitors), "patch_root_pixel_counts", patchOwners));
+                }
+                result["points"] = points; result["hit_windows"] = owners;
+                var relevant = new List<object>();
+                foreach (IntPtr window in order) {
+                    Rect bounds; bool read = GetWindowRect(window, out bounds);
+                    if (window == hwnd || owners.ContainsKey(DiagnosticHandle(window)) || IsWindowVisible(window) && !IsIconic(window) && (!read || new RecoveryRect(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom).Intersects(client))) relevant.Add(DiagnosticWindow(window, order));
+                }
+                result["related_z_order"] = relevant; result["z_order_total"] = order.Count; result["target_z_index"] = order.IndexOf(hwnd);
+                List<IntPtr> after = ReadWindowOrder(); bool stable = after.Count == order.Count; if (stable) for (int i = 0; i < order.Count; i++) if (after[i] != order[i]) { stable = false; break; }
+                result["z_order_stable"] = stable; result["status"] = "observed";
+            } catch (Exception error) { result["status"] = "partial"; result["error_type"] = error.GetType().Name; result["error"] = error.Message; }
+            result["finished_windows_qpc_ms"] = Clock.PreciseMs; return result;
         }
         public static int LastError { get; private set; }
         public static void MakeDpiAware()

@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-07 console首任务恢复进行中。** 用户最新授权覆盖此前离线等待：会话1已由用户tscon转console，允许空闲闸内可见点激活，必要时另经统一闸Alt+Tab或仅移动/最小化遮挡窗口；每次切换独立复核前台，失败释放停止。独立树console-session基线90bf5c8，recovery仍只到可玩世界，首交谈仍须world引用/局部facts→L4→L3→Body闸→hand，不能在恢复中绕过任务链。
+
+本轮readonly-01 WTSActive/Default/WGC19回调，但原compositor时间比宿主QPC领先约15ms；修正为真实FrameArrived QPC与未重复render戳，原render域未对时单独保存。readonly-02成功取三帧/断线实图，ROI约589ms；批量GPU读取后readonly-03 ROI67–80ms/CV9–22ms、源→响应83–115ms，n=3零输入，尚非观察→输入成绩。WowPID22072/start639268827443062278/HWND0x904a6/物理2560×1440/DPI144仍一致、FG0；四个背景点击点point_patch_not_target，正在只读核对具体遮挡和输入desktop。当前游戏输入/模型/首任务完成均0，不宣称p50<150ms达成。
+
+专项TS66/66、typecheck、C#纯78/78及新可见点24/24通过，hand主环境16/16修正子agentmock运行环境故障的结论；完整Git快照待后续复验。readonly三轮任务均删除且独立回查，不从no_executor_acquired外推物理释放。可运行入口与原件见docs/acceptance/console-first-task.md及docs/recovery-visible-focus.md。
+
 **2026-10-07 第3阶段全部离线实现与完整回归通过，按用户要求仅推codex/agent-system后停止。** 隔离组合候选bbf43fe含72文件，TS644/644、Python820passed+3原有strict xfail（收集823），0失败/普通skip，typecheck通过；相对第2阶段新增77TS/55Python，原用例全保留。JUnit三项skipped节点均为pytest.xfail的gamma1.1反例。完整原生构建及71/71纯策略/schema/合成ROI检查通过；两个新入口help和控件prepare实跑0桌面/输入/模型。离线六场景×四重复single/layered共48trial（8完成/32预期阻塞/8取消/0失败），严格语义回放verified；模拟成本/模型次数与实际性能分开，不报告150ms目标达成。最后审计修正cold已发输入丢失/unknown终态伪零、Python独立注册遗漏完整Native schema，以及真实知识原件SHA与全部artifact读回；全量基于已提交共同Git快照，一次完整套件全绿后只补文档。
 
 体验入口`python3 tools/layered_tutorial.py --help`、`python3 tools/resident_readonly.py --help`、`python3 tools/resident_fixture_benchmark.py prepare --run-dir <全新目录>`；现场readonly/run/bootstrap/cancel及recording窗口/基准入口见docs/tutorial-layered-runtime.md和docs/resident-session.md，完整验收docs/acceptance/resident-session-integration.md。root原件在out/acceptance/layered-tutorial-20261006/stage-3-integration及stage-3-native；源/失败/模块专项均保留。主集成只ff-only，推送不force、不推其它game-db分支；原wow-jev.bundle与原HANDOFF备份SHA未变。

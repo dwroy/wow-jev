@@ -1,8 +1,9 @@
 import {isAbsolute,join} from 'node:path';
 import {TraceRecorder,traceAsync} from '../benchmark/trace.js';
 import {interpretRecovery,sameTarget,sourceFor,validateObservation,validateTarget} from './recognition.js';
+import {verifiedFocusCandidate,visibleFocusPoint,type FocusVisibilityMode} from './focus.js';
 import type {BridgeRequest,BridgeResult,RecoveryAction,RecoveryEvent,RecoveryFrame,RecoveryInterpretation,RecoveryResult,RecoveryReview,RecoveryTarget} from './types.js';
-export interface RecoveryOptions {runId:string;directory:string;command:'recover'|'launch';mode:'offline'|'live';authorized:boolean;targetCharacter:string;maxDurationMs?:number;stageTimeoutMs?:number;maxActions?:number;maxObservationAgeMs?:number;clickDurationMs?:number;maxObservations?:number}
+export interface RecoveryOptions {runId:string;directory:string;command:'recover'|'launch';mode:'offline'|'live';authorized:boolean;targetCharacter:string;focusVisibilityMode?:FocusVisibilityMode;maxDurationMs?:number;stageTimeoutMs?:number;maxActions?:number;maxObservationAgeMs?:number;clickDurationMs?:number;maxObservations?:number}
 export interface RecoveryPorts {now():number;call(request:BridgeRequest,directory:string,signal:AbortSignal):Promise<BridgeResult>;sleep(ms:number,signal:AbortSignal):Promise<void>;release(reason:string):Promise<{release:'confirmed'|'unconfirmed';pending_result?:BridgeResult}>;append(event:RecoveryEvent):Promise<void>;review?(frame:RecoveryFrame,signal:AbortSignal):Promise<RecoveryReview|undefined>}
 class RecoveryStop extends Error {constructor(readonly status:'blocked'|'cancelled'|'failed',reason:string){super(reason);}}
 const blocked=new Set(['blocked_auth','blocked_terms','blocked_update']);
@@ -10,6 +11,7 @@ function integer(v:number|undefined,fallback:number,max:number):number {const n=
 function processKind(target:RecoveryTarget):'wow'|'battle_net' {validateTarget(target);if(/(?:^|[\\/])Wow\.exe$/i.test(target.executable)&&['GxWindowClass','GxWindowClassD3d','waApplication Window'].includes(target.class))return'wow';if(/(?:^|[\\/])Battle\.net(?: Launcher)?\.exe$/i.test(target.executable))return'battle_net';throw new RecoveryStop('blocked','process_not_in_recovery_allowlist');}
 export function validateRecoveryOptions(options:RecoveryOptions):void {
   if(!options.authorized||!['recover','launch'].includes(options.command)||!['offline','live'].includes(options.mode)||!isAbsolute(options.directory)||!options.runId||options.targetCharacter!=='小啊')throw new Error('recovery_explicit_authorization_alliance_warrior_required');
+  if(options.focusVisibilityMode!==undefined&&!['complete_client','visible_point'].includes(options.focusVisibilityMode))throw new Error('recovery_focus_visibility_mode');
   integer(options.maxDurationMs,180000,180000);integer(options.stageTimeoutMs,30000,30000);integer(options.maxActions,8,8);integer(options.maxObservationAgeMs,15000,15000);integer(options.clickDurationMs,60,100);integer(options.maxObservations,120,200);
 }
 /** One dispatcher owns all recovery operations; perception has no input port. */
@@ -63,7 +65,12 @@ export class RecoveryOrchestrator {
     this.fresh(frame);const w=frame.observation.window,safety=w.recovery_safety;
     const gate=this.trace.span('gate',`input-${this.actions+1}`,{reason});
     try{if(!w.visible||w.minimized)throw new RecoveryStop('blocked','target_not_visible_or_minimized');if(action.kind==='focus_click'){
-      if(this.focusUsed||w.focused||!safety?.allowed||!safety.client_fully_visible||!safety.visible||safety.minimized||safety.user_idle_ms<=5000||safety.idle_threshold_ms<5000||!Array.isArray(safety.occluders)||safety.occluders.length)throw new RecoveryStop('blocked','focus_recovery_safety_gate');this.focusUsed=true;
+      const mode=action.visibility_mode??'complete_client';
+      if(this.focusUsed||w.focused||mode!==(this.options.focusVisibilityMode??'complete_client'))throw new RecoveryStop('blocked','focus_recovery_safety_gate');
+      if(mode==='visible_point'){
+        if(!w.recovery_focus_candidates?.some(c=>c.point.x===action.x&&c.point.y===action.y&&verifiedFocusCandidate(frame,c)))throw new RecoveryStop('blocked','focus_recovery_point_safety_gate');
+      }else if(!safety?.allowed||!safety.client_fully_visible||!safety.visible||safety.minimized||safety.user_idle_ms<=5000||safety.idle_threshold_ms<5000||!Array.isArray(safety.occluders)||safety.occluders.length)throw new RecoveryStop('blocked','focus_recovery_safety_gate');
+      this.focusUsed=true;
     }else if(!w.focused)throw new RecoveryStop('blocked','ordinary_input_requires_current_foreground');
     if('duration_ms'in action&&action.duration_ms>100)throw new RecoveryStop('blocked','recovery_input_duration');
     if('x'in action&&('y'in action)&&(action.x<2||action.y<2||action.x>=frame.source.width-2||action.y>=frame.source.height-2))throw new RecoveryStop('blocked','recovery_input_point_outside_client');
@@ -123,7 +130,24 @@ export class RecoveryOrchestrator {
       }
       if(!wow)throw new RecoveryStop('blocked','wow_process_and_window_not_observed');const target=wow.target;let pendingStateStarted:number|null=newlyLaunched?this.ports.now():null;let current=await this.observe(target);let entered=false;let pendingEnterBefore:RecoveryFrame|null=null;this.loadingStarted=null;
       while(true){
-        this.check();if(!['loading','login'].includes(current.scene.scene))this.loadingStarted=null;if(!current.frame.observation.window.focused){const safety=current.frame.observation.window.recovery_safety;if(safety.visible&&!safety.minimized&&safety.client_fully_visible&&safety.occluders.length===0&&Number.isFinite(safety.user_idle_ms)&&safety.user_idle_ms<=5000&&(!safety.reason||['safe','user_recent_input'].includes(safety.reason))){this.focusWaitStarted??=this.ports.now();if(this.ports.now()-this.focusWaitStarted>=this.stage)throw new RecoveryStop('blocked','focus_idle_wait_deadline');await this.event('focus_idle_wait',{source:current.frame.source,user_idle_ms:safety.user_idle_ms,required_strictly_greater_than_ms:5000,input_allowed:false});await this.bounded(this.ports.sleep(500,this.controller.signal),Math.min(this.stage,this.total-(this.ports.now()-this.starts)));current=await this.observe(target);continue;}const point=current.scene.safe_focus_point;if(!point)throw new RecoveryStop('blocked','safe_focus_point_evidence_required');const focusMayAck=current.scene.scene==='disconnected'&&current.scene.buttons.some(b=>b.id==='disconnect_ack');const before=current.frame;await this.input(before,{kind:'focus_click',x:point.x,y:point.y,duration_ms:this.clickDuration},'single_safe_focus_recovery');current=await this.observe(target);if(!current.frame.observation.window.focused)throw new RecoveryStop('blocked','focus_not_confirmed_after_click');if(focusMayAck&&current.scene.scene==='disconnected'&&current.scene.buttons.some(b=>b.id==='reconnect')){this.disconnectAckUsed=true;await this.confirmEffect(before,current.frame,'foreground_and_disconnect_acknowledgement_observed');}else await this.confirmEffect(before,current.frame,'foreground_confirmed');continue;}
+        this.check();if(!['loading','login'].includes(current.scene.scene))this.loadingStarted=null;
+        if(!current.frame.observation.window.focused){
+          const safety=current.frame.observation.window.recovery_safety,mode=this.options.focusVisibilityMode??'complete_client';
+          const candidate=mode==='visible_point'?visibleFocusPoint(current.frame,current.scene,true):null;
+          const canWait=mode==='visible_point'?candidate?.reason==='user_recent_input':safety.visible&&!safety.minimized&&safety.client_fully_visible&&safety.occluders.length===0&&Number.isFinite(safety.user_idle_ms)&&safety.user_idle_ms<=5000&&(!safety.reason||['safe','user_recent_input'].includes(safety.reason));
+          if(canWait){
+            this.focusWaitStarted??=this.ports.now();if(this.ports.now()-this.focusWaitStarted>=this.stage)throw new RecoveryStop('blocked','focus_idle_wait_deadline');
+            await this.event('focus_idle_wait',{source:current.frame.source,visibility_mode:mode,user_idle_ms:candidate?.user_idle_ms??safety.user_idle_ms,required_strictly_greater_than_ms:5000,input_allowed:false});
+            await this.bounded(this.ports.sleep(500,this.controller.signal),Math.min(this.stage,this.total-(this.ports.now()-this.starts)));current=await this.observe(target);continue;
+          }
+          const point=mode==='visible_point'?visibleFocusPoint(current.frame,current.scene)?.point:current.scene.safe_focus_point;
+          if(!point)throw new RecoveryStop('blocked',mode==='visible_point'?'native_visible_background_focus_point_required':'safe_focus_point_evidence_required');
+          const focusMayAck=mode==='complete_client'&&current.scene.scene==='disconnected'&&current.scene.buttons.some(b=>b.id==='disconnect_ack');
+          const before=current.frame;await this.input(before,{kind:'focus_click',x:point.x,y:point.y,duration_ms:this.clickDuration,...(mode==='visible_point'?{visibility_mode:mode}:{})},'single_safe_focus_recovery');
+          current=await this.observe(target);if(!current.frame.observation.window.focused)throw new RecoveryStop('blocked','focus_not_confirmed_after_click');
+          if(focusMayAck&&current.scene.scene==='disconnected'&&current.scene.buttons.some(b=>b.id==='reconnect')){this.disconnectAckUsed=true;await this.confirmEffect(before,current.frame,'foreground_and_disconnect_acknowledgement_observed');}
+          else await this.confirmEffect(before,current.frame,'foreground_confirmed');continue;
+        }
         const s=current.scene;
         if(s.scene==='disconnected'&&s.buttons.some(b=>b.id==='disconnect_ack')){if(this.disconnectAckUsed)throw new RecoveryStop('blocked','disconnect_ack_budget');this.disconnectAckUsed=true;const before=current.frame;await this.click(before,s,'disconnect_ack');current=await this.observe(target);if(current.scene.scene!=='disconnected'||!current.scene.buttons.some(b=>b.id==='reconnect'))throw new RecoveryStop('blocked','disconnect_ack_effect_unconfirmed');await this.confirmEffect(before,current.frame,'disconnect_ack_reconnect_ui_confirmed');continue;}
         if(s.scene==='disconnected'){if(this.reconnectUsed)throw new RecoveryStop('blocked','reconnect_budget');this.reconnectUsed=true;const before=current.frame;await this.click(before,s,'reconnect');current=await this.observe(target);if(current.scene.scene==='disconnected')throw new RecoveryStop('blocked','reconnect_effect_unconfirmed');await this.confirmEffect(before,current.frame,'disconnected_dialog_changed');continue;}

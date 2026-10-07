@@ -264,6 +264,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 150
+            },
+            "visibility_mode": {
+              "type": "string",
+              "enum": [
+                "complete_client",
+                "visible_point"
+              ]
             }
           }
         },

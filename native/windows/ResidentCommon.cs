@@ -3,6 +3,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -77,6 +78,29 @@ sealed class ResidentSchema
         var array=value as object[];if(array!=null){if(schema.ContainsKey("minItems"))ResidentWire.Need(array.Length>=Convert.ToInt32(schema["minItems"]),"schema_array");if(schema.ContainsKey("maxItems"))ResidentWire.Need(array.Length<=Convert.ToInt32(schema["maxItems"]),"schema_array");if(schema.ContainsKey("items"))foreach(var item in array)Check(item,ResidentWire.Map(schema["items"]),authority,depth+1);if(schema.ContainsKey("uniqueItems")&&(bool)schema["uniqueItems"])for(int i=0;i<array.Length;i++)for(int j=0;j<i;j++)ResidentWire.Need(!ResidentWire.Same(array[i],array[j]),"schema_unique");}
         if(value is string){string s=(string)value;if(schema.ContainsKey("pattern"))ResidentWire.Need(Regex.IsMatch(s,(string)schema["pattern"]),"schema_pattern");if(schema.ContainsKey("minLength"))ResidentWire.Need(s.Length>=Convert.ToInt32(schema["minLength"]),"schema_length");if(schema.ContainsKey("maxLength"))ResidentWire.Need(s.Length<=Convert.ToInt32(schema["maxLength"]),"schema_length");}
         if(value is int||value is long||value is double||value is decimal){double n=Convert.ToDouble(value);ResidentWire.Need(!Double.IsNaN(n)&&!Double.IsInfinity(n),"schema_finite");if(schema.ContainsKey("minimum"))ResidentWire.Need(n>=Convert.ToDouble(schema["minimum"]),"schema_minimum");if(schema.ContainsKey("maximum"))ResidentWire.Need(n<=Convert.ToDouble(schema["maximum"]),"schema_maximum");}
+    }
+}
+
+static class ResidentFrameClock
+{
+    // SystemRelativeTime is kept in its own source domain until alignment is
+    // verified. Only the actual FrameArrived QPC can establish acquisition.
+    public static bool Fresh(double requested,double arrived,double now,double render,double previousRender)
+    {
+        return !Double.IsNaN(render)&&!Double.IsInfinity(render)&&render>=0&&render>previousRender&&
+            !Double.IsNaN(arrived)&&!Double.IsInfinity(arrived)&&arrived>=requested&&arrived<=now;
+    }
+}
+
+static class ResidentRoiBytes
+{
+    public static byte[] Slice(byte[] pixels,int width,int height,Rectangle rectangle)
+    {
+        ResidentWire.Need(pixels!=null&&width>0&&height>0&&pixels.Length==checked(width*height*4)&&
+            rectangle.X>=0&&rectangle.Y>=0&&rectangle.Width>0&&rectangle.Height>0&&rectangle.Right<=width&&rectangle.Bottom<=height,"roi_slice_bounds");
+        var result=new byte[checked(rectangle.Width*rectangle.Height*4)];
+        for(int y=0;y<rectangle.Height;y++)Buffer.BlockCopy(pixels,checked(((rectangle.Y+y)*width+rectangle.X)*4),result,y*rectangle.Width*4,rectangle.Width*4);
+        return result;
     }
 }
 

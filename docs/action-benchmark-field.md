@@ -1,6 +1,8 @@
 # 联盟战士现场验收入口
 
-2026-10-07常驻会话路线保留前台输入闸，WGC与ROI在Windows内存内处理，低频证据/OCR单独请求。教程由局部事实与既有L4/L3/Body执行，恢复只到可玩世界；详见[教程分层入口](tutorial-layered-runtime.md)、[常驻宿主](resident-session.md)、[常驻集成实测](acceptance/resident-session-integration.md)。专用记录窗口以独立fixture_effect验收相同执行链，不能代替游戏效果。当前RDP会话1已断开，用户要求只完成离线代码/测试/文档后推送并停止，不轮询RDP或发送输入；实际WGC/30次控件输入/持键断链及首个交谈待用户通知窗口就绪。
+2026-10-07用户已将会话1转到console并授权继续首个教程交谈及受限焦点切换；当前进度见HANDOFF与[现场验收](acceptance/console-first-task.md)。常驻路线保留普通输入前台闸，WGC与ROI在Windows内存处理，低频证据/OCR单独请求。教程由局部事实与既有L4/L3/Body执行，恢复只到可玩世界；详见[教程分层入口](tutorial-layered-runtime.md)、[常驻宿主](resident-session.md)、[常驻集成实测](acceptance/resident-session-integration.md)。专用记录窗口的fixture_effect不能代替游戏效果，未实测的控件/强杀与重启验收仍须单独标明。
+
+当前WGC源时钟口径为真实FrameArrived回调QPC，协议明确`source_qpc_basis=host_frame_arrived`；原始SystemRelativeTime未对时，单独保存，不能相减或用它判缓存新鲜。观察→输入包含回调后ROI/CV/协调器/各层闸/实际SendInput，但不包含unknown的compositor→回调延迟。单个首任务输入仅能报告n=1区间，不能宣称n≥30分布目标已验收。
 
 2026-10-06新增受限会话启动/选角/焦点恢复和首个交谈入口见[session-recovery](session-recovery.md)。最新用户授权允许空闲/无遮挡且身份确认后的单次恢复点击，普通输入仍前台；本节原背包对照方案不自动获得任意失焦输入权限。恢复的code/冷桥/QPC输入/独立效果证据另记，不冒充single/layered成对跑分。
 

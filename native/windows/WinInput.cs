@@ -44,7 +44,7 @@ static class WinInput
     sealed class Work
     {
         public Command Command;
-        public string Kind, Mode;
+        public string Kind, Mode, FocusVisibilityMode;
         public KeySpec[] Keys;
         public TimelineEvent[] Events;
         public long TimelineStart;
@@ -70,6 +70,7 @@ static class WinInput
         readonly IntPtr hwnd;
         readonly int expectedPid;
         readonly long targetStartTicks;
+        readonly string targetWindowClass;
         readonly LeaseStore store;
         readonly Process watchdog;
         readonly object stateLock = new object();
@@ -89,6 +90,7 @@ static class WinInput
             WindowInfo info = Native.GetWindow(hwnd);
             if (info.Pid != expectedPid) throw new InputFailure("window_pid_mismatch", "Window PID does not match expected PID");
             targetStartTicks = Native.GetProcessStartTicks(expectedPid);
+            targetWindowClass = Native.WindowClassName(hwnd);
             store = new LeaseStore(session, true);
             int executorPid = Process.GetCurrentProcess().Id;
             long now = Clock.NowMs;
@@ -245,7 +247,10 @@ static class WinInput
                     else if (work.FocusObserved || Clock.NowMs >= Interlocked.Read(ref work.FocusActivationDeadlineMs))
                         throw new InputFailure("focus_recovery_failed", "Focus did not activate promptly or was lost after activation");
                 }
-                Dictionary<string, object> safety = Native.GetRecoverySafety(hwnd);
+                if (work.FocusVisibilityMode == "visible_point" && (Native.WindowClassName(hwnd) != targetWindowClass || String.IsNullOrEmpty(targetWindowClass)))
+                    throw new InputFailure("window_class_changed", "Focus recovery target class changed");
+                Dictionary<string, object> safety = work.FocusVisibilityMode == "visible_point"
+                    ? Native.GetRecoveryPointSafety(hwnd, work.X, work.Y, work.FocusClickStarted) : Native.GetRecoverySafety(hwnd);
                 if (!safety.ContainsKey("pid") || Convert.ToInt64(safety["pid"], CultureInfo.InvariantCulture) != expectedPid ||
                     !safety.ContainsKey("process_start_ticks") || Convert.ToInt64(safety["process_start_ticks"], CultureInfo.InvariantCulture) != targetStartTicks)
                     throw new InputFailure("window_identity_unknown", "Focus recovery target identity was not confirmed");
@@ -264,6 +269,8 @@ static class WinInput
                             throw new InputFailure("focus_recovery_target_unsupported", "Focus recovery is limited to retail Wow.exe");
                     if (Native.IsMouseDown(1) || Native.IsMouseDown(2) || Native.IsMouseDown(4))
                         throw new InputFailure("user_button_held", "A mouse button is already held; no recovery input issued");
+                    if (work.FocusVisibilityMode == "visible_point" && !TimelineCursorSafety.FreeForFirstDown(hwnd))
+                        throw new InputFailure("cursor_not_free", "A free visible cursor is required before recovery DOWN");
                 }
             }
             else
@@ -606,9 +613,16 @@ static class WinInput
             }
             else if (work.Kind == "focus_click")
             {
-                Exact(action, "kind", "x", "y", "duration_ms"); work.Button = 1;
+                if (action.ContainsKey("visibility_mode")) Exact(action, "kind", "x", "y", "duration_ms", "visibility_mode");
+                else Exact(action, "kind", "x", "y", "duration_ms");
+                work.FocusVisibilityMode = action.ContainsKey("visibility_mode") ? Text(action, "visibility_mode") : "complete_client";
+                if (work.FocusVisibilityMode != "complete_client" && work.FocusVisibilityMode != "visible_point")
+                    throw new InputFailure("invalid_action", "Unknown focus visibility mode");
+                work.Button = 1;
                 work.X = Integer(action, "x", 0, 65535); work.Y = Integer(action, "y", 0, 65535); CheckPoint(work.X, work.Y);
                 work.Duration = Integer(action, "duration_ms", 1, 150);
+                if (work.FocusVisibilityMode == "visible_point")
+                { WindowInfo info = Native.GetWindow(hwnd); if (!RecoverySafety.FocusCandidate(work.X, work.Y, info.Width, info.Height)) throw new InputFailure("invalid_action", "Visible-point focus requires a fixed background candidate"); }
             }
             else if (work.Kind == "mouse_click")
             {

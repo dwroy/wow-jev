@@ -42,6 +42,14 @@ test('resident schema separates memory ROI proof from printwindow and full scree
  const v=await validators();const valid=sample();assertResident(valid,v.resident);
  for(const change of [(s:ResidentMemorySample)=>{s.memory_frame.full_frame_sha256=hash as unknown as null;},(s:ResidentMemorySample)=>{s.capture.method='printwindow'as'wgc';},(s:ResidentMemorySample)=>{s.memory_frame.seq=2;},(s:ResidentMemorySample)=>{s.capture.started_qpc_ms=100;s.memory_frame.source_qpc_ms=100;}]){const bad=structuredClone(valid);change(bad);assert.throws(()=>assertResident(bad,v.resident));}
 });
+test('actual host arrival QPC remains separate from unaligned compositor timestamps',async()=>{
+ const v=await validators();const s=sample();s.capture.source_qpc_basis='host_frame_arrived';
+ s.capture.started_qpc_ms=s.memory_frame.source_qpc_ms=s.capture.arrived_qpc_ms;
+ s.capture.render_timestamp={domain:'wgc-system-relative',at_ms:1000,alignment:'unverified'};
+ assertResident(s,v.resident);
+ const bad=structuredClone(s);bad.capture.started_qpc_ms=bad.memory_frame.source_qpc_ms=101.2;
+ assert.throws(()=>assertResident(bad,v.resident),/resident_acquisition_clock_basis/);
+});
 test('resident source private register rejects fabricated, edited and old raw samples',async()=>{
  const m=await mock();try{const one=await m.client.sample(true);assert.equal(one.sample.artifact,null);assert.equal(m.client.validateOriginal(one.sample),true);assert.equal(m.client.validateOriginal(structuredClone(one.sample)),false);assert.equal(m.client.validateBracket(one.sample,one),true);assert.equal(m.client.validateBracket(one.sample,{...one,started_at_ms:11}),false);
  const two=await m.client.sample();assert.equal(m.client.validateOriginal(one.sample),false);assert.equal(m.client.validateOriginal(two.sample),true);two.sample.cv.tutorial_interaction.verified=false;assert.equal(m.client.validateOriginal(two.sample),false);

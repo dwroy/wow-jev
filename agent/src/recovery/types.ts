@@ -1,9 +1,10 @@
 import type { NativeAction, NativeReceipt } from '../hand/protocol.js';
-export type RecoveryAction = NativeAction | { kind:'focus_click';x:number;y:number;duration_ms:number };
+export type RecoveryAction = NativeAction;
 export interface RecoveryTarget {pid:number;start_ticks:string;hwnd:string;class:string;executable:string}
 export interface RecoverySource {observation_id:string;capture_sha256:string;width:number;height:number;observation_path:string}
 export interface RecoverySafety {allowed:boolean;reason?:string;visible:boolean;minimized:boolean;focused:boolean;client_fully_visible:boolean;user_idle_ms:number;idle_threshold_ms:number;occluders:unknown[];[key:string]:unknown}
-export interface RecoveryWindow {client_width:number;client_height:number;dpi:number;focused:boolean;visible:boolean;minimized:boolean;recovery_safety:RecoverySafety}
+export interface RecoveryPointSafety {mode:'visible_point';allowed:boolean;reason:string;hwnd:string;pid?:number;process_start_ticks?:string;class?:string;executable?:string;session_id?:number;probe_session_id?:number;checked_at_ms:number;visible:boolean;minimized:boolean;focused:boolean;point:{x:number;y:number};patch_radius:number;on_monitor:boolean;point_owned:boolean;point_visible:boolean;cursor_free:boolean;mouse_buttons_held:boolean;user_idle_ms?:number;idle_threshold_ms:number;client_width?:number;client_height?:number;owned_click_started:boolean}
+export interface RecoveryWindow {client_width:number;client_height:number;dpi:number;focused:boolean;visible:boolean;minimized:boolean;recovery_safety:RecoverySafety;recovery_focus_candidates?:RecoveryPointSafety[]}
 export interface RecoveryCapture {file:string;sha256:string;width:number;height:number;started_windows_qpc_ms:number;finished_windows_qpc_ms:number;method:string}
 export interface RecoveryOcrItem {text:string;x:number;y:number;width:number;height:number}
 export interface RecoverySelectedCharacter {verified:boolean;source:"calibrated_cv";reason:string;calibration_sha256:string;reference_sha256:string;layout_width:number;layout_height:number;observation_id:string;capture_sha256:string;regions:Array<{region:string;mean_abs_error:number;fraction_above_24:number;max_mean_abs_error:number;max_fraction_above_24:number;matched:boolean}>;name?:string;class?:"warrior";faction?:"alliance";safe_focus_point?:{x:number;y:number}}

@@ -21,7 +21,7 @@ export interface ResidentInputState {
 }
 export interface ResidentMemorySample {
   protocol:'wow-resident';version:1;type:'sample';session_id:string;id:string;seq:number;window:ResidentWindow;
-  capture:{status:'ok'|'unavailable';method:'wgc';started_qpc_ms:number;finished_qpc_ms:number;request_received_qpc_ms:number;arrived_qpc_ms:number;reason?:{code:string}};
+  capture:{status:'ok'|'unavailable';method:'wgc';started_qpc_ms:number;finished_qpc_ms:number;request_received_qpc_ms:number;arrived_qpc_ms:number;reason?:{code:string};source_qpc_basis?:'host_frame_arrived';render_timestamp?:{domain:'wgc-system-relative';at_ms:number;alignment:'unverified'}};
   metrics:{mean_luma:number|null;variance_luma:number|null;frame_delta:number|null};
   detectors:{inventory_open:EyeDetector};artifact:null;local_clock:{domain:'windows-qpc';at_ms:number};
   memory_frame:ResidentMemoryFrame;cv:{selected_character:Record<string,unknown>;tutorial_interaction:Record<string,unknown>;dialog_absence?:Record<string,unknown>;recording_fixture?:Record<string,unknown>};
@@ -81,6 +81,7 @@ export function assertResident(value:unknown,validate:ValidateFunction):asserts 
       [t.roi_started_ms,t.roi_finished_ms,t.cv_started_ms,t.cv_finished_ms,t.response_ms].some((x,i,a)=>i>0&&x<a[i-1]!)||
       t.roi_finished_ms!==capture.finished_qpc_ms||t.response_ms>sample.local_clock.at_ms||capture.arrived_qpc_ms<capture.started_qpc_ms)
       throw new Error('resident_memory_clock_or_identity');
+    if(capture.source_qpc_basis==='host_frame_arrived'&&capture.started_qpc_ms!==capture.arrived_qpc_ms)throw new Error('resident_acquisition_clock_basis');
     if(frame.rois.some(r=>r.x+r.width>frame.client_width||r.y+r.height>frame.client_height)||new Set(frame.rois.map(r=>r.id)).size!==frame.rois.length)
       throw new Error('resident_roi_geometry');
   }

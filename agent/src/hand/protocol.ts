@@ -42,7 +42,7 @@ export type NativeAction =
   | { kind: 'mouse_move'; mode: 'absolute'; x: number; y: number }
   | { kind: 'mouse_move'; mode: 'relative'; dx: number; dy: number }
   | { kind: 'mouse_click'; button: 'left' | 'right' | 'middle'; x: number; y: number; duration_ms: number }
-  | { kind: 'focus_click'; x: number; y: number; duration_ms: number }
+  | { kind: 'focus_click'; x: number; y: number; duration_ms: number; visibility_mode?: 'complete_client'|'visible_point' }
   | { kind: 'mouse_wheel'; delta: number }
   | { kind: 'mouse_drag'; button: 'left' | 'right' | 'middle'; from: { x: number; y: number }; to: { x: number; y: number }; duration_ms: number };
 export type NativeOp = 'execute' | 'heartbeat' | 'cancel' | 'release_all' | 'shutdown' | 'status';

@@ -461,6 +461,30 @@
         },
         "reason": {
           "$ref": "#/definitions/reason"
+        },
+        "source_qpc_basis": {
+          "const": "host_frame_arrived"
+        },
+        "render_timestamp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "domain",
+            "at_ms",
+            "alignment"
+          ],
+          "properties": {
+            "domain": {
+              "const": "wgc-system-relative"
+            },
+            "at_ms": {
+              "type": "number",
+              "minimum": 0
+            },
+            "alignment": {
+              "const": "unverified"
+            }
+          }
         }
       },
       "required": [

@@ -8,9 +8,11 @@ WGC 使用按 HWND 创建的 capture item、常驻 `CreateFreeThreaded` 帧池�
 
 热采样无 PNG 编码、无 OCR。显式 `evidence()` 才从同一 checked-out GPU 帧读取完整客户区、同步按需保存 PNG，并可选择低频 Windows 本地 OCR。这是低频抽样取证，尚不是异步 PNG 编码。只有经过验证的低频完整图才提供 screenshot SHA。普通 `sample(true)` 中遗留的 save 参数不启用这些操作。
 
-每次热请求等待源 QPC 晚于 Windows 接收请求的新帧，最多 500ms，不对缓存帧更换 ID 以伪装新观察。WGC `SystemRelativeTime` 是 compositor QPC；原 WinInput 回执的 first successful SendInput 起止也是 Windows QPC。在同一启动时钟身份下可统计帧源到输入发出区间，不能与协调器单调时钟直接相减。[SystemRelativeTime](https://learn.microsoft.com/en-us/uwp/api/windows.graphics.capture.direct3d11captureframe.systemrelativetime)
+每次热请求等待真实FrameArrived回调晚于Windows接收请求的新帧，最多500ms；原始compositor戳还须未被重复使用，不对缓存帧更换ID或源时间。2026-10-07实测`SystemRelativeTime`比同次宿主回调QPC领先约15ms，不能未经对时直接比较。协议保存`render_timestamp`为`wgc-system-relative / alignment=unverified`；`source_qpc_basis=host_frame_arrived`的源时间取真实回调时读到的Windows QPC，并与`arrived_qpc_ms`相等。原WinInput first successful SendInput同属Windows QPC，可在相同时钟身份下报告真实回调→输入区间；compositor→回调延迟与协调器跨域时间保持unknown。[SystemRelativeTime](https://learn.microsoft.com/en-us/uwp/api/windows.graphics.capture.direct3d11captureframe.systemrelativetime)
 
-输入仍经过 L3、Body、统一执行闸及原 WinInput。宿主只接受绑定原 frame、布局、ROI、计划、意图和批准 action SHA 的有限动作；每个动作最多 150ms。Windows 再检查源 QPC 年龄不超过 750ms、目标身份、布局、前台、首 DOWN 前自由光标和人类按钮状态，以及鼠标落点归属。普通动作不允许后台输入。焦点恢复仅保留 AGENTS 中已授权的单次例外，完整可见、空闲严格超过 5 秒等条件没有放宽。
+输入仍经过L3、Body、统一执行闸及原WinInput。宿主只接受绑定原frame、布局、ROI、计划、意图和批准action SHA的有限动作；每个动作最多150ms。Windows再检查源QPC年龄不超过750ms、目标身份、布局、前台、首DOWN前自由光标和人类按钮状态，以及鼠标落点归属。普通动作不允许后台输入。焦点恢复的最新可见背景点例外见AGENTS及[具体安全闸](recovery-visible-focus.md)，仍要求空闲严格超过5秒、有限输入与独立前台效果确认。
+
+多ROI热采集仅对所有ROI的包围矩形作一次GPU staging/map，再在Windows内存里按原物理坐标切片；每个ROI独立字节SHA和原校准保持不变，不缩放图像来伪造匹配。热路径不编码PNG、不OCR；显式证据请求另作完整帧编码。
 
 `cancel` 和 `release_all` 对应原 WinInput 控制回执，保留连接和后续采样；`shutdown`、EOF、750ms 控制心跳到期及总预算到期才关闭宿主。输入模式长期复用一次原 WinInput 与独立 watchdog、ledger；不把它们放入协调器的强杀组。关闭结果必须有匹配会话的 release_all 实际回执、空 ledger、输入器退出和 capture dispose，再另核对计划任务删除及 GetTask 不存在。只读模式不取得输入器，报告 `no_executor_acquired`，不能据此声称已验证 held-key 断连释放。
 
