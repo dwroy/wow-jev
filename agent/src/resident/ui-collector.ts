@@ -5,8 +5,8 @@ import type {JsonValue,Observation,ObservedField} from '../core/protocol.js';
 import type {Collected} from '../eye/runtime.js';
 import {MemoryFrameRegistry} from '../eye/memory-frame.js';
 import type {ResidentClient} from './client.js';
-import type {ResidentMemorySample} from './protocol.js';
-import type {UiFrame,UiSkill,UiScope,UiSource,UiState,UiElement} from '../ui-skills/types.js';
+import type {ResidentMemorySample,ResidentMemoryFrame} from './protocol.js';
+import type {UiFrame,UiSkill,UiScope,UiSource,UiState,UiElement,HardStop} from '../ui-skills/types.js';
 import type {TargetScopeVerifier} from '../layers/contracts.js';
 import {canonical} from '../behavior/validation.js';
 import {recognizeTutorialVisual} from '../tutorial/recognition.js';
@@ -34,6 +34,7 @@ export class UiResidentCollector {
     add('capture.available',true,'cv');add('window.focused',s.window.focused,'window');add('window.scope',m.target_scope,'window');add('ui.layout_id',m.layout_id,'cv');
     if(s.input_state.status==='known'){add('input.cursor_free',s.input_state.cursor_free===true,'window',s.input_state.sampled_qpc_ms);add('input.mouse_buttons_held',s.input_state.mouse_buttons_held===true,'window',s.input_state.sampled_qpc_ms);}
     let state:UiState|null=null;const elements:UiElement[]=[];const matched=s.ui_skills,skills=this.options.skills();
+    const stopKind=(raw:unknown):HardStop=>typeof raw==='string'&&['credentials','two_factor','terms','update'].includes(raw)?raw as HardStop:'unclassified';
     const skillMatches:Array<{skill_id:string;signature_sha256:string}>=[];
     if(matched&&matched.knowledge_sha256===this.options.knowledgeSha()) {
       if(matched.started_qpc_ms<m.source_qpc_ms||matched.finished_qpc_ms<matched.started_qpc_ms||matched.finished_qpc_ms>s.local_clock.at_ms)throw new Error('ui_native_match_timing');
@@ -43,7 +44,7 @@ export class UiResidentCollector {
         skillMatches.push({skill_id:skill.skill_id,signature_sha256:skill.signature.sha256});
         if(matched.status==='known'&&match.state_id===matched.state_id){
           // Same state may expose multiple independently matched elements; route chooses among them.
-          if(!state||skill.action?.kind==='key')state={id:match.state_id,confidence:matched.confidence,signature_sha256:skill.signature.sha256,hard_stop:match.hard_stop?'credentials':null};
+          if(!state||skill.action?.kind==='key')state={id:match.state_id,confidence:matched.confidence,signature_sha256:skill.signature.sha256,hard_stop:match.hard_stop?stopKind((match as unknown as Record<string,unknown>).hard_stop_kind):null};
           const b=skill.element.bbox;if(!skill.action&&!/(?:npc|talk|dialogue|quest)/i.test(skill.element.purpose))elements.push({id:skill.element.id,x:Math.floor((b.x+b.width/2)*m.client_width),y:Math.floor((b.y+b.height/2)*m.client_height),layout_id:m.layout_id,enabled:true,signature_sha256:skill.signature.sha256});
         }
       }
@@ -51,11 +52,15 @@ export class UiResidentCollector {
     const selected=s.cv.selected_character;
     if(selected?.verified===true&&selected.name==='小呵'&&selected.class==='warrior'&&selected.faction==='alliance'&&m.rois.some(r=>r.calibration_sha256===selected.calibration_sha256))add('ui.selected_character',{name:'小呵',class:'warrior',faction:'alliance'},'cv');
     const tutorial=s.cv.tutorial_interaction as Record<string,unknown>|undefined;
-    // A tutorial background may remain visible behind a modal. Preserve native
-    // ambiguity instead of upgrading its conflicting learned matches to world.
-    const learnedAmbiguous=matched?.status==='unknown'&&matched.matches.length>0;
-    if(!state&&!learnedAmbiguous&&tutorial?.verified===true&&m.rois.some(r=>r.calibration_sha256===tutorial.calibration_sha256))state={id:'in_world',confidence:.95,signature_sha256:String(tutorial.calibration_sha256),hard_stop:null};
-    if(matched?.hard_stop===true)add('ui.hard_stop','credentials','cv'); // Conservative unclassified stop; never authorizes input.
+    // A specific tutorial template is never a general playable-world proof.
+    // Unknown or modal recognition stays on the slow path.
+    const recognitionRaw=matched as unknown as {recognition_status?:string;route_eligibility?:string;confidence_basis?:string;modal?:{status?:string}}|undefined;
+    const recognition={status:recognitionRaw?.recognition_status==='known'?'known' as const:recognitionRaw?.recognition_status==='hard_stop'?'hard_stop' as const:'unknown' as const,
+      route_eligibility:recognitionRaw?.route_eligibility==='candidate'?'candidate' as const:recognitionRaw?.route_eligibility==='hard_stop'?'hard_stop' as const:'slow_path' as const,
+      confidence_basis:recognitionRaw?.confidence_basis??'unverified',modal_status:recognitionRaw?.modal?.status==='clear'?'clear' as const:recognitionRaw?.modal?.status==='present'?'present' as const:'unknown' as const};
+    add('ui.recognition',recognition,'cv');
+    const hardStop=matched?.hard_stop?stopKind((matched as unknown as Record<string,unknown>).hard_stop_kind):state?.hard_stop??null;
+    if(hardStop)add('ui.hard_stop',hardStop,'cv');
     if(skillMatches.length)add('ui.skill_matches',skillMatches,'cv');
     if(state)add('ui.state',state as unknown as JsonValue,'cv');
     if(state?.id==='tutorial_look_around')add('input.mouse_mode','world','cv');
@@ -65,14 +70,14 @@ export class UiResidentCollector {
     }
     if(state?.id==='tutorial_talk_jaina'&&matched?.status==='known'){
       const entry=matched.matches.map(match=>skills.find(k=>k.skill_id===match.skill_id)).find(k=>k?.element.purpose==='talk_jaina_layered'&&k.element.label==='吉安娜·普罗德摩尔');
-      const roi=entry?m.rois.find(r=>r.id==='learned-ui-'+entry.skill_id):null;
-      if(entry&&roi){
-        const b=entry.element.bbox,point={x:Math.floor((b.x+b.width/2)*m.client_width),y:Math.floor((b.y+b.height/2)*m.client_height)},signature='visible-name:'+entry.element.label;
-        if(point.x<roi.x||point.y<roi.y||point.x>=roi.x+roi.width||point.y>=roi.y+roi.height)throw new Error('ui_npc_point_outside_current_body_roi');
+      const match=entry?matched.matches.find(row=>row.skill_id===entry.skill_id):null;
+      const surface=nativeNpcSurface(m,match);
+      if(entry&&surface){
+        const {point,rect,roi}=surface,signature='visible-name:'+surface.name;
         add('tutorial.instruction','与吉安娜·普罗德摩尔交谈','cv');add('target.signature',signature,'cv');
         add('input.mouse_mode','world','cv');
         add('target.screen_interaction',{id:entry.element.id,signature,layout_id:m.layout_id,...point,enabled:true},'cv');
-        add('target.world_npc_surface',{id:entry.element.id,signature,layout_id:m.layout_id,rect:{x:roi.x,y:roi.y,width:roi.width,height:roi.height},point,frame_id:m.frame_id,roi_id:roi.id,roi_sha256:roi.sha256,calibration_sha256:roi.calibration_sha256,visible:true},'cv');
+        add('target.world_npc_surface',{id:entry.element.id,signature,layout_id:m.layout_id,rect,point,frame_id:m.frame_id,roi_id:roi.id,roi_sha256:roi.sha256,calibration_sha256:roi.calibration_sha256,visible:true},'cv');
       }
     }
     if(elements.length){add('ui.elements',elements.map(({signature_sha256:_,...e})=>e),'cv');add('ui.control_signatures',elements.map(e=>({id:e.id,signature_sha256:e.signature_sha256})),'cv');add('input.mouse_mode','ui','cv');}
@@ -90,7 +95,22 @@ export class UiResidentCollector {
     this.scopes.set(id,{collected,fingerprint:canonical(observation)});while(this.scopes.size>64)this.scopes.delete(this.scopes.keys().next().value!);
     const {windows_session_id,...target}=m.target;
     const source:UiSource={observation_id:id,frame_id:m.frame_id,seq:m.seq,width:m.client_width,height:m.client_height,layout_id:m.layout_id,target:{...target,session_id:windows_session_id},clock:{domain:'windows-qpc',clock_id:m.windows_clock_id,ticks:m.source_qpc_ms,unit:'ms'},capture,producer:'resident_wgc',roi_sha256:m.roi_sha256};
-    const frame:UiFrame={collected,source,state,elements,hard_stop:matched?.hard_stop?'credentials':state?.hard_stop??null,scope:this.options.scope};this.frames.set(collected,frame);
+    const nativeEvidence=evidence?structuredClone(evidence):undefined;if(nativeEvidence)delete (nativeEvidence as unknown as Record<string,unknown>).bracket;
+    const frame:UiFrame={collected,source,state,elements,hard_stop:hardStop,scope:this.options.scope,recognition,...(nativeEvidence?{native_evidence:nativeEvidence}:{} )};this.frames.set(collected,frame);
     await writeFile(join(this.options.directory,id+'.json'),JSON.stringify({source,native:s,observation})+'\n',{flag:'wx'});return frame;
   }
+}
+
+/** Current native nameplate/body detector only; no reference element point. */
+export function nativeNpcSurface(m:ResidentMemoryFrame,raw:unknown):{point:{x:number;y:number};rect:{x:number;y:number;width:number;height:number};name:string;roi:ResidentMemoryFrame['rois'][number]}|null{
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
+  const match=raw as Record<string,any>,location=match.location,point=match.current_point,rect=match.current_rect;
+  if(!location||location.method!=='current_nameplate_yellow_outline_v1'||location.name!=='吉安娜·普罗德摩尔'||location.point_semantics!=='detected_body_interior'||location.frame_id!==m.frame_id||location.source_qpc_ms!==m.source_qpc_ms||location.layout_id!==m.layout_id)return null;
+  const roi=m.rois.find(r=>r.id===location.roi_id&&r.id==='learned-ui-npc-current-view');
+  if(!roi||location.roi_sha256!==roi.sha256||location.calibration_sha256!==roi.calibration_sha256||!point||!rect||
+    !['x','y'].every(k=>Number.isSafeInteger(point[k]))||!['x','y','width','height'].every(k=>Number.isSafeInteger(rect[k]))||
+    rect.x<0||rect.y<0||rect.width<1||rect.height<1||rect.x+rect.width>m.client_width||rect.y+rect.height>m.client_height||
+    rect.x<roi.x||rect.y<roi.y||rect.x+rect.width>roi.x+roi.width||rect.y+rect.height>roi.y+roi.height||
+    point.x<rect.x||point.y<rect.y||point.x>=rect.x+rect.width||point.y>=rect.y+rect.height)return null;
+  return{point:{x:point.x,y:point.y},rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},name:location.name,roi};
 }

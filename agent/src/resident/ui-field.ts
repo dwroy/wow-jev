@@ -64,6 +64,9 @@ export async function uiField(args:string[]){
         const sourceFrame=skill.signature.source as UiSource;
         requests.push({part:skill.signature,metric:'chroma_surface_v1',source_frame:{width:sourceFrame.width,height:sourceFrame.height}});targets.push(entry.signature);
         const anchors=(skill.signature.anchors??[])as Array<Record<string,unknown>>;
+        const nameIndex=anchors.findIndex(anchor=>String(anchor.id).includes('npc-current-name'));
+        if(nameIndex<0)throw new Error('ui_current_npc_name_anchor_required');
+        Object.assign(entry.signature,{npc_locator:{method:'current_nameplate_yellow_outline_v1',name:'吉安娜·普罗德摩尔',anchor_index:nameIndex}});
         for(let j=0;j<anchors.length;j++){requests.push({part:anchors[j]!,metric:String(anchors[j]!.id).includes('npc-current-name')?'green_glyph_tolerant_v3':'rgb_exact_v1',source_frame:{width:sourceFrame.width,height:sourceFrame.height}});targets.push(entry.signature.anchors[j]!);}
       }
       await writeFile(requestPath,JSON.stringify(requests)+'\n',{flag:'wx'});

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {UiResidentCollector} from '../src/resident/ui-collector.js';
+import {UiResidentCollector,nativeNpcSurface} from '../src/resident/ui-collector.js';
 import type {ResidentClient} from '../src/resident/client.js';
 import {MemoryFrameRegistry} from '../src/eye/memory-frame.js';
 import {MemoryOwner,memorySample} from './fixtures/resident-memory.js';
@@ -28,7 +28,20 @@ test('native ambiguous learned scenes stay unknown despite a verified tutorial b
       if(mode==='ambiguous'){
         assert.equal(frame.state,null);assert.equal(frame.collected.observation.fields['ui.state'],undefined);
         assert.equal(routeUi(frame,skills,0).owner,'seed');
-      }else assert.equal(frame.state?.id,mode==='empty'?'in_world':'controls_position_hint');
+      }else assert.equal(frame.state?.id,mode==='empty'?undefined:'controls_position_hint');
     }
   }finally{await rm(directory,{recursive:true,force:true});}
+});
+
+test('current NPC surface binds same frame/QPC/ROI and never uses the reference element point',()=>{
+  const sample=memorySample('dynamic-npc',1),m=sample.memory_frame;
+  m.rois.push({id:'learned-ui-npc-current-view',x:0,y:0,width:m.client_width,height:m.client_height,sha256:'f'.repeat(64),calibration_id:'native-ui',calibration_sha256:'e'.repeat(64)});
+  const raw={current_point:{x:420,y:310},current_rect:{x:400,y:250,width:100,height:200},location:{method:'current_nameplate_yellow_outline_v1',name:'吉安娜·普罗德摩尔',point_semantics:'detected_body_interior',frame_id:m.frame_id,source_qpc_ms:m.source_qpc_ms,layout_id:m.layout_id,roi_id:'learned-ui-npc-current-view',roi_sha256:'f'.repeat(64),calibration_sha256:'e'.repeat(64)}};
+  assert.deepEqual(nativeNpcSurface(m,raw)?.point,{x:420,y:310});
+  for(const mutate of [
+    (v:typeof raw)=>{v.location.frame_id='old';},(v:typeof raw)=>{v.location.source_qpc_ms--;},(v:typeof raw)=>{v.location.layout_id='other';},
+    (v:typeof raw)=>{v.location.roi_sha256='a'.repeat(64);},(v:typeof raw)=>{v.location.name='其它NPC';},(v:typeof raw)=>{v.current_point.x=900;},
+    (v:typeof raw)=>{v.location.method='reference_bbox';},
+  ]){const v=structuredClone(raw);mutate(v);assert.equal(nativeNpcSurface(m,v),null);}
+  assert.equal(nativeNpcSurface(m,{reference_point:{x:420,y:310}}),null);
 });
