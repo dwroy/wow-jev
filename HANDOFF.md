@@ -330,3 +330,19 @@ UI 和世界屏幕交互仍使用原同帧目标、布局、自由光标条件�
 验收：TypeScript 定向 102/102、0 跳过/失败（actions-timeline、actions-body、activate-control、memory-frame-gate、tutorial-resident、tutorial-layered），全树 typecheck 与 diff check 通过。日志 `/tmp/wow-click-timeline-targeted.tap`、`/tmp/wow-click-timeline-typecheck.log`。首轮教程契约测试因独立树缺 Python venv 报环境故障；连接主 checkout 既有环境后定向全绿，不删/跳测试。本模块未编译或启动 Windows、未读取凭据/调用模型/发送输入；仅本地提交，不推送。
 
 原生验收由负责人继续：`RunTimeline` 的绝对计划时间本身不能证明真实 MOVE→DOWN ≥150ms 或 DOWN→UP ≥80ms。原生必须以实际 MOVE 完成和 DOWN 完成时刻守住下界，慢 MOVE/检查需顺延，取消或失焦在 DOWN 前必须阻止按下。focus_click 的 own MOVE 更新 GetLastInputInfo，idle 豁免须与 actual DOWN/焦点激活计时分开，不能因此放宽用户按钮与自由光标检查。
+
+## 2026-10-07 重连点击分段时序重试
+
+按 reviewer=claude 对前帧的审核，仅一次重试；鼠标原语改为独立MOVE→Windows QPC等待≥150ms并持续安全复核→DOWN持请求时长→独立账本UP。duration_ms明确是持有时长，不是释放后的等待。首次SendInput边界为MOVE，click_timing另存DOWN/UP，不冒充按钮效果。焦点恢复MOVE不提前触发激活期限，首DOWN前仍保留自由光标/人类按钮/点位核验。
+
+现场 out/acceptance/click-retry-20261007：同源审核帧SHA85b8f0…a441a76与当前重连按钮/Logo匹配；FG=0x904a6，PID22072，2560×1440/DPI144。请求hold80；MOVE完成→DOWN开始158.4412ms，DOWN完成→UP开始88.4799ms；3/3事件，独立release_all+空账本+executor退出。Windows本地以UP结束为参考预约+1/+3/+8秒图片，实际capture开始+1094.649/+3182.840/+8094.750ms（偏差保留）。+1图显示刷新服务器列表，+8图角色列表加载，随后step-3角色选择CV核实小啊/warrior/alliance。恢复有意maxActions=1，返回recovery_action_budget；input_issued=1、effects_confirmed=1、release=confirmed，不是游戏交谈完成。4个一次性WowJev-SessionRecovery任务均删除并GetTask回查。相关83 TS、27 Python、typecheck与Windows编译通过；全量回归/全局Body timeline覆盖继续整合，未推送。
+
+用户新增操作技能自学习A–F并授权反复登出/进世界和退出/战网重启练习；先已报告本次重连成功，下一步docs/ui-skill-learning.md设计、agent.sqlite技能图/独立学习者、分层路由/审核队列、常驻Windows签名识别、最小2轮练习。凭据/验证/协议/更新仍硬停止，Seed配置等待通知，不查其它密钥。
+
+## 2026-10-07：原生标准 click timeline 的真实时钟下界
+
+在同一独立 `codex/click-timeline` 树先合入负责人原生分段点击提交 `7cbc4eb`（本树 `55f4c42`），HANDOFF 双方段落完整保留。新增 WinInput 生产 `ClickTimelineTiming`，仅识别 Builder 标准单/双 click 的三/六阶段，依据真实成功 SendInput 的 MOVE 完成 QPC 等待 DOWN 至少 150ms、依据 DOWN 完成 QPC 等待 UP 至少 80ms或显式更长 hold。双击保留独立两次 settle 与批准的 inter-click gap，原动作 Events、duration 和批准 hash 不改。计划总时长额外安全排程最多 250ms，每次原生发送前再次检查下界/剩余预算；超宽限取消并释放，普通前台、取消、看门狗、点位、首 DOWN 自由光标和账本仍生效。drag、转向与按键不被重释为 click。
+
+新增 `tools/ClickTimelineTimingFixture.cs` 直接调用同一生产 helper，无窗口/截屏/SendInput。29项检查覆盖 MOVE/DOWN 自身延迟、显式 hold、双击、MOVE后取消/丢焦无 DOWN、DOWN后取消的 fake owned release、250ms上限、形态隔离与批准计划不变。复用原纯 safety 42项/visible point 24项全部通过；这些既有几何/空账本测试不冒充新 click 实际时序证明。Windows 四模块编译、TypeScript定向105/105、typecheck、diff check通过。原件 `/tmp/wow-click-timeline-native-fixture.json`、`/tmp/wow-click-native-safety.json`、`/tmp/wow-click-native-visible.json`、`/tmp/wow-click-native-build.log`、`/tmp/wow-click-timeline-native-targeted.tap`。
+
+`click_timing` 对标准 timeline 记录第一 click 的真实原始 MOVE/DOWN/UP区间，hold_requested取该 click 的计划 UP-DOWN（默认80），不能误用整条230/540时长；整体 input_timing仍保留最后实际输入。预登记但没有发送DOWN的清理UP不写成click UP，双click后续紧急释放不覆盖第一click记录。输入已发出边界仍为第一成功 MOVE，不宣称游戏效果。仅本地提交、未推送、无真实游戏输入；Resident总时长准入调整和主集成/现场由负责人继续。

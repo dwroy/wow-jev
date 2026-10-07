@@ -51,7 +51,9 @@ static class WinInput
         public long TimelineStart;
         public int Duration, Button, X, Y, Dx, Dy, Delta, FromX, FromY, ToX, ToY;
         public long StartedMs = -1;
-        public double FirstSendStartedMs = -1, FirstSendFinishedMs = -1, LastSendFinishedMs = -1;
+        public double FirstSendStartedMs = -1, FirstSendFinishedMs = -1, LastSendStartedMs = -1, LastSendFinishedMs = -1;
+        public int ClickHoldRequestedMs;
+        public ClickTimelineTiming ClickTimeline;
         public long Requested, Inserted;
         public bool OwnedEver;
         public bool ReleaseAccounted;
@@ -309,7 +311,7 @@ static class WinInput
             if (inserted > 0)
             {
                 if (work.FirstSendStartedMs < 0) { work.FirstSendStartedMs = sendStarted; work.FirstSendFinishedMs = sendFinished; }
-                work.LastSendFinishedMs = sendFinished;
+                work.LastSendStartedMs = sendStarted; work.LastSendFinishedMs = sendFinished;
             }
             if (inserted != packets.Length) throw new InputFailure("sendinput_partial", "Input was not fully inserted; Win32 error " + Native.LastError);
         }
@@ -400,13 +402,25 @@ static class WinInput
         {
             // One command owns all keys/buttons. Each same-time batch is one SendInput.
             work.TimelineStart = Clock.NowMs;
+            var steps = new ClickTimelineStep[work.Events.Length];
+            for (int i = 0; i < work.Events.Length; i++)
+                steps[i] = new ClickTimelineStep(work.Events[i].Kind, work.Events[i].At, work.Events[i].Button);
+            work.ClickTimeline = ClickTimelineTiming.TryCreate(steps, work.Duration, Clock.PreciseMs);
+            if (work.ClickTimeline != null) work.ClickHoldRequestedMs = work.ClickTimeline.FirstHoldMs;
             ulong expectedKeys = 0; int expectedMouse = 0;
             int cursor = 0;
             while (cursor < work.Events.Length)
             {
                 int at = work.Events[cursor].At, end = cursor + 1;
                 while (end < work.Events.Length && work.Events[end].At == at) end++;
-                WaitUntil(work, work.TimelineStart + at);
+                if (work.ClickTimeline == null) WaitUntil(work, work.TimelineStart + at);
+                else
+                {
+                    try { work.ClickTimeline.WaitBefore(cursor, delegate { return Clock.PreciseMs; },
+                        delegate(int milliseconds) { if (work.Cancel.WaitOne(milliseconds)) throw new InputFailure(work.CancelReason, "Action cancelled during timeline click wait"); },
+                        delegate { CheckSafe(work, store.Read()); }); }
+                    catch (ClickTimelineTiming.Failure error) { throw new InputFailure(error.Code, error.Message); }
+                }
                 List<Native.InputPacket> packets = new List<Native.InputPacket>();
                 ulong downKeys = 0, upKeys = 0; int downMouse = 0, upMouse = 0;
                 for (int i = cursor; i < end; i++)
@@ -459,15 +473,40 @@ static class WinInput
                             throw new InputFailure("timeline_cursor_not_free","Cursor ownership changed before DOWN");
                         work.TimelineMouseDownIssued=true;
                     }
+                    if (work.ClickTimeline != null)
+                    {
+                        try { work.ClickTimeline.CheckDispatch(cursor, Clock.PreciseMs); }
+                        catch (ClickTimelineTiming.Failure error) { throw new InputFailure(error.Code, error.Message); }
+                    }
                     SendEvents(work, packets.ToArray());
+                    if (work.ClickTimeline != null)
+                    {
+                        // Save only the first click's original successful call
+                        // interval. input_timing still covers the whole command.
+                        if (cursor == 0) { work.ClickMoveIssued = true; work.ClickMoveFinishedMs = work.LastSendFinishedMs; }
+                        else if (cursor == 1) { work.ClickDownStartedMs = work.LastSendStartedMs; work.ClickDownFinishedMs = work.LastSendFinishedMs; }
+                        else if (cursor == 2) { work.ClickUpStartedMs = work.LastSendStartedMs; work.ClickUpFinishedMs = work.LastSendFinishedMs; }
+                    }
                     state.HeldKeysMask &= ~upKeys; state.HeldMouseMask &= ~upMouse;
                     expectedKeys = state.HeldKeysMask; expectedMouse = state.HeldMouseMask;
                     if (state.HeldKeysMask == 0 && state.HeldMouseMask == 0)
-                    { state.LeaseDeadlineMs = 0; if (work.OwnedEver) work.ReleaseAccounted = true; }
+                    { state.LeaseDeadlineMs = 0; if (work.OwnedEver) work.ReleaseAccounted = true; if (work.ClickTimeline != null) work.TimelineMouseDownIssued = false; }
                 });
+                if (work.ClickTimeline != null)
+                {
+                    try { work.ClickTimeline.Record(cursor, work.LastSendStartedMs, work.LastSendFinishedMs); }
+                    catch (ClickTimelineTiming.Failure error) { throw new InputFailure(error.Code, error.Message); }
+                }
                 cursor = end;
             }
-            WaitUntil(work, work.TimelineStart + work.Duration);
+            if (work.ClickTimeline == null) WaitUntil(work, work.TimelineStart + work.Duration);
+            else
+            {
+                try { work.ClickTimeline.WaitCompletion(delegate { return Clock.PreciseMs; },
+                    delegate(int milliseconds) { if (work.Cancel.WaitOne(milliseconds)) throw new InputFailure(work.CancelReason, "Action cancelled during timeline completion"); },
+                    delegate { CheckSafe(work, store.Read()); }); }
+                catch (ClickTimelineTiming.Failure error) { throw new InputFailure(error.Code, error.Message); }
+            }
         }
         ReleaseResult TryRelease(Work work, int timeoutMs)
         {
@@ -497,8 +536,14 @@ static class WinInput
                     double upStarted = Clock.PreciseMs;
                     last = store.ReleaseOwned("executor_release");
                     double upFinished = Clock.PreciseMs;
-                    if (work != null && work.ClickMoveIssued && last.Requested > 0 && last.Inserted > 0)
-                    { work.ClickUpStartedMs = upStarted; work.ClickUpFinishedMs = upFinished; work.LastSendFinishedMs = upFinished; }
+                    if (work != null && last.Requested > 0 && last.Inserted > 0)
+                    {
+                        work.LastSendFinishedMs = upFinished;
+                        // Cleanup may release a pre-registered button before a
+                        // DOWN was sent; that is not a click UP milestone.
+                        if (work.ClickMoveIssued && work.ClickDownFinishedMs >= 0 && work.ClickUpStartedMs < 0)
+                        { work.ClickUpStartedMs = upStarted; work.ClickUpFinishedMs = upFinished; }
+                    }
                     requested += last.Requested; inserted += last.Inserted;
                     if (work != null) { Interlocked.Add(ref work.Requested, last.Requested); Interlocked.Add(ref work.Inserted, last.Inserted); }
                     if (last.Released)
@@ -553,6 +598,8 @@ static class WinInput
             catch (InputFailure error)
             {
                 reason = error.Code; message = error.Message;
+                if (error.Code == "click_schedule_grace_exceeded")
+                { work.CancelReason = error.Code; work.Cancel.Set(); RequestStop(error.Code); }
                 status = work.Cancel.WaitOne(0) ? "cancelled" : work.Requested == 0 ? "rejected" : "failed";
             }
             catch (Exception error) { status = "failed"; reason = "execution_failed"; message = error.Message; }
@@ -582,7 +629,7 @@ static class WinInput
             reply.Add("input_timing", work.FirstSendStartedMs < 0 ? null : Obj("clock", "windows_qpc",
                 "first_send_started_ms", work.FirstSendStartedMs, "first_send_finished_ms", work.FirstSendFinishedMs,
                 "last_send_finished_ms", work.LastSendFinishedMs));
-            if (work.ClickMoveIssued) reply.Add("click_timing", Obj("clock", "windows_qpc", "settle_min_ms", ClickSettleMs, "hold_requested_ms", work.Duration,
+            if (work.ClickMoveIssued) reply.Add("click_timing", Obj("clock", "windows_qpc", "settle_min_ms", ClickSettleMs, "hold_requested_ms", work.ClickHoldRequestedMs > 0 ? work.ClickHoldRequestedMs : work.Duration,
                 "move_finished_ms", work.ClickMoveFinishedMs, "down_started_ms", work.ClickDownStartedMs < 0 ? null : (object)work.ClickDownStartedMs,
                 "down_finished_ms", work.ClickDownFinishedMs < 0 ? null : (object)work.ClickDownFinishedMs,
                 "up_started_ms", work.ClickUpStartedMs < 0 ? null : (object)work.ClickUpStartedMs, "up_finished_ms", work.ClickUpFinishedMs < 0 ? null : (object)work.ClickUpFinishedMs));
@@ -1058,5 +1105,113 @@ public static class TimelineCursorSafety
     {
         var cursor=new Cursor{Size=(uint)Marshal.SizeOf(typeof(Cursor))};if(!GetCursorInfo(ref cursor))return false;var point=cursor.Position;
         return ScreenToClient(hwnd,ref point)&&Native.RecoveryPointOwnedByWindow(hwnd,point.X,point.Y);
+    }
+}
+
+// Pure production scheduling for standalone Builder click/double-click plans.
+// No SendInput, desktop API, wall-clock assumptions or payload mutation here.
+public sealed class ClickTimelineStep
+{
+    public readonly string Kind;
+    public readonly int AtMs, Button;
+    public ClickTimelineStep(string kind, int atMs, int button) { Kind = kind; AtMs = atMs; Button = button; }
+}
+public sealed class ClickTimelineTiming
+{
+    public const int SettleMs = 150, MinimumHoldMs = 80, GraceMs = 250;
+    public sealed class Failure : Exception
+    {
+        public readonly string Code;
+        public Failure(string code) : base(code) { Code = code; }
+    }
+    readonly ClickTimelineStep[] steps;
+    readonly double start, plannedEnd, deadline;
+    readonly double[] started, finished;
+    int next;
+    ClickTimelineTiming(ClickTimelineStep[] plan, int duration, double at)
+    {
+        steps = (ClickTimelineStep[])plan.Clone(); start = at; plannedEnd = at + duration; deadline = plannedEnd + GraceMs;
+        started = new double[plan.Length]; finished = new double[plan.Length];
+        for (int i = 0; i < plan.Length; i++) { started[i] = -1; finished[i] = -1; }
+    }
+    public int FirstHoldMs { get { return steps[2].AtMs - steps[1].AtMs; } }
+    public static ClickTimelineTiming TryCreate(ClickTimelineStep[] plan, int duration, double start)
+    {
+        if (plan == null || plan.Length != 3 && plan.Length != 6 || duration < 1 || duration > 5000 ||
+            Double.IsNaN(start) || Double.IsInfinity(start) || start < 0) return null;
+        for (int i = 0; i < plan.Length; i += 3)
+        {
+            var move = plan[i]; var down = plan[i + 1]; var up = plan[i + 2];
+            if (move == null || down == null || up == null || move.Kind != "absolute_mouse_move" || down.Kind != "button_down" || up.Kind != "button_up" ||
+                move.AtMs < 0 || down.AtMs - move.AtMs < SettleMs || up.AtMs - down.AtMs < MinimumHoldMs ||
+                up.AtMs > duration || down.Button != up.Button || down.Button != 1 && down.Button != 2 && down.Button != 4 ||
+                i > 0 && move.AtMs <= plan[i - 1].AtMs) return null;
+        }
+        return new ClickTimelineTiming(plan, duration, start);
+    }
+    double MinimumTail(int index)
+    {
+        double duration = 0;
+        for (int i = index + 1; i < steps.Length; i++)
+        {
+            int phase = i % 3;
+            duration += phase == 1 ? SettleMs : steps[i].AtMs - steps[i - 1].AtMs;
+        }
+        return duration;
+    }
+    public double Earliest(int index)
+    {
+        if (index != next || index >= steps.Length) throw new Failure("click_schedule_order");
+        double earliest = start + steps[index].AtMs;
+        if (index > 0)
+        {
+            if (finished[index - 1] < 0) throw new Failure("click_schedule_missing_phase");
+            int phase = index % 3;
+            double gap = phase == 1 ? SettleMs : steps[index].AtMs - steps[index - 1].AtMs;
+            earliest = Math.Max(earliest, finished[index - 1] + gap);
+        }
+        if (earliest + MinimumTail(index) > deadline) throw new Failure("click_schedule_grace_exceeded");
+        return earliest;
+    }
+    public void WaitBefore(int index, Func<double> now, Action<int> wait, Action guard)
+    {
+        double earliest = Earliest(index);
+        while (true)
+        {
+            guard();
+            double current = now();
+            if (Double.IsNaN(current) || Double.IsInfinity(current) || current < start) throw new Failure("click_schedule_clock_invalid");
+            if (current + MinimumTail(index) > deadline) throw new Failure("click_schedule_grace_exceeded");
+            if (current >= earliest) return;
+            wait(Math.Max(1, Math.Min(5, (int)Math.Ceiling(earliest - current))));
+        }
+    }
+    public void WaitCompletion(Func<double> now, Action<int> wait, Action guard)
+    {
+        if (next != steps.Length) throw new Failure("click_schedule_missing_phase");
+        while (true)
+        {
+            guard(); double current = now();
+            if (Double.IsNaN(current) || Double.IsInfinity(current) || current < finished[next - 1])
+                throw new Failure("click_schedule_clock_invalid");
+            if (current > deadline) throw new Failure("click_schedule_grace_exceeded");
+            if (current >= plannedEnd) return;
+            wait(Math.Max(1, Math.Min(5, (int)Math.Ceiling(plannedEnd - current))));
+        }
+    }
+    public void CheckDispatch(int index, double current)
+    {
+        double earliest = Earliest(index);
+        if (Double.IsNaN(current) || Double.IsInfinity(current) || current < earliest)
+            throw new Failure("click_schedule_dispatch_before_lower_bound");
+        if (current + MinimumTail(index) > deadline) throw new Failure("click_schedule_grace_exceeded");
+    }
+    public void Record(int index, double began, double ended)
+    {
+        double earliest = Earliest(index);
+        if (Double.IsNaN(began) || Double.IsInfinity(began) || Double.IsNaN(ended) || Double.IsInfinity(ended) ||
+            began < earliest || ended < began) throw new Failure("click_schedule_actual_clock_order");
+        started[index] = began; finished[index] = ended; next++;
+        if (ended + MinimumTail(index) > deadline) throw new Failure("click_schedule_grace_exceeded");
     }
 }
