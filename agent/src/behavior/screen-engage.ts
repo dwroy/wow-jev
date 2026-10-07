@@ -39,3 +39,15 @@ export function nextScreenEngage(params:Record<string,JsonValue>,o:Observation,p
   for(const [path,value]of [['input.cursor_free',true],['input.mouse_buttons_held',false]]as const){const f=readKnown(o,path,p,true);if(f?.source!=='window'||f.value!==value)return blocked('training_engage_cursor_or_mouse');}
   return{action:{kind:'screen_interact',target_signature:String(params.target_signature),element_id:point.id,x:Number(point.x),y:Number(point.y),duration_ms:Number(params.action_duration_ms)},conditions:[...paths.filter(path=>path!=='ui.state').map(path=>condition(path,fields.get(path)!.value,p.maxAgeMs)),{field:'ui.state',op:'exists',max_age_ms:p.maxAgeMs},condition('input.cursor_free',true,p.maxAgeMs),condition('input.mouse_buttons_held',false,p.maxAgeMs)],state:'engaging_current_training_dummy_surface'};
 }
+
+/** A finite exploratory step toward an already observed training entity.
+ * W comes from the immutable profile's binding artifact, not a fresh CV claim. */
+export function nextScreenApproach(params:Record<string,JsonValue>,o:Observation,p:FieldPolicy,state:{lastActionAt?:number;lastActionObservation?:string}):ScreenEngageDecision{
+  if(params.action_duration_ms!==150)return blocked('training_approach_duration');
+  if(state.lastActionAt!==undefined)return o.id===state.lastActionObservation?blocked('training_approach_effect_not_new'):{status:'completed',reason:'bounded_movement_issued_approach_effect_unverified',effect:false};
+  const engage=nextScreenEngage({...params,action_duration_ms:80},o,p,{});if(!('action'in engage))return engage;
+  const mode=readKnown(o,'player.movement_mode',p,true),proof=readKnown(o,'player.ground_source',p,true);
+  if(mode?.source!=='cv'||mode.value!=='ground'||proof?.source!=='cv'||!object(proof.value)||proof.value.mode!=='ground'||typeof proof.value.frame_id!=='string'||typeof proof.value.roi_id!=='string'||!sha(proof.value.roi_sha256)||!sha(proof.value.calibration_sha256))return blocked('training_approach_current_ground_unknown');
+  const surface=readKnown(o,'target.world_npc_surface',p,true),layout=readKnown(o,'ui.layout_id',p,true);if(!object(surface?.value)||proof.value.frame_id!==surface.value.frame_id||proof.value.calibration_sha256!==surface.value.calibration_sha256||proof.value.layout_id!==layout?.value||proof.captured_at_ms!==layout?.captured_at_ms||mode.captured_at_ms!==layout?.captured_at_ms)return blocked('training_approach_ground_source_unbound');
+  return{action:{kind:'move',axis:'forward',duration_ms:150},conditions:[...engage.conditions,condition('player.movement_mode','ground',p.maxAgeMs),condition('player.ground_source',proof.value,p.maxAgeMs)],state:'bounded_training_dummy_approach'};
+}

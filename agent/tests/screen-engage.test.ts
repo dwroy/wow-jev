@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {nextScreenEngage} from '../src/behavior/screen-engage.js';
+import {nextScreenEngage,nextScreenApproach} from '../src/behavior/screen-engage.js';
 import type {Observation,JsonValue} from '../src/core/protocol.js';
 
 const signature='visible-name:作战假人';const params={target_signature:signature,action_duration_ms:80};
@@ -29,4 +29,11 @@ test('after input only a new target-frame proof can finish and never proves a ki
  for(const [path,value]of Object.entries({'target.selected_signature':signature,'target.selection_source':{kind:'current_target_frame_ocr',label:'作战假人',capture_sha256:'d'.repeat(64),source_frame_id:'frame-2',source_qpc_ms:1200,box:{x:1780,y:950,width:110,height:22}}}))o.fields[path]={status:'known',value,source:'local_ocr',confidence:1,captured_at_ms:180,source_observation_id:o.id,source_clock:{domain:'windows-qpc',value_ms:1200}};
  const out=nextScreenEngage(params,o,{...policy,now:210},state);assert.deepEqual(out,{status:'completed',reason:'training_dummy_selected_attack_effect_unverified',effect:false});
  const proof=o.fields['target.selection_source']!.value as Record<string,JsonValue>;proof.box={x:1780,y:150,width:110,height:22};assert.ok('status'in nextScreenEngage(params,o,{...policy,now:210},state));
+});
+
+test('approach requires current same-frame ground and never invents a current W binding',()=>{
+ const o=fixture();const proof={mode:'ground',frame_id:'frame-1',roi_id:'learned-ui-feet',roi_sha256:'d'.repeat(64),calibration_sha256:'c'.repeat(64),layout_id:'layout'};
+ for(const [name,value]of Object.entries({'player.movement_mode':'ground','player.ground_source':proof}))o.fields[name]={status:'known',value,source:'cv',confidence:1,captured_at_ms:100,source_observation_id:o.id};
+ const d=nextScreenApproach({...params,action_duration_ms:150},o,policy,{});assert.ok('action'in d&&d.action.kind==='move');assert.ok('action'in d&&!d.conditions.some(c=>c.field==='input.forward_binding'));
+ for(const mutate of [(x:Observation)=>{(x.fields['player.ground_source']!.value as Record<string,JsonValue>).frame_id='old';},(x:Observation)=>{x.fields['player.ground_source']!.source='seed';},(x:Observation)=>{(x.fields['player.ground_source']!.value as Record<string,JsonValue>).layout_id='other';}]){const changed=structuredClone(o);mutate(changed);assert.ok('status'in nextScreenApproach({...params,action_duration_ms:150},changed,policy,{}));}
 });

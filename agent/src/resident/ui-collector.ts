@@ -85,7 +85,6 @@ export class UiResidentCollector {
       const entry=matched.matches.map(match=>skills.find(k=>k.skill_id===match.skill_id)).find(k=>k?.element.purpose==='engage_training_dummy_layered'&&k.element.label==='作战假人');
       const match=entry?matched.matches.find(row=>row.skill_id===entry.skill_id):null;const surface=nativeNpcSurface(m,match);
       if(entry&&surface&&surface.name==='作战假人'){
-        state={id:'tutorial_attack_training',confidence:matched.confidence,signature_sha256:entry.signature.sha256,hard_stop:null};add('ui.state',state as unknown as JsonValue,'cv');
         const {point,rect,roi}=surface,signature='visible-name:作战假人';add('tutorial.instruction','攻击一个作战假人','cv');add('target.entity_kind','training_dummy','cv');add('target.signature',signature,'cv');add('input.mouse_mode','world','cv');
         add('target.screen_interaction',{id:entry.element.id,signature,layout_id:m.layout_id,...point,enabled:true},'cv');add('target.world_npc_surface',{id:entry.element.id,signature,layout_id:m.layout_id,rect,point,frame_id:m.frame_id,roi_id:roi.id,roi_sha256:roi.sha256,calibration_sha256:roi.calibration_sha256,visible:true},'cv');
       }
