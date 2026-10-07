@@ -4,6 +4,12 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-07用户处理遮挡后继续人工审核重连：WoW已前台，点击发出并释放，但后图仍重连页，当前供监督审核。** 稳定源码3c16340；初始session1 inputDefault/UOI_IO=true、FG0x904a6=Wow22072，目标start/class/path未变、物理2560×1440/DPI144。无需focus_click。使用原RecoveryOrchestrator/InteractiveRecoveryBridge/hand与看门狗，review callback作为现有review-file等价适配：以reviewer=claude原帧SHA f60daaacd71fc016cf6dbc53dc7d876305326eb0e49ad56769fd477e57498737为审核依据，每个新capture单独SHA及按钮/独立logo像素匹配后才返回同源human_reviewed，不伪称Claude已独立看过新图，不刷新参考源时间。重连中心客户区(1280,720)，一次有限mouse_click，原生3/3事件、released=true、空账本/executor exited。
+
+独立after截图仍是“重新连接/登出”登录页，FG保持WoW；自动effects_confirmed=0，未观察到选角/世界。该后图冷桥回读超过15s观察上限，原程序source_capture_age_unknown_or_stale停止；当前人工判断为页面未改变，不以回执completed证明重连成功。未重复点击、未选角或启动L4/L3交谈，首任务未完成。按最新要求已向监督报帧路径/简短判断，等待当前帧审核，不长时间研究OCR或11.2s、不搜索密钥。
+
+当前帧主out/acceptance/manual-resume-20261007-02/recovery/step-3-observe/client.png SHA85b8f0c589086eb3b63bb8bd6f7e854177308a417fe8c07342cc3bf5ea441a76；完整审阅适配脚本/源码SHA、live comparison、input原件与trace均保留。五项临时任务（1Resident/4SessionRecovery）全删除且独立GetTask80070002回查。业务代码未改，本轮仅独立manual-resume-record树验收/HANDOFF提交、ff-only主集成，不重跑软件全量或推送。
+
 **2026-10-07用户授权的单次背景focus_click实测：SendInput插入成功，但前台未改变，立即停止。** 独立manual-first-task树、业务基线40c1650。当前readonly确认session1/Default/UOI_IO=true、Wow22072/start639268827443062278/HWND0x904a6/物理2560×1440/DPI144；客户区点(1536,360)→屏幕(2148,773)的5×5像素全为WoW，避开按钮/公告且在PowerShell右侧。PowerShell外框(141,152)-(1893,1088)，WoW外框(601,368)-(3183,1864)、客户区(612,413)-(3172,1853)。当前光标flags2/handle0（系统抑制），本次明确授权的固定验收助手仅对此已知状态、无鼠标捕获/无人持键、空闲>5s放行，普通生产光标闸未改；使用原GlobalExecutorAdmission/LeaseStore账本及独立WinInputWatchdog。
 
 唯一次Focus输入为绝对MOVE+LEFT_DOWN，SendInput返回2/2、GetLastError raw0；有限60ms后UP返回1/1，成功释放、held keys/mouse均0、watchdog退出。前台复核仍0x3607de/PID32924管理员PowerShell，没有成为WoW；按最新指令失败即停，没有第二次点击、重连、AltTab、窗口操作、权限提升或其它绕过。总插入鼠标事件3、focus_click意图1、普通游戏任务输入0，首交谈未完成；SendInput成功不替代focus效果确认。没有拿此单次焦点试验作为L4/L3性能或150ms目标。
