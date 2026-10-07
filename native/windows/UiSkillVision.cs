@@ -12,7 +12,7 @@ sealed class UiSkillVision
     public const string GreenTolerantAlgorithm="green_glyph_tolerant_v2:g>=60,g>r*1.3,g>b*1.3;msb0-row-major;min100;dilation-chebyshev-radius1;shift3;raw_iou0.65;bidirectional_coverage_min0.95;live_source_fg_ratio0.8:1.25";
     public const string GreenTolerantV3Algorithm="green_glyph_tolerant_v3:g>=60,g>r*1.3,g>b*1.3;msb0-row-major;min100;dilation-chebyshev-radius1;shift3;raw_iou0.5;bidirectional_coverage_min0.95;live_source_fg_ratio0.8:1.25";
     public const string ModalAlgorithm="neutral_panel_components_v1:tile8;sample-step2;rgb-chroma28;neutral-fraction0.875;bt601-variance64;component-fill0.8;min-width0.16;min-height0.10;central0.15,0.10,0.70,0.80;exclude-client-border;expected-iou0.85;one-to-one";
-    sealed class Entry { public string Id,State,Signature,SignatureSha,Status,Metric="rgb_exact_v1",Algorithm,NpcName,EligibilityReason="negative_validation_missing",SourceCaptureSha; public int NpcAnchor=-1; public bool HardStop,SupervisorReviewed,ActiveQualified,RecognizeApproved; public Dictionary<string,object> Box,Scope,ModalGuard,Element,Action,RawSignature,AuthorityReview; public byte[] Template,Mask; public int Width,Height,MaskWidth,MaskHeight,ReferenceWidth,ReferenceHeight; public Rectangle? ReferenceRect; public double MaxError,MaxFraction; public List<Entry> Anchors=new List<Entry>(); public HashSet<string> RequiredStates=new HashSet<string>(); }
+    sealed class Entry { public string Id,State,Signature,SignatureSha,Status,Metric="rgb_exact_v1",Algorithm,NpcName,NpcMethod,EligibilityReason="negative_validation_missing",SourceCaptureSha; public int NpcAnchor=-1; public bool HardStop,SupervisorReviewed,ActiveQualified,RecognizeApproved; public Dictionary<string,object> Box,Scope,ModalGuard,Element,Action,RawSignature,AuthorityReview; public byte[] Template,Mask; public int Width,Height,MaskWidth,MaskHeight,ReferenceWidth,ReferenceHeight; public Rectangle? ReferenceRect,NeutralGoldRect; public bool[] NeutralNameMask; public double MaxError,MaxFraction; public List<Entry> Anchors=new List<Entry>(); public HashSet<string> RequiredStates=new HashSet<string>(); }
     readonly List<Entry> entries=new List<Entry>();
     readonly List<object> quarantine=new List<object>();
     public string KnowledgeSha {get;private set;}
@@ -55,9 +55,19 @@ sealed class UiSkillVision
             }
             if(sig.ContainsKey("npc_locator")){
                 var locator=ResidentWire.Map(sig["npc_locator"]);
-                ResidentWire.Need(locator.Count==3&&ResidentWire.Text(locator,"method")=="current_nameplate_yellow_outline_v1"&&features&&e.State=="tutorial_talk_jaina"&&e.Metric=="chroma_surface_v1"&&ResidentWire.Text(e.Scope,"target_scope")=="retail_wow","ui_npc_locator_scope_rejected");
+                string method=ResidentWire.Text(locator,"method");e.NpcMethod=method;
                 e.NpcName=ResidentWire.Text(locator,"name");e.NpcAnchor=ExactInteger(locator,"anchor_index",0,e.Anchors.Count-1);
-                ResidentWire.Need(e.NpcName=="吉安娜·普罗德摩尔"&&e.Anchors[e.NpcAnchor].Metric=="green_glyph_tolerant_v3"&&e.Anchors.Count>=2&&e.Anchors.Any(a=>a.Metric=="rgb_exact_v1")&&e.ReferenceRect.HasValue&&e.Anchors[e.NpcAnchor].ReferenceRect.HasValue,"ui_npc_locator_proofs_missing");
+                if(method=="current_neutral_nameplate_v1"){
+                    ResidentWire.Need(locator.Count==6&&e.State=="tutorial_attack_training"&&ResidentWire.Text(e.Scope,"target_scope")=="retail_wow"&&e.NpcName=="作战假人"&&e.Element!=null&&ResidentWire.Text(e.Element,"purpose")=="engage_training_dummy_layered"&&e.Anchors.Count>=2&&e.Width==32&&e.Height==16&&e.Anchors[e.NpcAnchor].Metric=="rgb_exact_v1"&&e.ReferenceRect.HasValue&&e.Anchors[e.NpcAnchor].ReferenceRect.HasValue,"ui_dummy_locator_scope_rejected");
+                    ResidentWire.Need(ResidentWire.Text(locator,"algorithm_sha256")==ResidentWire.Hash(Encoding.UTF8.GetBytes(TrainingDummyVision.Algorithm)),"ui_dummy_locator_algorithm_changed");
+                    var gold=ResidentWire.Map(locator["source_gold_rect"]);ResidentWire.Need(gold.Count==4,"ui_dummy_gold_rect_shape");e.NeutralGoldRect=new Rectangle(ExactInteger(gold,"x",0,e.ReferenceWidth-1),ExactInteger(gold,"y",0,e.ReferenceHeight-1),ExactInteger(gold,"width",90,350),ExactInteger(gold,"height",8,40));ResidentWire.Need(e.NeutralGoldRect.Value.Right<=e.ReferenceWidth&&e.NeutralGoldRect.Value.Bottom<=e.ReferenceHeight,"ui_dummy_gold_rect_bounds");
+                    var mask=ResidentWire.Map(locator["mask"]);var name=e.Anchors[e.NpcAnchor].ReferenceRect.Value;ResidentWire.Need(mask.Count==5&&ResidentWire.Text(mask,"packing")=="msb0-row-major"&&ExactInteger(mask,"width",1,180)==name.Width&&ExactInteger(mask,"height",1,48)==name.Height,"ui_dummy_name_mask_geometry");
+                    var raw=Convert.FromBase64String(ResidentWire.Text(mask,"base64"));ResidentWire.Need(raw.Length==(name.Width*name.Height+7)/8&&ResidentWire.Hash(raw)==ResidentWire.Text(mask,"sha256"),"ui_dummy_name_mask_sha");e.NeutralNameMask=new bool[name.Width*name.Height];int foreground=0;for(int i=0;i<e.NeutralNameMask.Length;i++){e.NeutralNameMask[i]=(raw[i/8]&(128>>(i%8)))!=0;if(e.NeutralNameMask[i])foreground++;}ResidentWire.Need(foreground>=100,"ui_dummy_name_mask_empty");for(int i=e.NeutralNameMask.Length;i<raw.Length*8;i++)ResidentWire.Need((raw[i/8]&(128>>(i%8)))==0,"ui_dummy_name_mask_padding");
+                }else{
+                    ResidentWire.Need(locator.Count==3&&ResidentWire.Text(locator,"method")=="current_nameplate_yellow_outline_v1"&&features&&e.State=="tutorial_talk_jaina"&&e.Metric=="chroma_surface_v1"&&ResidentWire.Text(e.Scope,"target_scope")=="retail_wow","ui_npc_locator_scope_rejected");
+                    e.NpcName=ResidentWire.Text(locator,"name");e.NpcAnchor=ExactInteger(locator,"anchor_index",0,e.Anchors.Count-1);
+                    ResidentWire.Need(e.NpcName=="吉安娜·普罗德摩尔"&&e.Anchors[e.NpcAnchor].Metric=="green_glyph_tolerant_v3"&&e.Anchors.Count>=2&&e.Anchors.Any(a=>a.Metric=="rgb_exact_v1")&&e.ReferenceRect.HasValue&&e.Anchors[e.NpcAnchor].ReferenceRect.HasValue,"ui_npc_locator_proofs_missing");
+                }
             }
             if(sig.ContainsKey("modal_guard")){e.ModalGuard=ResidentWire.Map(sig["modal_guard"]);ValidateModalGuard(e);}
             next.Add(e);
@@ -429,7 +439,7 @@ sealed class UiSkillVision
         double started=WowJev.Input.Clock.PreciseMs;var matches=new List<object>();var distances=new List<KeyValuePair<string,double>>();
         foreach(var e in entries) {
             if(e.NpcAnchor>=0&&ResidentWire.Same(e.Scope,scope)){
-                var current=DynamicMatch(e,rois,regions,frame);if(current!=null){double distance=CompositeDistance(e,ResidentWire.Map(current["scores"]));distances.Add(new KeyValuePair<string,double>(e.State,distance));current["positive_distance"]=distance;current["active_qualified"]=false;current["eligibility_reason"]="dynamic_feature_negative_validation_not_available";if(e.RecognizeApproved)matches.Add(current);}continue;
+                var current=e.NpcMethod=="current_neutral_nameplate_v1"?DynamicNeutralMatch(e,rois,regions,frame):DynamicMatch(e,rois,regions,frame);if(current!=null){double distance=e.NpcMethod=="current_neutral_nameplate_v1"?ResidentWire.Num(current,"positive_distance"):CompositeDistance(e,ResidentWire.Map(current["scores"]));distances.Add(new KeyValuePair<string,double>(e.State,distance));current["positive_distance"]=distance;current["active_qualified"]=false;current["eligibility_reason"]="dynamic_feature_negative_validation_not_available";if(e.RecognizeApproved)matches.Add(current);}continue;
             }
             if(!ResidentWire.Same(e.Scope,scope))continue;int index=-1;for(int i=0;i<regions.Count;i++)if(regions[i].Id=="learned-ui-"+e.Id){index=i;break;}if(index<0)continue;
             var roi=rois[index];var score=EntryScore(e,roi);
@@ -483,4 +493,21 @@ sealed class UiSkillVision
         var location=ResidentWire.Obj("method","current_nameplate_yellow_outline_v1","name",entry.NpcName,"frame_id",frame["frame_id"],"source_qpc_ms",frame["source_qpc_ms"],"layout_id",frame["layout_id"],"roi_id","learned-ui-npc-current-view","roi_sha256",view.Hash,"calibration_sha256",KnowledgeSha,"nameplate_rect",plate,"score",located["name_score"],"point_semantics","detected_body_interior");
         return ResidentWire.Obj("skill_id",entry.Id,"state_id",entry.State,"signature_id",entry.Signature,"status",entry.Status,"hard_stop",entry.HardStop,"roi_sha256",view.Hash,"scores",score,"current_point",located["body_point"],"current_rect",located["body_rect"],"location",location);
     }
+    Dictionary<string,object> DynamicNeutralMatch(Entry entry,IList<WgcCapture.Roi> rois,IList<RecoveryCvRegion> regions,Dictionary<string,object> frame){
+        if(frame==null)return null;int index=-1;for(int i=0;i<regions.Count;i++)if(regions[i].Id=="learned-ui-npc-current-view"){index=i;break;}if(index<0)return null;
+        var view=rois[index];int width=ResidentWire.Int(frame,"client_width"),height=ResidentWire.Int(frame,"client_height");ResidentWire.Need(view.Rectangle==new Rectangle(0,0,width,height),"ui_dummy_current_view_partial");
+        if(entry.ReferenceWidth!=width||entry.ReferenceHeight!=height)return null;
+        var name=entry.Anchors[entry.NpcAnchor];var reference=new TrainingDummyVision.Reference{Name=entry.NpcName,Width=width,Height=height,NameRect=name.ReferenceRect.Value,BodyRect=entry.ReferenceRect.Value,GoldRect=entry.NeutralGoldRect.Value,NameRgb=name.Template,BodyRgb=entry.Template,NameMask=entry.NeutralNameMask};
+        var found=TrainingDummyVision.Locate(view.Pixels,width,height,reference);if(found.Count==0)return null;
+        var hit=found[0];var anchorScores=new List<object>();double distance=Math.Max(hit.BodyScore.ChromaDistance/.15,Math.Max((1-hit.NameScore.RawIou)/.5,(1-hit.NameScore.Coverage)/.05));
+        var glyph=ResidentWire.Obj("metric","neutral_nameplate_glyph_v1","matched",true,"raw_iou",hit.NameScore.RawIou,"bidirectional_coverage",hit.NameScore.Coverage,"foreground_ratio",hit.NameScore.ForegroundRatio,"roi_sha256",view.Hash,"current_rect",Rect(hit.NameRect));
+        for(int a=0;a<entry.Anchors.Count;a++){
+            if(a==entry.NpcAnchor){anchorScores.Add(glyph);continue;}int ai=-1;for(int i=0;i<regions.Count;i++)if(regions[i].Id=="learned-ui-"+entry.Anchors[a].Id){ai=i;break;}if(ai<0)return null;
+            var score=EntryScore(entry.Anchors[a],rois[ai]);if(!ResidentWire.Bool(score,"matched"))return null;score["roi_sha256"]=rois[ai].Hash;anchorScores.Add(score);distance=Math.Max(distance,Distance(entry.Anchors[a],score));
+        }
+        var body=ResidentWire.Obj("metric","chroma_surface_v1","matched",true,"distance_tv",hit.BodyScore.ChromaDistance,"source_luma_variance",hit.BodyScore.SourceVariance,"live_luma_variance",hit.BodyScore.LiveVariance,"anchors",anchorScores,"current_body_crop",Rect(hit.BodyRect),"current_body_crop_sha256",ResidentWire.Hash(CropPixels(view.Pixels,width,height,hit.BodyRect)));
+        var location=ResidentWire.Obj("method","current_neutral_nameplate_v1","name",entry.NpcName,"frame_id",frame["frame_id"],"source_qpc_ms",frame["source_qpc_ms"],"layout_id",frame["layout_id"],"roi_id","learned-ui-npc-current-view","roi_sha256",view.Hash,"calibration_sha256",KnowledgeSha,"nameplate_rect",Rect(hit.NameRect),"score",glyph,"point_semantics","detected_body_interior");
+        return ResidentWire.Obj("skill_id",entry.Id,"state_id",entry.State,"signature_id",entry.Signature,"status",entry.Status,"hard_stop",entry.HardStop,"roi_sha256",view.Hash,"scores",body,"positive_distance",distance,"current_point",ResidentWire.Obj("x",hit.Point.X,"y",hit.Point.Y),"current_rect",Rect(hit.BodyRect),"location",location);
+    }
+
 }
