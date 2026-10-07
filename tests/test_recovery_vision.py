@@ -290,3 +290,27 @@ def test_cli_nonfatal_unknown_returns_zero_instead_of_stopping_process(tmp_path,
     monkeypatch.setattr(rv.RecoveryVision, 'analyze', lambda self, **kw: {'status':'unknown','model_result':None,'input_authority':False})
     code=rv.main(['--png','/absent.png','--png-sha256','bad','--source','/absent.json','--out',str(tmp_path/'out')])
     assert code==0 and json.loads(capsys.readouterr().out)['status']=='unknown'
+
+@pytest.mark.parametrize('raw', ['{"stop_reason":"auth", broken', '{"scene":"blocked_terms", broken'])
+def test_syntax_retry_never_erases_explicit_hard_stop_claim_even_in_broken_object(sample, raw):
+    calls=[]
+    def transport(payload,*_):calls.append(payload);return provider(raw)
+    result=worker(transport).analyze(**sample)
+    assert len(calls)==1 and result['api_calls']['attempted']==1
+    assert result['request_attempts'][0]['hard_stop_claim_preserved'] is True
+    assert result['candidate_controls']==[] and result['model_result'] is None
+
+
+def test_schema_retry_never_erases_blocked_scene_with_invalid_known_control(sample):
+    value=reconnect_model();value.update(scene='blocked_auth',stop_reason='auth')
+    result=worker(lambda *_:provider(value)).analyze(**sample)
+    assert result['api_calls']['attempted']==1 and result['reason']['code']=='blocked_controls_present'
+    assert result['request_attempts'][0]['hard_stop_claim_preserved'] is True
+
+
+def test_schema_retry_is_one_same_source_request_and_exhaustion_is_unknown(sample):
+    value=reconnect_model();value['controls'][0]['rect']['x']=.95
+    result=worker(lambda *_:provider(value)).analyze(**sample)
+    assert result['api_calls']['attempted']==2 and result['status']=='unknown'
+    assert result['json_policy']['contract_retry_exhausted'] is True and result['json_policy']['syntax_retry_exhausted'] is False
+    assert result['reason']['code']=='invalid_normalized_rect' and not result['candidate_controls']

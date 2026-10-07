@@ -50,7 +50,7 @@ def worker(value, calls=None, **kwargs):
 
 
 def test_v4_versions_coordinates_while_preserving_old_v3_contract():
-    assert uv.PROMPT_VERSION == "ui-skill-retail-v5"
+    assert uv.PROMPT_VERSION == "ui-skill-retail-v6"
     assert (uv.ROOT / "schemas/ui-skill-vision-v3.schema.json").read_bytes() == (uv.ROOT / "schemas/ui-skill-vision-v2.schema.json").read_bytes()
     prompt = (uv.ROOT / "prompts/ui-skill-retail-v3.txt").read_text()
     assert prompt.startswith((uv.ROOT / "prompts/ui-skill-retail-v2.txt").read_text())
@@ -72,9 +72,9 @@ def test_bad_anchor_geometry_is_rejected_preserved_and_never_silently_repaired(s
     value = model(); value["anchors"][0]["rect"] = rect
     before = copy.deepcopy(value); calls = []
     result = worker(value, calls).analyze_effect(expected_state="in_world", **sample)
-    assert result["status"] == "failed" and result["model_result"] is None
+    assert result["status"] == "unknown" and result["model_result"] is None
     assert result["visual_effect"]["status"] == "unknown" and not result["candidate_controls"]
-    assert len(calls) == 1 and result["api_calls"]["attempted"] == 1
+    assert len(calls) == 2 and result["api_calls"]["attempted"] == 2
     raw = sample["output_dir"] / "model-output-unvalidated.txt"
     assert json.loads(raw.read_text()) == before == value
     assert result["model_output_artifact"]["sha256"] == hashlib.sha256(raw.read_bytes()).hexdigest()
@@ -92,7 +92,7 @@ def test_readonly_effect_reuses_exact_original_source_and_records_scene_only(sam
     assert effect["source"]["source_qpc_ms"] == 987.25
     assert effect["game_effect"] == "unverified" and effect["input_authority"] is False
     assert effect["requires_independent_post_input_source_check"] is True
-    assert result["prompt_version"] == "ui-skill-retail-v5" and len(calls) == 1
+    assert result["prompt_version"] == "ui-skill-retail-v6" and len(calls) == 1
     out = sample["output_dir"]
     assert json.loads((out / "result.json").read_text()) == result
     assert json.loads((out / "effect-result.json").read_text()) == effect
@@ -259,3 +259,64 @@ def test_ui_v5_actual_request_json_mode_retry_same_source_and_v4_converter(sampl
     assert result['model_result']['anchors'][0]['rect']=={'x':.82,'y':.08,'width':.12,'height':.04}
     assert '0–1000整数' in calls[0]['messages'][1]['content'][1]['text']
     assert result['candidate_authority']=='proposal_only' and result['requires_pixel_ocr_revalidation_before_input'] is True
+
+REAL_CONTRACT_PATH = Path(__file__).parent / 'fixtures/ui_skill_vision_contract_controls19.json'
+
+
+def test_real_controls19_contract_mechanical_typing_keeps_overlapping_anchor_rejection():
+    raw = REAL_CONTRACT_PATH.read_text()
+    canonical, audit = uv.normalize_model_contract(raw)
+    assert canonical['controls'][-1]['bbox'] == {'x1':450,'y1':805,'x2':550,'y2':845}
+    assert canonical['tutorial']['dialog_state'] == {'status':'known','value':'closed','confidence':1}
+    assert len(audit['changes']) == 17 and audit['original_object_sha256'] == hashlib.sha256(raw.encode()).hexdigest()
+    assert audit['coordinate_bounds_changed'] is False and audit['symbol_or_value_guessing'] is False
+    with pytest.raises(uv.seed.Failure, match='anchor_overlaps_control'):
+        uv.validate_model_output(raw)
+    assert json.loads(raw)['controls'][-1]['bbox']['x1'] == '450'
+
+
+@pytest.mark.parametrize('text', ['0','000','450','1000'])
+def test_explicit_ascii_decimal_strings_only_mechanically_become_integers(text):
+    value=model();value['anchors'][0]['bbox']['x1']=text
+    canonical,audit=uv.normalize_model_contract(json.dumps(value))
+    assert type(canonical['anchors'][0]['bbox']['x1']) is int and canonical['anchors'][0]['bbox']['x1']==int(text,10)
+    assert audit['changes'][0]['original']==text and audit['changes'][0]['operation']=='ascii_decimal_string_to_integer'
+
+
+@pytest.mark.parametrize('text', ['+450','-1',' 450','450 ','4.5e2','450px','４５０','450.0','','1001','00000'])
+def test_ambiguous_signed_whitespace_exponent_units_unicode_or_outside_coordinate_strings_reject(text):
+    value=model();value['anchors'][0]['bbox']['x1']=text
+    with pytest.raises(uv.seed.Failure,match='invalid_ascii_integer_coordinate'):
+        uv.normalize_model_contract(json.dumps(value))
+
+
+@pytest.mark.parametrize('state', ['open','closed'])
+def test_only_unambiguous_dialog_status_shorthand_converts_without_changing_confidence(state):
+    value=model();value['tutorial']['dialog_state']={'status':state,'value':None,'confidence':.7}
+    canonical,audit=uv.normalize_model_contract(json.dumps(value))
+    assert canonical['tutorial']['dialog_state']=={'status':'known','value':state,'confidence':.7}
+    assert audit['changes'][0]['operation']=='explicit_open_closed_status_to_known_value'
+    value['tutorial']['dialog_state']['value']='open' if state=='closed' else 'closed'
+    with pytest.raises(uv.seed.Failure,match='invalid_dialog_state'):
+        uv.normalize_model_contract(json.dumps(value))
+
+
+def test_contract_schema_retry_keeps_original_real_output_mapping_and_source(sample):
+    raw=REAL_CONTRACT_PATH.read_text();corrected=json.loads(raw)
+    corrected['anchors']=[{'label':'单独Logo证据','bbox':{'x1':10,'y1':10,'x2':100,'y2':100},'confidence':.99}]
+    calls=[]
+    def transport(payload,*_):
+        calls.append(copy.deepcopy(payload))
+        if len(calls)==1:return {'choices':[{'message':{'role':'assistant','content':raw},'finish_reason':'stop'}]}
+        return provider(corrected)
+    before=copy.deepcopy(sample['source'])
+    result=uv.UiSkillVision(allow_upload=True,transport=transport,credential_loader=lambda _:('unit-test-fake-secret',uv.recovery.MODEL)).analyze(**sample)
+    assert result['status']=='ok' and result['api_calls']['attempted']==2
+    assert result['source']==before==sample['source'] and calls[0]['messages'][1]==calls[1]['messages'][1]
+    assert result['request_attempts'][0]['reason']['code']=='anchor_overlaps_control'
+    assert result['contract_normalization'][0]['semantic_validation_status']=='failed'
+    assert len(result['contract_normalization'][0]['changes'])==17
+    assert result['model_result']['tutorial']['dialog_state']=={'status':'known','value':'closed','confidence':1}
+    out=sample['output_dir'];assert (out/'model-output-unvalidated.txt').read_text()==raw
+    assert json.loads((out/'contract-normalization.json').read_text())==result['contract_normalization']
+    assert result['input_authority'] is False and result['requires_pixel_ocr_revalidation_before_input'] is True

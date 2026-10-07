@@ -5,13 +5,14 @@ import argparse
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
 import sys
 
 from . import recovery_vision as recovery
 from . import seed_worker as seed
 
-PROMPT_VERSION = "ui-skill-retail-v5"
+PROMPT_VERSION = "ui-skill-retail-v6"
 ROOT = Path(__file__).resolve().parent
 SCHEMA_PATH = ROOT / "schemas" / "ui-skill-vision-v4.schema.json"
 SCENES = recovery.SCENES | {"game_menu", "logout_countdown", "queue", "tutorial_controls_intro"}
@@ -42,8 +43,8 @@ def normalize_bbox(bbox):
             "width": (bbox["x2"] - bbox["x1"]) / 1000, "height": (bbox["y2"] - bbox["y1"]) / 1000}
 
 
-def validate_model_output(raw):
-    """Parse only the explicitly versioned v4 wire; never guess old geometry."""
+def normalize_model_contract(raw):
+    """Mechanical v4 canonicalization only; no coordinate or meaning repair."""
     value = seed.strict_json(raw)
     seed.exact_object(value, {"schema_version", "coordinate_convention", "scene", "confidence", "stop_reason",
                               "controls", "anchors", "selected_character", "tutorial"})
@@ -51,6 +52,48 @@ def validate_model_output(raw):
         raise seed.Failure("unsupported_ui_model_schema")
     if value["coordinate_convention"] != COORDINATE_CONVERSION["source_convention"]:
         raise seed.Failure("unsupported_ui_coordinate_convention")
+    value = copy.deepcopy(value)
+    changes = []
+    for collection in ("controls", "anchors"):
+        if not isinstance(value[collection], list):
+            raise seed.Failure("invalid_controls_or_anchors")
+        for index, part in enumerate(value[collection]):
+            if not isinstance(part, dict):
+                raise seed.Failure("invalid_fields")
+            bbox = part.get("bbox")
+            if bbox is None and collection == "controls":
+                continue
+            seed.exact_object(bbox, {"x1", "y1", "x2", "y2"})
+            for key in bbox:
+                original = bbox[key]
+                if type(original) is str:
+                    if not re.fullmatch(r"[0-9]{1,4}", original, flags=re.ASCII) or not 0 <= int(original, 10) <= 1000:
+                        raise seed.Failure("invalid_ascii_integer_coordinate")
+                    bbox[key] = int(original, 10)
+                    changes.append({"path": f"{collection}[{index}].bbox.{key}", "original": original,
+                                    "canonical": bbox[key], "operation": "ascii_decimal_string_to_integer"})
+    tutorial = value.get("tutorial")
+    if not isinstance(tutorial, dict):
+        raise seed.Failure("invalid_fields")
+    dialog = tutorial.get("dialog_state")
+    if isinstance(dialog, dict) and type(dialog.get("status")) is str and dialog.get("status") in {"open", "closed"}:
+        seed.exact_object(dialog, {"status", "value", "confidence"})
+        if dialog["value"] is not None or not recovery.finite(dialog["confidence"]):
+            raise seed.Failure("invalid_dialog_state")
+        original = copy.deepcopy(dialog)
+        dialog["value"], dialog["status"] = dialog["status"], "known"
+        changes.append({"path": "tutorial.dialog_state", "original": original, "canonical": copy.deepcopy(dialog),
+                        "operation": "explicit_open_closed_status_to_known_value"})
+    canonical = json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":")).encode()
+    return value, {"version": "ui-v4-mechanical-contract-v1", "source_schema_version": 4, "target_schema_version": 4,
+                   "original_object_sha256": hashlib.sha256(raw.encode()).hexdigest(), "canonical_wire_sha256": hashlib.sha256(canonical).hexdigest(),
+                   "changes": changes, "status": "normalized" if changes else "unchanged", "coordinate_bounds_changed": False,
+                   "symbol_or_value_guessing": False, "input_authority": False}
+
+
+def validate_model_output(raw):
+    """Accept only explicit v4 geometry after audited mechanical typing."""
+    value, _ = normalize_model_contract(raw)
     normalized = copy.deepcopy(value)
     normalized["schema_version"] = 1
     del normalized["coordinate_convention"]
@@ -132,6 +175,27 @@ class UiSkillVision(recovery.RecoveryVision):
 
     def analyze(self, **kwargs):
         result = super().analyze(**kwargs)
+        normalization = []
+        output = Path(kwargs["output_dir"])
+        for attempt in result.get("request_attempts", []):
+            artifact = attempt.get("model_output_artifact")
+            if not artifact:
+                continue
+            audit = {"attempt": attempt["index"], "raw_model_output_artifact": copy.deepcopy(artifact),
+                     "semantic_validation_status": attempt["status"], "semantic_failure": attempt.get("reason")}
+            try:
+                raw = (output / artifact["file"]).read_text(encoding="utf-8")
+                extracted, _ = recovery.first_json_object(raw)
+                canonical_wire, details = normalize_model_contract(extracted)
+                audit.update(details)
+                wire_path = output / ("contract-canonical-wire-" + str(attempt["index"]) + ".json")
+                wire_bytes = json.dumps(canonical_wire, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":")).encode()
+                with wire_path.open("xb") as stream:
+                    stream.write(wire_bytes)
+                audit["canonical_wire_artifact"] = {"file": wire_path.name, "sha256": hashlib.sha256(wire_bytes).hexdigest()}
+            except (seed.Failure, OSError) as error:
+                audit.update(status="rejected", reason=getattr(error, "code", "artifact_unavailable"), input_authority=False)
+            normalization.append(audit)
         conversion = copy.deepcopy(COORDINATE_CONVERSION)
         encoded = json.dumps(COORDINATE_CONVERSION, sort_keys=True, separators=(",", ":")).encode("utf-8")
         conversion["conversion_sha256"] = hashlib.sha256(encoded).hexdigest()
@@ -147,9 +211,11 @@ class UiSkillVision(recovery.RecoveryVision):
                     conversion["normalized_model_output_artifact"] = {"file": normalized.name, "sha256": hashlib.sha256(normalized.read_bytes()).hexdigest()}
                 with (output / "coordinate-conversion.json").open("x", encoding="utf-8") as stream:
                     stream.write(json.dumps(conversion, ensure_ascii=False, allow_nan=False, indent=2) + "\n")
-                recovery.persist(stored, {**result, "coordinate_mapping": conversion, "candidate_authority": "proposal_only",
+                with (output / "contract-normalization.json").open("x", encoding="utf-8") as stream:
+                    stream.write(json.dumps(normalization, ensure_ascii=False, allow_nan=False, indent=2) + "\n")
+                recovery.persist(stored, {**result, "contract_normalization": normalization, "coordinate_mapping": conversion, "candidate_authority": "proposal_only",
                                           "requires_pixel_ocr_revalidation_before_input": True})
-        return {**result, "coordinate_mapping": conversion, "candidate_authority": "proposal_only",
+        return {**result, "contract_normalization": normalization, "coordinate_mapping": conversion, "candidate_authority": "proposal_only",
                 "requires_pixel_ocr_revalidation_before_input": True}
 
     def analyze_effect(self, *, expected_state, **kwargs):

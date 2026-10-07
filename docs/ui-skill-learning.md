@@ -62,3 +62,12 @@ UI prompt `ui-skill-retail-v5` 继续使用 schema 4 的 0–1000整数xyxy；�
 每次安全模型原文、请求描述/SHA、prompt版本/SHA、原PNG与派生JPEG引用、失败码和API attempted/completed计数留档；请求描述以JPEG文件/SHA代替图像编码，凭据不存档，不安全秘密/图像回显只留省略原因。两次语法失败返回 `status=unknown`、`model_result=null`、零候选和继续只读观察建议，CLI退出0；不能据此报告识别或游戏成功。UI v5另明确任何中央模态都不能把背景选角的 enter_world 标为known。
 
 离线验证：`python -m pytest -q tests/test_recovery_vision.py tests/test_ui_skill_vision.py` 81/81通过；注入fake transport和合成PNG，不读取凭据、桌面或调用真实模型。
+
+
+#### 2026-10-07：v6机械字段规范化与契约重试补充
+
+UI prompt升`ui-skill-retail-v6`，输出schema仍4。仅在明确`wow_client_xyxy_0_1000`约定下，bbox四角的1–4位ASCII数字串按十进制机械转int，再执行原0–1000/顺序/面积校验；指数、空白、单位、符号、Unicode数字和浮点不转。`tutorial.dialog_state`仅精确三字段、status=open/closed、value=null且原confidence合法时机械转known/value同词，不提升置信度，矛盾状态不改。原响应SHA、逐字段变化、规范化wire原件/SHA保存在`contract-normalization.json`与每次`contract-canonical-wire-N.json`；旧schema、原图和QPC不改。
+
+最新用户指示将一次重试扩到模型字段/schema错误，所有语法/契约错误共用**一个**重试预算，最多两个请求、同原图且共原15秒API预算。第一响应只要明确声明认证/验证/协议/更新阻塞，就不能重试去掩盖；不安全回显、重复键、NaN、传输失败不重试。schema重试也不代替后续当前原生CV/身份/像素OCR复核。保留官方已确认的json_object实际请求与本地严格schema，不把API格式控制当语义保证。
+
+真实controls19模型输出作为仅契约回归fixture：数字串/closed可机械转换，但NPC anchor重复目标框和教程anchor覆盖确定按钮仍`anchor_overlaps_control`，不删错锚点或假成功；可让同图第二请求重新观察，仍错则unknown/零候选。专项104/104通过、py_compile与diffcheck通过，全部fake provider/合成PNG，无模型/密钥/桌面调用。

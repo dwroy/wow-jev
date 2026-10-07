@@ -29,6 +29,22 @@ SHA = re.compile(r"[0-9a-f]{64}\Z")
 CLASSES = {"warrior", "paladin", "hunter", "rogue", "priest", "death_knight", "shaman",
            "mage", "warlock", "monk", "druid", "demon_hunter", "evoker"}
 MAX_PNG = 32 * 1024 * 1024
+CONTRACT_RETRY_CODES = frozenset({
+    "invalid_json", "invalid_fields", "missing_fields", "unsupported_model_schema",
+    "unsupported_ui_model_schema", "unsupported_ui_coordinate_convention", "invalid_scene",
+    "invalid_controls", "invalid_control_id", "invalid_controls_or_anchors", "invalid_anchors",
+    "invalid_anchor", "anchor_overlaps_control", "invalid_normalized_rect", "invalid_v4_xyxy_bbox",
+    "invalid_ascii_integer_coordinate", "invalid_field_status", "invalid_field_type",
+    "invalid_confidence", "unknown_value_not_null", "unknown_scene_confidence",
+    "unknown_control_label", "invalid_character", "invalid_dialog_state",
+})
+
+
+def declared_hard_stop(raw):
+    # A malformed contract must not use a second response to erase an explicit
+    # auth/verification/terms/update declaration already present in the first.
+    return bool(re.search(r'"stop_reason"\s*:\s*"(?:auth|verification|terms|update)"', raw) or
+                re.search(r'"scene"\s*:\s*"(?:blocked_auth|blocked_terms|blocked_update)"', raw))
 Failure = seed.Failure
 
 
@@ -298,8 +314,8 @@ class RecoveryVision:
             "image_mapping": None, "model_result": None,
             "candidate_controls": [],
             "request_attempts": [],
-            "json_policy": {"response_format": {"type": "json_object"}, "syntax_retries_max": 1,
-                            "retry_scope": "invalid_json_only_same_original_image", "symbol_or_value_repair": False,
+            "json_policy": {"response_format": {"type": "json_object"}, "syntax_retries_max": 1, "requests_max": 2, "shared_retry_budget": 1,
+                            "retry_scope": "json_or_contract_schema_without_hard_stop_same_original_image", "symbol_or_value_repair": False,
                             "api_budget_ms": self.timeout * 1000, "failure_is_fatal": False},
             "api_calls": {"attempted": 0, "completed": 0, "count_scope": "attempted_requests"},
             "usage": {"input_tokens": None, "output_tokens": None},
@@ -374,7 +390,7 @@ class RecoveryVision:
             for index in range(1, 3):
                 request = json.loads(json.dumps(payload, ensure_ascii=False, allow_nan=False))
                 if index == 2:
-                    request["messages"].append({"role": "user", "content": "上一次响应不是有效JSON。请重新只读观察完全相同的原图，严格遵循系统schema，只返回一个完整JSON对象，不要代码围栏、说明、注释或额外键；未知值用unknown/null/0，不猜值或修改安全规则。"})
+                    request["messages"].append({"role": "user", "content": "上一次响应未通过JSON或字段契约校验。请重新只读观察完全相同的原图，严格遵循系统schema，只返回一个完整JSON对象，不要代码围栏、说明、注释或额外键；未知值用unknown/null/0，不猜值或修改安全规则。"})
                 # Preserve the exact wire digest plus every non-image request field.
                 # The original image bytes already exist as original.png/derived.jpg.
                 request_bytes = json.dumps(request, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode()
@@ -393,6 +409,7 @@ class RecoveryVision:
                     raise Failure("timeout")
                 phase, phase_started = "api_ms", time.monotonic()
                 result["api_calls"]["attempted"] += 1
+                raw = None
                 try:
                     response = seed.bounded_request(self.transport, request, key, remaining)
                     result["api_calls"]["completed"] += 1
@@ -434,12 +451,19 @@ class RecoveryVision:
                     phase = None
                     attempt.update(status="failed", reason=seed.reason(error.code))
                     persist(output / ("attempt-" + str(index) + ".json"), attempt)
-                    if error.code == "invalid_json" and index == 1:
+                    blocked_claim = type(raw) is str and declared_hard_stop(raw)
+                    attempt["hard_stop_claim_preserved"] = blocked_claim
+                    if blocked_claim:
+                        result["json_policy"]["hard_stop_claim_preserved"] = True
+                        result["next_action"] = "independent_hard_stop_review_required_no_input"
+                    retryable = error.code in CONTRACT_RETRY_CODES and not blocked_claim
+                    if retryable and index == 1:
                         attempt["retry_scheduled"] = True
                         continue
-                    if error.code == "invalid_json":
+                    if retryable:
                         result["status"] = "unknown"
-                        result["json_policy"]["syntax_retry_exhausted"] = True
+                        result["json_policy"]["syntax_retry_exhausted"] = error.code == "invalid_json"
+                        result["json_policy"]["contract_retry_exhausted"] = True
                         result["next_action"] = "fresh_observation_or_independent_read_only_verifier"
                     raise
                 finally:
