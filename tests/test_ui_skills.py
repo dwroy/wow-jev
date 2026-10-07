@@ -31,7 +31,7 @@ def frame(root, seq, *, producer='resident_wgc'):
     path = root / f'frame-{seq}.png'
     Image.new('RGB', (96, 64), (30 + seq, 60, 90)).save(path)
     return {'observation_id': f'o-{seq}', 'frame_id': f'f-{seq}', 'seq': seq, 'width': 96, 'height': 64,
-            'layout_id': 'explicit-offline-fixture-layout', 'target': TARGET,
+            'layout_id': hashlib.sha256(b'explicit-offline-fixture-layout').hexdigest(), 'target': TARGET,
             'clock': {'domain': 'windows-qpc', 'clock_id': 'explicit-fixture-qpc', 'ticks': seq * 1000, 'unit': 'ms'},
             'capture': {'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}, 'producer': producer}
 
@@ -45,18 +45,45 @@ def seed(root, *, pending=False, hard_stop=False):
             'hard_stop': hard_stop}
 
 
-def attempt(root, number, *, mode='live', outcome='confirmed'):
+def attempt(root, number, *, mode='live', outcome='confirmed', action=None):
     before = frame(root, number * 2 + 1, producer='simulation' if mode != 'live' else 'resident_wgc')
     after = frame(root, number * 2 + 2, producer='simulation' if mode != 'live' else 'resident_wgc') if outcome == 'confirmed' else None
     receipt = {'protocol': 'wow-input', 'version': 1, 'type': 'receipt', 'id': f'action-{number}',
                'session_id': '11111111-1111-1111-1111-111111111111', 'op': 'execute', 'status': 'completed',
-               'input': {'status': 'released', 'events_requested': 3, 'events_inserted': 3, 'released': True}, 'effect': {'status': 'unknown'},
+               'input': {'status': 'released', 'events_requested': 2 if action else 3, 'events_inserted': 2 if action else 3, 'released': True}, 'effect': {'status': 'unknown'},
                'timing': {'clock': 'windows_qpc', 'started_ms': before['clock']['ticks'] + 1, 'finished_ms': before['clock']['ticks'] + 90},
                'local_clock': {'domain': 'windows-qpc', 'at_ms': before['clock']['ticks'] + 100},
                'input_timing': {'clock': 'windows_qpc', 'first_send_started_ms': before['clock']['ticks'] + 10,
                                 'first_send_finished_ms': before['clock']['ticks'] + 11, 'last_send_finished_ms': before['clock']['ticks'] + 90}}
-    native = proof(root / f'native-{number}.json', {'native': receipt, 'source': {'frame_id': before['frame_id'], 'seq': before['seq'],
-                                                                            'windows_clock_id': before['clock']['clock_id'], 'target': TARGET}}) if mode == 'live' and outcome == 'confirmed' else None
+    source = {'target_scope': 'retail_wow', 'session_id': receipt['session_id'],
+              'channel_generation': '22222222-2222-2222-2222-222222222222', 'host_pid': 100, 'host_start_ticks': '12345',
+              'frame_id': before['frame_id'], 'seq': before['seq'], 'windows_clock_id': before['clock']['clock_id'],
+              'target': {**{k: v for k, v in TARGET.items() if k != 'session_id'}, 'windows_session_id': TARGET['session_id']},
+              'layout_id': before['layout_id'], 'client_width': before['width'], 'client_height': before['height'], 'dpi': 144,
+              'source_qpc_ms': before['clock']['ticks'], 'request_received_qpc_ms': before['clock']['ticks'] - 1,
+              'roi_sha256': 'a' * 64, 'full_frame_sha256': None,
+              'rois': [{'id': 'fixture', 'x': 0, 'y': 0, 'width': 96, 'height': 64, 'sha256': 'b' * 64, 'calibration_id': 'explicit-fixture', 'calibration_sha256': 'c' * 64}]}
+    compiled = {'kind': 'timeline', 'duration_ms': action['duration_ms'] if action else 230,
+                'events': [{'kind': 'key_down', 'at_ms': 0, 'key': action['keys'][0]}, {'kind': 'key_up', 'at_ms': action['duration_ms'], 'key': action['keys'][0]}] if action else
+                          [{'kind': 'absolute_mouse_move', 'at_ms': 0, 'x': 48, 'y': 32}, {'kind': 'button_down', 'at_ms': 150, 'button': 'left'}, {'kind': 'button_up', 'at_ms': 230, 'button': 'left'}]}
+    body = {'protocol': 'wow-agent', 'version': 1, 'type': 'action_intent', 'id': receipt['id'], 'run_id': 'explicit-fixture-run',
+            'at_ms': 100, 'actor': 'code', 'plan': {'id': 'fixture-plan', 'revision': 1}, 'based_on_observation_id': before['observation_id'],
+            'deadline_ms': 500, 'mode': 'live', 'window_token': f'resident-ui-{TARGET["pid"]}-{source["channel_generation"]}',
+            'action': {'name': 'native_input', 'args': compiled}, 'conditions': [
+                {'field': 'ui.state', 'op': 'eq', 'value': {'id': 'disconnected', 'confidence': .95, 'signature_sha256': 'd' * 64, 'hard_stop': None}, 'max_age_ms': 750},
+                {'field': 'ui.layout_id', 'op': 'eq', 'value': before['layout_id'], 'max_age_ms': 750},
+                {'field': 'input.mouse_mode', 'op': 'eq', 'value': 'ui', 'max_age_ms': 750},
+                {'field': 'ui.elements', 'op': 'eq', 'value': [{'id': 'reconnect-button', 'x': 48, 'y': 32, 'layout_id': before['layout_id'], 'enabled': True}], 'max_age_ms': 750}]}
+    binding = {'observation_id': before['observation_id'], 'intent_id': receipt['id'], 'actor': 'code', 'plan_id': 'fixture-plan',
+               'plan_revision': 1, 'task_id': 'fixture-plan', 'task_revision': 1, 'run_epoch': 0, 'gate_id': 'e' * 64, 'action_sha256': canonical_sha256(compiled)}
+    document = {'protocol': 'wow-resident', 'version': 1, 'type': 'receipt', 'id': receipt['id'], 'session_id': receipt['session_id'],
+                'local_clock': {'domain': 'windows-qpc', 'at_ms': receipt['local_clock']['at_ms']}, 'dispatch_qpc_ms': before['clock']['ticks'] + 1,
+                'native': receipt, 'source': source, 'intent': binding, 'compiled_action': compiled, 'action_intent': body}
+    native = proof(root / f'native-{number}.json', document) if mode == 'live' and outcome == 'confirmed' else None
+    if native:
+        # IDs in the real pipeline are identical at all three dispatch layers.
+        receipt['id'] = f'attempt-{number}'; document['id'] = receipt['id']; body['id'] = receipt['id']; binding['intent_id'] = receipt['id']
+        native = proof(root / f'native-{number}.json', document)
     effect = proof(root / f'effect-{number}.json', {'protocol': 'wow-ui-skill-effect-proof', 'version': 1, 'status': 'confirmed',
                     'source_observation_id': after['observation_id'], 'frame_id': after['frame_id'], 'capture_sha256': after['capture']['sha256'],
                     'verifier': 'review'}) if after else None
@@ -79,8 +106,10 @@ def test_two_independent_confirmations_promote_and_two_failures_demote(tmp_path)
         assert store.attempt(attempt(tmp_path, 2))['skill']['status'] == 'active'
         assert store.attempt(attempt(tmp_path, 3, outcome='failed'))['skill']['status'] == 'active'
         assert store.attempt(attempt(tmp_path, 4, outcome='failed'))['skill']['status'] == 'degraded'
-        assert store.attempt(attempt(tmp_path, 5))['skill']['status'] == 'degraded'
-        assert store.attempt(attempt(tmp_path, 6))['skill']['status'] == 'active'
+        recovering = store.attempt(attempt(tmp_path, 5))['skill']
+        assert recovering['status'] == 'degraded' and recovering['last_failure'] is None and recovering['failure_streak'] == 0
+        restored = store.attempt(attempt(tmp_path, 6))['skill']
+        assert restored['status'] == 'active' and restored['last_failure'] is None  # reflex routing can recover
         assert store.query({})['skills'][0]['confirmed_count'] == 4
         assert dict(db.connection.execute('SELECT key,value FROM runtime_meta')) == base
         assert db.integrity_check()['status'] == 'ok'
@@ -100,7 +129,12 @@ def test_duplicate_attempt_frame_and_native_receipt_cannot_double_count(tmp_path
     with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
         store = UiSkills(db, create=True); store.seed(seed(tmp_path)); one = attempt(tmp_path, 1)
         assert store.attempt(one)['inserted'] and not store.attempt(one)['inserted']
-        changed = deepcopy(one); changed['attempt_id'] = 'duplicate-other-id'
+        changed = attempt(tmp_path, 2); changed['before'] = deepcopy(one['before'])
+        doc = json.loads(Path(changed['native_receipt']['path']).read_text())
+        original = json.loads(Path(one['native_receipt']['path']).read_text())
+        doc['source'] = original['source']; doc['intent']['observation_id'] = changed['before']['observation_id']
+        doc['action_intent']['based_on_observation_id'] = changed['before']['observation_id']
+        changed['native_receipt'] = proof(Path(changed['native_receipt']['path']), doc)
         with pytest.raises(ValidationError, match='duplicate live'):
             store.attempt(changed)
         changed = deepcopy(one); changed['effect']['status'] = 'failed'
@@ -124,7 +158,7 @@ def test_native_frame_counter_restart_is_distinct_but_observation_rename_is_not(
         second['effect']['proof'] = proof(Path(second['effect']['proof']['path']), effect)
         assert store.attempt(second)['skill']['status'] == 'active'
         renamed = deepcopy(second); renamed['attempt_id'] = 'renamed-replay'; renamed['before']['observation_id'] = 'renamed-before'
-        with pytest.raises(ValidationError, match='duplicate live'):
+        with pytest.raises(ValidationError, match='action ID or native session'):
             store.attempt(renamed)
 
 
@@ -216,6 +250,63 @@ def test_key_and_wait_actions_roundtrip_without_fake_mouse_authority(tmp_path):
         assert store.query({'status': 'active'})['skills'] == []
 
 
+def test_wrong_click_or_key_cannot_promote_even_with_consistent_native_digest(tmp_path):
+    with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
+        store = UiSkills(db, create=True); store.seed(seed(tmp_path))
+        wrong = attempt(tmp_path, 1); doc = json.loads(Path(wrong['native_receipt']['path']).read_text())
+        doc['compiled_action']['events'][0]['x'] = 0
+        doc['action_intent']['action']['args'] = deepcopy(doc['compiled_action'])
+        doc['action_intent']['conditions'][-1]['value'][0]['x'] = 0
+        doc['intent']['action_sha256'] = canonical_sha256(doc['compiled_action'])
+        wrong['native_receipt'] = proof(Path(wrong['native_receipt']['path']), doc)
+        with pytest.raises(ValidationError, match='outside learned element'):
+            store.attempt(wrong)
+        key_seed = seed(tmp_path); key_seed['skill_id'] = 'menu-key'; key_seed['action'] = {'kind': 'key', 'keys': ['ESC'], 'duration_ms': 80}
+        store.seed(key_seed); wrong_key = attempt(tmp_path, 2, action={'keys': ['ENTER'], 'duration_ms': 80}); wrong_key['skill_id'] = key_seed['skill_id']
+        with pytest.raises(ValidationError, match='key differs'):
+            store.attempt(wrong_key)
+        for number in (3, 4):
+            correct = attempt(tmp_path, number, action=key_seed['action']); correct['skill_id'] = key_seed['skill_id']; store.attempt(correct)
+        assert store.query({'status': 'active'})['skills'][0]['skill_id'] == key_seed['skill_id']
+
+
+def test_original_body_plan_args_ids_and_full_insertion_are_required(tmp_path):
+    with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
+        store = UiSkills(db, create=True); store.seed(seed(tmp_path))
+        for number, change in enumerate(('args', 'plan', 'source', 'element', 'partial', 'legacy'), 1):
+            bad = attempt(tmp_path, number); doc = json.loads(Path(bad['native_receipt']['path']).read_text())
+            if change == 'args': doc['action_intent']['action']['args']['events'][0]['x'] = 49
+            elif change == 'plan': doc['intent']['task_revision'] = 2
+            elif change == 'source': doc['action_intent']['based_on_observation_id'] = 'unrelated-observation'
+            elif change == 'element': doc['action_intent']['conditions'][-1]['value'][0]['id'] = 'wrong-button'
+            elif change == 'partial': doc['native']['input']['events_inserted'] = 2
+            else: doc.pop('compiled_action'); doc.pop('action_intent')
+            bad['native_receipt'] = proof(Path(bad['native_receipt']['path']), doc)
+            with pytest.raises(ValidationError):
+                store.attempt(bad)
+        assert store.query({})['skills'][0]['confirmed_count'] == 0
+
+
+def test_legacy_unbound_history_is_preserved_but_not_an_active_qualification(tmp_path):
+    with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
+        store = UiSkills(db, create=True); store.seed(seed(tmp_path))
+        first = attempt(tmp_path, 1); store.attempt(first)
+        # Emulate a database written by the old permissive qualifier. Evidence
+        # remains immutable; read/export must independently reconsider eligibility.
+        legacy = attempt(tmp_path, 2); doc = json.loads(Path(legacy['native_receipt']['path']).read_text()); doc.pop('compiled_action'); doc.pop('action_intent')
+        legacy['native_receipt'] = proof(Path(legacy['native_receipt']['path']), doc)
+        for item in (legacy['before']['capture'], legacy['after']['capture']):
+            db.register_artifact(item['path'], media_type='image/png', expected_sha256=item['sha256'])
+        for item in (legacy['native_receipt'], legacy['effect']['proof']):
+            db.register_artifact(item['path'], media_type='application/json', expected_sha256=item['sha256'])
+        db.connection.execute('INSERT INTO ui_attempt(attempt_id,skill_id,content_sha256,live_confirmed,before_frame_id,after_frame_id,receipt_key,payload) VALUES (?,?,?,?,?,?,?,?)',
+                              (legacy['attempt_id'], legacy['skill_id'], canonical_sha256(legacy), 1, 'legacy-before', 'legacy-after', 'legacy-receipt', canonical(legacy)))
+        row = store.query({})['skills'][0]
+        assert row['confirmed_count'] == 1 and row['status'] == 'candidate'
+        assert db.connection.execute('SELECT count(*) FROM ui_attempt').fetchone()[0] == 2
+        assert store.attempt(attempt(tmp_path, 3))['skill']['status'] == 'active'
+
+
 def test_queue_checkpoint_partial_tail_replay_and_mutated_prefix(tmp_path):
     queue = tmp_path / 'queue.jsonl'; first = request('seed', seed(tmp_path), 'seed-once')
     second = request('attempt', attempt(tmp_path, 1, mode='simulated'), 'attempt-once')
@@ -247,3 +338,77 @@ def test_shared_wire_and_independent_worker_cli(tmp_path):
                          input=canonical(query), cwd=root, capture_output=True, text=True, timeout=10)
     assert cli.returncode == 0, cli.stdout + cli.stderr
     assert json.loads(cli.stdout)['result']['snapshot']['skills'][0]['status'] == 'candidate'
+
+
+def test_shared_native_click_nullable_phase_types_are_validated_without_coercion():
+    from game_database.ui_skills import _validate
+    schema={'type':['number','null'],'minimum':0}
+    _validate(150.5,schema);_validate(None,schema)
+    for invalid in [True,'150',-1]:
+        with pytest.raises(ValidationError):_validate(invalid,schema)
+
+
+def world_npc_attempt(root, number):
+    """Protocol-shaped world input; deliberately synthetic, no game acceptance."""
+    data = attempt(root, number); data['skill_id'] = 'talk-jaina'
+    document = json.loads(Path(data['native_receipt']['path']).read_text())
+    source, compiled, body = document['source'], document['compiled_action'], document['action_intent']
+    for event in compiled['events'][1:]: event['button'] = 'right'
+    body['action']['args'] = deepcopy(compiled)
+    document['intent']['action_sha256'] = canonical_sha256(compiled)
+    roi = {**source['rois'][0], 'id': 'learned-ui-talk-jaina', 'x': 24, 'y': 16, 'width': 48, 'height': 32}
+    source['rois'] = [roi]
+    signature = 'visible-name:吉安娜·普罗德摩尔'
+    screen = {'id': 'jaina-body', 'signature': signature, 'layout_id': source['layout_id'], 'x': 48, 'y': 32, 'enabled': True}
+    surface = {'id': screen['id'], 'signature': signature, 'layout_id': source['layout_id'],
+               'rect': {k: roi[k] for k in ('x', 'y', 'width', 'height')}, 'point': {'x': 48, 'y': 32},
+               'frame_id': source['frame_id'], 'roi_id': roi['id'], 'roi_sha256': roi['sha256'],
+               'calibration_sha256': roi['calibration_sha256'], 'visible': True}
+    body['conditions'] = [{'field': field, 'op': 'eq', 'value': value, 'max_age_ms': 750} for field, value in {
+        'ui.state': {'id': 'tutorial_talk_jaina', 'confidence': .95, 'signature_sha256': 'd' * 64, 'hard_stop': None},
+        'ui.layout_id': source['layout_id'], 'target.signature': signature, 'target.screen_interaction': screen,
+        'target.world_npc_surface': surface, 'tutorial.instruction': '与吉安娜·普罗德摩尔交谈',
+        'input.cursor_free': True, 'input.mouse_buttons_held': False}.items()]
+    data['native_receipt'] = proof(Path(data['native_receipt']['path']), document)
+    return data, document
+
+
+def world_npc_seed(root):
+    value = seed(root); value.update(state_id='tutorial_talk_jaina', skill_id='talk-jaina')
+    value['element'].update(id='jaina-body', purpose='talk_jaina_layered', label='吉安娜·普罗德摩尔', button='right')
+    return value
+
+
+def test_world_npc_native_surface_right_click_qualifies_without_ui_button_fallback(tmp_path):
+    with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
+        store = UiSkills(db, create=True); store.seed(world_npc_seed(tmp_path))
+        for number in (1, 2):
+            data, _ = world_npc_attempt(tmp_path, number)
+            result = store.attempt(data)
+            assert result['live_confirmed']
+        assert result['skill']['status'] == 'active' and result['skill']['confirmed_count'] == 2
+
+
+def test_wrong_world_surface_cannot_promote_with_consistent_compilation_and_full_insertion(tmp_path):
+    with RuntimeDatabase(tmp_path / 'agent.sqlite') as db:
+        store = UiSkills(db, create=True); store.seed(world_npc_seed(tmp_path))
+        for number, change in enumerate(('roi_sha', 'calibration', 'old_frame', 'point', 'body_edge', 'ui_fallback', 'wrong_button'), 1):
+            bad, document = world_npc_attempt(tmp_path, number)
+            conditions = document['action_intent']['conditions']; surface = next(c['value'] for c in conditions if c['field'] == 'target.world_npc_surface')
+            if change == 'roi_sha': surface['roi_sha256'] = 'f' * 64
+            elif change == 'calibration': surface['calibration_sha256'] = 'f' * 64
+            elif change == 'old_frame': surface['frame_id'] = 'old-frame'
+            elif change == 'point': surface['point']['x'] += 1
+            elif change == 'body_edge':
+                surface['rect']['x'] = 47; document['source']['rois'][0]['x'] = 47
+            elif change == 'ui_fallback':
+                conditions[:] = [c for c in conditions if c['field'] != 'target.world_npc_surface']
+                conditions.extend([{'field': 'input.mouse_mode', 'op': 'eq', 'value': 'ui', 'max_age_ms': 750},
+                                   {'field': 'ui.elements', 'op': 'eq', 'value': [{'id': 'jaina-body', 'x': 48, 'y': 32, 'layout_id': bad['before']['layout_id'], 'enabled': True}], 'max_age_ms': 750}])
+            else:
+                for event in document['compiled_action']['events'][1:]: event['button'] = 'left'
+                document['action_intent']['action']['args'] = deepcopy(document['compiled_action'])
+                document['intent']['action_sha256'] = canonical_sha256(document['compiled_action'])
+            bad['native_receipt'] = proof(Path(bad['native_receipt']['path']), document)
+            with pytest.raises(ValidationError): store.attempt(bad)
+        assert store.query({})['skills'][0]['confirmed_count'] == 0

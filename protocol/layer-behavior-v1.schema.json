@@ -22,6 +22,140 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": [
+            "id",
+            "kind",
+            "params",
+            "max_duration_ms",
+            "max_actions"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "kind": {
+              "const": "tutorial_move"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "state_id",
+                "signature_sha256",
+                "layout_id",
+                "action_duration_ms"
+              ],
+              "properties": {
+                "state_id": {
+                  "const": "tutorial_move_around"
+                },
+                "signature_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "layout_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "action_duration_ms": {
+                  "type": "integer",
+                  "const": 150
+                }
+              }
+            },
+            "max_duration_ms": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 30000
+            },
+            "max_actions": {
+              "type": "integer",
+              "const": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "kind",
+            "params",
+            "max_duration_ms",
+            "max_actions"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "kind": {
+              "const": "tutorial_orient"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "state_id",
+                "signature_sha256",
+                "layout_id",
+                "action_duration_ms",
+                "dx_fraction",
+                "origin_x_fraction",
+                "origin_y_fraction",
+                "curve_steps"
+              ],
+              "properties": {
+                "state_id": {
+                  "const": "tutorial_look_around"
+                },
+                "signature_sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "layout_id": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "action_duration_ms": {
+                  "type": "integer",
+                  "const": 950
+                },
+                "dx_fraction": {
+                  "type": "number",
+                  "const": 0.12
+                },
+                "origin_x_fraction": {
+                  "type": "number",
+                  "const": 0.7
+                },
+                "origin_y_fraction": {
+                  "type": "number",
+                  "const": 0.62
+                },
+                "curve_steps": {
+                  "type": "integer",
+                  "const": 4
+                }
+              }
+            },
+            "max_duration_ms": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 30000
+            },
+            "max_actions": {
+              "type": "integer",
+              "const": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "properties": {
             "id": {
               "type": "string",
@@ -313,6 +447,9 @@
                   "type": "integer",
                   "minimum": 1,
                   "maximum": 1000
+                },
+                "screen_target_positive_only": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -336,6 +473,51 @@
             "params",
             "max_duration_ms",
             "max_actions"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "type": "object",
+                "required": [
+                  "params"
+                ],
+                "properties": {
+                  "params": {
+                    "type": "object",
+                    "required": [
+                      "screen_target_positive_only"
+                    ],
+                    "properties": {
+                      "screen_target_positive_only": {
+                        "const": true
+                      }
+                    }
+                  }
+                }
+              },
+              "then": {
+                "type": "object",
+                "properties": {
+                  "max_actions": {
+                    "type": "integer",
+                    "const": 1
+                  },
+                  "params": {
+                    "type": "object",
+                    "required": [
+                      "action_duration_ms"
+                    ],
+                    "properties": {
+                      "action_duration_ms": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 150
+                      }
+                    }
+                  }
+                }
+              }
+            }
           ]
         },
         {

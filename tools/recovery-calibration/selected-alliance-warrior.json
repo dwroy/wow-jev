@@ -1,12 +1,12 @@
 {
   "version": 2,
-  "id": "alliance-warrior-xiao-a-selected-anchored-v2",
+  "id": "alliance-warrior-xiao-he-selected-anchored-v2",
   "layout": {
     "width": 2560,
     "height": 1440
   },
   "character": {
-    "name": "小啊",
+    "name": "小呵",
     "class": "warrior",
     "faction": "alliance",
     "level_reference": 1
@@ -70,7 +70,7 @@
   "source": {
     "original_capture_sha256": "4390bfd2ac283781d678bb06a342f056b51d34cb87d181b717f463aab8995069",
     "original_capture": "out/acceptance/exiles-first-task-20261006/foreground-restored-readonly-01/client.png",
-    "review": "root assistant original-image review: selected gold row 小啊, level1 warrior, Alliance insignia; user specified Alliance warrior 小啊",
+    "review": "2026-10-07 user name correction (previous 小啊 annotation was wrong), same source SHA; selected-row/name glyph pixels reviewed: selected gold row 小呵, level1 warrior, Alliance insignia; user specified Alliance warrior 小呵",
     "reviewed_at": "2026-10-06",
     "scope": "selected character identity only; no character GUID, task progress or bindings inferred"
   },

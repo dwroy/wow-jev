@@ -7,7 +7,7 @@ export interface BehaviorExecutionResult extends BehaviorResult { input_count_sc
 export interface BehaviorOptions { maxFieldAgeMs?: number; maxObservationAgeMs?: number; trustedSources?: ReadonlyArray<string>; maxEffectFieldAgeMs?: number; targetScopeVerifier?: TargetScopeVerifier; }
 export interface BehaviorRunOptions { isCurrent?: () => boolean; }
 type Decision = { action: BodyAction; conditions: ActionCondition[]; state: string } | { status: BehaviorResult['status']; reason: string; effect?: boolean };
-interface State { initialAlive: boolean; killActionAt?: number; killActionObservation?: string; lastActionAt?: number; lastActionObservation?: string; initialProgress?: number; lastProgress?: number; noProgress: number; recoverAttempts: number; safeFrames: number; lastSafeId?: string; rewardSelected: boolean; controlBefore?: { activation_count: number; state_token: string; frame_nonce: number; layout_id: string }; }
+interface State { initialAlive: boolean; killActionAt?: number; killActionObservation?: string; lastActionAt?: number; lastActionObservation?: string; initialProgress?: number; lastProgress?: number; noProgress: number; recoverAttempts: number; safeFrames: number; lastSafeId?: string; rewardSelected: boolean; controlBefore?: { activation_count: number; state_token: string; frame_nonce: number; layout_id: string }; orientationInstruction?: { id: string; signature_sha256: string }; }
 const finish = (status: BehaviorResult['status'], reason: string, effect = false): Decision => ({ status, reason, effect });
 const condition = (field: string, v: JsonValue, age: number): ActionCondition => ({ field, op: 'eq', value: v, max_age_ms: age });
 const axes = new Set<MovementAxis>(['forward', 'backward', 'strafe_left', 'strafe_right']);
@@ -35,8 +35,9 @@ export class BehaviorRuntime {
   policy(context: Pick<ExecutionContext, 'mode'>): FieldPolicy {
     return { mode: context.mode, now: this.ports.now(), maxAgeMs: this.options.maxFieldAgeMs ?? 1000, ...(this.options.trustedSources ? { trustedSources: this.options.trustedSources } : {}) };
   }
-  resolveScope(o: Observation, context: Pick<ExecutionContext,'mode'>, required=false) {
-    return resolveTargetScope(o,this.policy(context),this.options.targetScopeVerifier,required);
+  resolveScope(o: Observation, context: Pick<ExecutionContext,'mode'>, required=false, policy=this.policy(context)) {
+    if(policy.mode!==context.mode)return{proof:null,error:'target_scope_policy_mode_changed'};
+    return resolveTargetScope(o,policy,this.options.targetScopeVerifier,required);
   }
   private async execute(spec: BehaviorSpec, context: ExecutionContext, options: BehaviorRunOptions): Promise<BehaviorExecutionResult> {
     const result = this.empty(spec, 'failed', 'behavior_exception'); const started = this.ports.now();
@@ -57,7 +58,14 @@ export class BehaviorRuntime {
         const o = await lease.wait(() => this.ports.observe()); const policy = this.policy(context);
         if (!current()) { result.status = 'cancelled'; result.reason = 'cancelled_or_revision_changed'; break; }
         if (this.ports.now() - started >= spec.max_duration_ms) { result.status = 'blocked'; result.reason = 'behavior_deadline'; break; }
-        const resolved=this.resolveScope(o,context,spec.kind==='activate_control');
+        const tutorialLesson=spec.kind==='tutorial_orient'||spec.kind==='tutorial_move';
+        const confirmingTalk = spec.kind === 'talk_to' && state.lastActionAt !== undefined;
+        const confirmingLesson = tutorialLesson && state.lastActionAt !== undefined;
+        const confirmingReadonly = confirmingTalk || confirmingLesson;
+        // Relax source age only for terminal, read-only effect verification.
+        // No action decision uses this policy after an input has completed.
+        const effectPolicy = { ...policy, maxAgeMs: this.options.maxEffectFieldAgeMs ?? policy.maxAgeMs };
+        const resolved=this.resolveScope(o,context,spec.kind==='activate_control'||tutorialLesson&&context.mode==='live',confirmingReadonly?{...effectPolicy,maxAgeMs:Math.min(5000,effectPolicy.maxAgeMs)}:policy);
         if(resolved.error){result.status='blocked';result.reason=resolved.error;break;}
         scope=resolved.proof;
         if(scope){
@@ -67,13 +75,9 @@ export class BehaviorRuntime {
             if(spec.kind!=='activate_control'){result.status='blocked';result.reason='recording_fixture_requires_control_behavior';break;}
           }
         }else if(initialScope!==undefined){result.status='blocked';result.reason='target_scope_became_unverified';break;}
-        const confirmingTalk = spec.kind === 'talk_to' && state.lastActionAt !== undefined;
-        // A slow, independently captured dialog result can only terminate talk_to.
-        // It never supplies a new action, hazard movement or a refreshed input frame.
-        const effectPolicy = { ...policy, maxAgeMs: this.options.maxEffectFieldAgeMs ?? policy.maxAgeMs };
-        const invalid = observationError(o, { ...policy, maxAgeMs: confirmingTalk ? effectPolicy.maxAgeMs : this.options.maxObservationAgeMs ?? 1000 }, runId) ??
-          (confirmingTalk && (o.at_ms > policy.now || policy.now - o.at_ms > (this.options.maxObservationAgeMs ?? 1000)) ? 'observation_stale_or_future' : null) ??
-          (confirmingTalk && context.mode === 'live' && (readKnown(o, 'window.focused', effectPolicy, true, state.lastActionAt)?.source !== 'window' || readKnown(o, 'window.focused', effectPolicy, true, state.lastActionAt)?.value !== true) ? 'post_effect_foreground_evidence_unknown' : null) ??
+        const invalid = observationError(o, { ...policy, maxAgeMs: confirmingReadonly ? effectPolicy.maxAgeMs : this.options.maxObservationAgeMs ?? 1000 }, runId) ??
+          (confirmingReadonly && (o.at_ms > policy.now || policy.now - o.at_ms > (this.options.maxObservationAgeMs ?? 1000)) ? 'observation_stale_or_future' : null) ??
+          (confirmingReadonly && context.mode === 'live' && (readKnown(o, 'window.focused', effectPolicy, true, state.lastActionAt)?.source !== 'window' || readKnown(o, 'window.focused', effectPolicy, true, state.lastActionAt)?.value !== true) ? 'post_effect_foreground_evidence_unknown' : null) ??
           conditionError(o, context.conditions, policy) ?? (confirmingTalk ? null : bindingError(spec, o, policy));
         if (invalid) { result.status = 'blocked'; result.reason = invalid; break; }
         if (previous && (o.id === previous.id || o.observation_seq <= previous.observation_seq || o.at_ms < previous.at_ms)) { result.status = 'blocked'; result.reason = 'observation_not_new'; break; }
@@ -82,7 +86,7 @@ export class BehaviorRuntime {
         initialWindow ??= windowId; runId ??= o.run_id; previous = o;
         result.evidence_observation_ids.push(o.id);
         let decision: Decision;
-        const hazardous = value(o, 'hazard.active', policy, true) === true;
+        const hazardous = value(o, 'hazard.active', confirmingReadonly?effectPolicy:policy, true, confirmingReadonly?state.lastActionAt:undefined) === true;
         if (confirmingTalk) {
           const target = readKnown(o, 'target.signature', effectPolicy, true, state.lastActionAt);
           const open = readKnown(o, 'dialog.open', effectPolicy, true, state.lastActionAt);
@@ -90,7 +94,8 @@ export class BehaviorRuntime {
           if (hazardous) decision = finish('blocked', 'post_action_hazard_observed');
           else if (target?.value !== spec.params.target_signature || open?.value !== true || dialogTarget?.value !== spec.params.target_signature) decision = finish('blocked', 'dialog_effect_not_new_or_unconfirmed');
           else decision = finish('completed', 'dialog_open_confirmed', true);
-        } else if(hazardous&&spec.kind==='activate_control') decision=finish('blocked','control_activation_hazard_observed');
+        } else if(confirmingLesson) decision=hazardous?finish('blocked',spec.kind==='tutorial_move'?'tutorial_movement_hazard_observed':'tutorial_orientation_hazard_observed'):this.tutorialLesson(spec,o,effectPolicy,state);
+        else if(hazardous&&(spec.kind==='activate_control'||tutorialLesson)) decision=finish('blocked',tutorialLesson?spec.kind==='tutorial_move'?'tutorial_movement_hazard_observed':'tutorial_orientation_hazard_observed':'control_activation_hazard_observed');
         else if (hazardous && spec.kind !== 'avoid_hazard') {
           const released = await lease.wait(() => this.ports.release('hazard_preempt'));
           if (released !== 'confirmed') { outcomeUnconfirmed = true; result.status = 'blocked'; result.reason = 'hazard_release_unconfirmed'; break; }
@@ -147,12 +152,51 @@ export class BehaviorRuntime {
   private decide(spec: BehaviorSpec, o: Observation, p: FieldPolicy, s: State): Decision {
     const duration = Number(spec.params.action_duration_ms ?? spec.params.step_duration_ms ?? 200);
     if (spec.kind === 'activate_control') return this.activateControl(spec,o,p,s,Number(spec.params.action_duration_ms??50));
+    if (spec.kind === 'tutorial_orient'||spec.kind==='tutorial_move') return this.tutorialLesson(spec,o,p,s);
     if (spec.kind === 'kill_target') return this.kill(spec, o, p, s, duration);
     if (spec.kind === 'loot_target') return this.loot(spec, o, p, s, duration);
     if (['talk_to', 'accept_quest', 'turn_in_quest'].includes(spec.kind)) return this.dialog(spec, o, p, s, duration);
     if (spec.kind === 'move_to' || spec.kind === 'fly_to') return this.navigate(spec, o, p, s, duration);
     if (spec.kind === 'avoid_hazard') return this.avoid(o, p, s, duration, Number(spec.params.safe_observations ?? 2), true);
     return this.recover(spec, o, p, s, duration);
+  }
+  private tutorialLesson(spec:BehaviorSpec,o:Observation,p:FieldPolicy,s:State):Decision {
+    const moving=spec.kind==='tutorial_move',prefix=moving?'tutorial_movement':'tutorial_orientation';
+    const layout=readKnown(o,'ui.layout_id',p,true,s.lastActionAt),field=readKnown(o,'ui.state',p,true,s.lastActionAt);
+    const instruction=readKnown(o,'tutorial.instruction',p,true,s.lastActionAt);
+    if(!layout||layout.value!==spec.params.layout_id||p.mode==='live'&&layout.source!=='cv')return finish('blocked',prefix+'_layout_unknown_or_changed');
+    const current=(f:typeof field)=>f!==null&&f.captured_at_ms===layout.captured_at_ms&&(p.mode!=='live'||f.source==='cv');
+    const row=field?.value;
+    const ui=current(field)&&row!==null&&typeof row==='object'&&!Array.isArray(row)&&Object.keys(row).length===4&&typeof row.id==='string'&&typeof row.confidence==='number'&&row.confidence>=.95&&row.confidence<=1&&typeof row.signature_sha256==='string'&&/^[a-f0-9]{64}$/.test(row.signature_sha256)&&(row.hard_stop===null||row.hard_stop===false)?row:null;
+    const text=instruction?.value;
+    const label=current(instruction)&&text!==null&&typeof text==='object'&&!Array.isArray(text)&&typeof text.id==='string'&&text.id.length>0&&!['unknown','unsupported','unavailable'].includes(text.id)&&typeof text.signature_sha256==='string'&&/^[a-f0-9]{64}$/.test(text.signature_sha256)?{id:text.id,signature_sha256:text.signature_sha256}:null;
+    const hardStop=readKnown(o,'ui.hard_stop',p,true,s.lastActionAt);
+    if(hardStop&&hardStop.value!==false&&hardStop.value!==null||current(field)&&row!==null&&typeof row==='object'&&!Array.isArray(row)&&row.hard_stop!==null&&row.hard_stop!==false)return finish('blocked',prefix+'_hard_stop');
+    const matches=readKnown(o,'ui.skill_matches',p,true,s.lastActionAt);
+    const uniqueMatch=(signature:JsonValue|undefined)=>typeof signature==='string'&&current(matches)&&Array.isArray(matches?.value)&&matches.value.filter(v=>v!==null&&typeof v==='object'&&!Array.isArray(v)&&typeof v.skill_id==='string'&&v.signature_sha256===signature).length===1;
+    if(s.lastActionAt!==undefined){
+      if(s.lastActionObservation===o.id)return finish('blocked',prefix+'_effect_not_new');
+      if(ui&&ui.id!==spec.params.state_id&&!['unknown','unsupported','unavailable'].includes(String(ui.id))&&uniqueMatch(ui.signature_sha256))return finish('completed',prefix+'_state_changed',true);
+      if(label&&s.orientationInstruction&&(label.id!==s.orientationInstruction.id||label.signature_sha256!==s.orientationInstruction.signature_sha256))return finish('completed',prefix+'_instruction_changed',true);
+      return finish('blocked',prefix+'_effect_unverified');
+    }
+    const cursor=readKnown(o,'input.cursor_free',p,true),held=readKnown(o,'input.mouse_buttons_held',p,true),mode=readKnown(o,'input.mouse_mode',p,true);
+    if(!ui||Object.keys(ui).length!==4||ui.id!==spec.params.state_id||ui.signature_sha256!==spec.params.signature_sha256)return finish('blocked',prefix+'_state_or_signature_unbound');
+    if(!uniqueMatch(spec.params.signature_sha256))return finish('blocked',prefix+'_learned_signature_unbound');
+    if(!cursor||!held||cursor.value!==true||held.value!==false||cursor.captured_at_ms!==layout.captured_at_ms||held.captured_at_ms!==layout.captured_at_ms||p.mode==='live'&&(cursor.source!=='window'||held.source!=='window'))return finish('blocked',prefix+'_cursor_unsafe');
+    if(!current(mode)||mode?.value!=='world')return finish('blocked',prefix+'_mouse_mode_unknown');
+    const conditions=[condition('ui.state',ui,p.maxAgeMs),condition('ui.layout_id',layout.value,p.maxAgeMs),condition('ui.skill_matches',matches!.value,p.maxAgeMs),condition('input.cursor_free',true,p.maxAgeMs),condition('input.mouse_buttons_held',false,p.maxAgeMs),condition('input.mouse_mode','world',p.maxAgeMs)];
+    if(label)s.orientationInstruction=label;
+    if(moving){
+      const ground=readKnown(o,'player.movement_mode',p,true),binding=readKnown(o,'input.forward_binding',p,true),b=binding?.value;
+      if(!current(ground)||ground?.value!=='ground')return finish('blocked','tutorial_movement_ground_mode_unknown');
+      if(!current(binding)||!b||typeof b!=='object'||Array.isArray(b)||Object.keys(b).length!==3||b.mode!=='ground'||b.layout_id!==layout.value||!Array.isArray(b.keys)||b.keys.length!==1||b.keys[0]!=='W')return finish('blocked','tutorial_movement_forward_binding_unbound');
+      return{action:{kind:'move',axis:'forward',duration_ms:Number(spec.params.action_duration_ms)},conditions:[...conditions,condition('player.movement_mode','ground',p.maxAgeMs),condition('input.forward_binding',b,p.maxAgeMs)],state:'tutorial_movement_forward'};
+    }
+    if(!o.window||!Number.isSafeInteger(o.window.client_width)||!Number.isSafeInteger(o.window.client_height)||o.window.client_width<1||o.window.client_height<1)return finish('blocked',prefix+'_client_unknown');
+    const dx=Math.round(o.window.client_width*Number(spec.params.dx_fraction)),x=Math.floor(o.window.client_width*Number(spec.params.origin_x_fraction)),y=Math.floor(o.window.client_height*Number(spec.params.origin_y_fraction));
+    if(dx<1||dx>32767||x<0||y<0||x+dx>=o.window.client_width||y>=o.window.client_height)return finish('blocked',prefix+'_curve_outside_client');
+    return{action:{kind:'turn',dx,duration_ms:Number(spec.params.action_duration_ms),camera_sweep:{origin:{x,y},steps:4,return_to_origin:true}},conditions,state:'tutorial_orientation_sweep'};
   }
   private activateControl(spec:BehaviorSpec,o:Observation,p:FieldPolicy,s:State,duration:number):Decision {
     const layout=readKnown(o,'ui.layout_id',p,true,s.lastActionAt),state=readKnown(o,'ui.control_state',p,true,s.lastActionAt);
@@ -222,6 +266,7 @@ export class BehaviorRuntime {
     }
     if (spec.kind === 'turn_in_quest' && value(o, `quest.${q}.completed`, p) !== true) return finish('blocked', 'quest_completion_unknown');
     const open = value(o, 'dialog.open', p, true);
+    if(spec.kind==='talk_to'&&spec.params.screen_target_positive_only===true&&after===undefined&&open!==true)return this.positiveScreenTalk(spec,o,p,duration);
     if (open === false) {
       const screen = value(o, 'target.screen_interaction', p, true);
       if (screen !== undefined) {
@@ -262,6 +307,27 @@ export class BehaviorRuntime {
     }
     if (!e) return finish('blocked', 'quest_dialog_element_unknown_or_ambiguous');
     return { action: { kind: 'click', element_id: String(e.id), button: 'left', x: Number(e.x), y: Number(e.y), duration_ms: duration }, conditions: [condition('dialog.elements', elements, p.maxAgeMs)], state: spec.kind === 'accept_quest' ? 'accepting_quest' : 'turning_in_quest' };
+  }
+  private positiveScreenTalk(spec:BehaviorSpec,o:Observation,p:FieldPolicy,duration:number):Decision {
+    const layout=readKnown(o,'ui.layout_id',p,true),target=readKnown(o,'target.signature',p,true),screen=readKnown(o,'target.screen_interaction',p,true),surface=readKnown(o,'target.world_npc_surface',p,true),instruction=readKnown(o,'tutorial.instruction',p,true);
+    const current=(f:typeof layout)=>f!==null&&layout!==null&&f.captured_at_ms===layout.captured_at_ms&&(p.mode!=='live'||f.source==='cv');
+    if(!current(layout)||typeof layout?.value!=='string'||!current(target)||target?.value!==spec.params.target_signature||!current(instruction)||instruction?.value!=='与吉安娜·普罗德摩尔交谈')return finish('blocked','positive_screen_talk_identity_or_instruction_unknown');
+    const point=screen?.value,body=surface?.value;
+    if(!current(screen)||!point||Array.isArray(point)||typeof point!=='object'||Object.keys(point).length!==6||point.signature!==spec.params.target_signature||point.layout_id!==layout.value||point.enabled!==true||typeof point.id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(point.id)||!Number.isSafeInteger(point.x)||!Number.isSafeInteger(point.y))return finish('blocked','positive_screen_talk_point_unbound');
+    if(!current(surface)||!body||Array.isArray(body)||typeof body!=='object'||Object.keys(body).length!==10||body.id!==point.id||body.signature!==point.signature||body.layout_id!==point.layout_id||body.visible!==true||typeof body.frame_id!=='string'||!body.frame_id||body.frame_id.length>128||typeof body.roi_id!=='string'||!body.roi_id||body.roi_id.length>128||typeof body.roi_sha256!=='string'||!/^[a-f0-9]{64}$/.test(body.roi_sha256)||typeof body.calibration_sha256!=='string'||!/^[a-f0-9]{64}$/.test(body.calibration_sha256))return finish('blocked','positive_screen_talk_surface_unbound');
+    const rect=body.rect,center=body.point,w=o.window;
+    if(!rect||Array.isArray(rect)||typeof rect!=='object'||Object.keys(rect).length!==4||!center||Array.isArray(center)||typeof center!=='object'||Object.keys(center).length!==2||center.x!==point.x||center.y!==point.y||!w||![rect.x,rect.y,rect.width,rect.height,w.client_width,w.client_height].every(Number.isSafeInteger)||Number(rect.x)<0||Number(rect.y)<0||Number(rect.width)<5||Number(rect.height)<5||Number(rect.x)+Number(rect.width)>w.client_width||Number(rect.y)+Number(rect.height)>w.client_height||Number(point.x)-2<Number(rect.x)||Number(point.y)-2<Number(rect.y)||Number(point.x)+2>=Number(rect.x)+Number(rect.width)||Number(point.y)+2>=Number(rect.y)+Number(rect.height))return finish('blocked','positive_screen_talk_surface_point_outside_body');
+    const cursor=readKnown(o,'input.cursor_free',p,true),held=readKnown(o,'input.mouse_buttons_held',p,true);
+    if(!cursor||!held||cursor.value!==true||held.value!==false||cursor.captured_at_ms!==layout.captured_at_ms||held.captured_at_ms!==layout.captured_at_ms||p.mode==='live'&&(cursor.source!=='window'||held.source!=='window'))return finish('blocked','positive_screen_talk_cursor_unsafe');
+    const uiConditions:ActionCondition[]=[];
+    if(Object.hasOwn(o.fields,'ui.state')){
+      const state=readKnown(o,'ui.state',p,true),row=state?.value;
+      if(!current(state)||!row||Array.isArray(row)||typeof row!=='object'||Object.keys(row).length!==4||typeof row.id!=='string'||!row.id||['unknown','unsupported','unavailable'].includes(row.id)||typeof row.confidence!=='number'||!Number.isFinite(row.confidence)||row.confidence<.95||row.confidence>1||typeof row.signature_sha256!=='string'||!/^[a-f0-9]{64}$/.test(row.signature_sha256)||row.hard_stop!==null)return finish('blocked','positive_screen_talk_ui_state_unbound');
+      uiConditions.push(condition('ui.state',row,p.maxAgeMs));
+    }
+    const hardStop=readKnown(o,'ui.hard_stop',p,true);
+    if(hardStop&&hardStop.value!==false&&hardStop.value!==null)return finish('blocked','positive_screen_talk_hard_stop');
+    return{action:{kind:'screen_interact',target_signature:String(spec.params.target_signature),element_id:point.id,x:Number(point.x),y:Number(point.y),duration_ms:Math.min(duration,150)},conditions:[condition('target.signature',target!.value,p.maxAgeMs),condition('target.screen_interaction',point,p.maxAgeMs),condition('target.world_npc_surface',body,p.maxAgeMs),condition('tutorial.instruction',instruction!.value,p.maxAgeMs),condition('ui.layout_id',layout.value,p.maxAgeMs),condition('input.cursor_free',true,p.maxAgeMs),condition('input.mouse_buttons_held',false,p.maxAgeMs),...uiConditions],state:'opening_dialog_at_positive_world_npc_surface'};
   }
   private navigate(spec: BehaviorSpec, o: Observation, p: FieldPolicy, s: State, duration: number): Decision {
     const expectedMode = spec.kind === 'move_to' ? 'ground' : spec.params.flight_mode;

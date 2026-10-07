@@ -19,7 +19,7 @@ def parser():
     return p
 
 def build_command(args,repo:Path,node:str|None=None):
-    if not args.recovery_authorized or args.target_character!='小啊':raise ValueError('recovery_explicit_authorization_and_selected_target_required')
+    if not args.recovery_authorized or args.target_character!='小呵':raise ValueError('recovery_explicit_authorization_and_selected_target_required')
     for name,limit in (('max_duration_ms',180000),('stage_timeout_ms',30000),('max_actions',8)):
         value=getattr(args,name)
         if value is not None and not 1<=value<=limit:raise ValueError('recovery_finite_budget')

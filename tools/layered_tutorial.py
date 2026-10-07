@@ -19,7 +19,7 @@ def parser():
 
 
 def build_command(args,repo:Path,node=None):
-    if args.command=='run' and (not args.finite_input_authorized or not args.recovery_authorized or args.target_character!='小啊'):
+    if args.command=='run' and (not args.finite_input_authorized or not args.recovery_authorized or args.target_character!='小呵'):
         raise ValueError('tutorial_input_recovery_and_character_authorization_required')
     required=('snapshot','image','review','output') if args.command=='bootstrap' else ('run_dir',) if args.command=='cancel' else ('config','run_dir')
     if any(not getattr(args,key) for key in required):raise ValueError('tutorial_entry_arguments_required')

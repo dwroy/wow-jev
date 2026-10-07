@@ -43,7 +43,7 @@ function harness(mode:'complete_client'|'visible_point'='visible_point',options:
     else {assert.ok(focused,'ordinary input remains foreground-only');state=state==='ack'?'reconnect':'world';}
     now+=60;return {schema_version:1,status:'input_released',session_id:1,release_confirmed:true,receipts:[{protocol:'wow-input',version:1,type:'receipt',id:'fixture-action',session_id:'11111111-1111-4111-8111-111111111111',op:'execute',status:'completed',input:{status:'released',events_requested:3,events_inserted:3,released:true},effect:{status:'unknown'},timing:{clock:'windows_qpc',started_ms:start,finished_ms:start+60},input_timing:{clock:'windows_qpc',first_send_started_ms:start+1,first_send_finished_ms:start+2,last_send_finished_ms:start+59},local_clock:{domain:'windows-qpc',at_ms:start+60}}]} as BridgeResult;
   },review:async f=>state==='world'?{version:1,source:f.source,target,kind:'human_reviewed',reviewed_at:'2026-10-07T00:00:00Z',scene:'world',buttons:[]}:undefined};
-  const runner=new RecoveryOrchestrator({runId:'visible-fixture',directory:'/tmp/visible-fixture',command:'recover',mode:'offline',authorized:true,targetCharacter:'小啊',focusVisibilityMode:mode},ports);
+  const runner=new RecoveryOrchestrator({runId:'visible-fixture',directory:'/tmp/visible-fixture',command:'recover',mode:'offline',authorized:true,targetCharacter:'小呵',focusVisibilityMode:mode},ports);
   return {runner,requests,controller,releases:()=>releases};
 }
 test('layered recovery activates background then freshly acknowledges/reconnects and stops at playable world',async()=>{
@@ -61,5 +61,5 @@ test('native/shared schemas load strictly, accept explicit modes, reject mode on
   assert.ok(validate(command),JSON.stringify(validate.errors));assert.equal(validate({...command,action:{...command.action,kind:'mouse_click',button:'left'}}),false);assert.equal(validate({...command,action:{...command.action,visibility_mode:'background'}}),false);
   const schema=JSON.parse(await readFile(new URL('../../protocol/session-recovery-v1.schema.json',import.meta.url),'utf8')),ajv=new Ajv({strict:true});ajv.addSchema(schema);const point=ajv.compile({$ref:'wow-jev/session-recovery-v1#/definitions/recovery_focus_point_safety'});
   const c={...candidate(),user_idle_scope:'calling-session-only',input_source_distinguishable:false,visibility_method:'physical_patch_monitor_union_and_each_pixel_root_hit_test'};assert.ok(point(c),JSON.stringify(point.errors));assert.equal(point({...c,process_start_ticks:638900000000000000}),false);
-  assert.throws(()=>validateRecoveryOptions({runId:'a',directory:'/tmp/a',command:'recover',mode:'offline',authorized:true,targetCharacter:'小啊',focusVisibilityMode:'background' as 'visible_point'}),/focus_visibility_mode/);
+  assert.throws(()=>validateRecoveryOptions({runId:'a',directory:'/tmp/a',command:'recover',mode:'offline',authorized:true,targetCharacter:'小呵',focusVisibilityMode:'background' as 'visible_point'}),/focus_visibility_mode/);
 });

@@ -1,7 +1,7 @@
 import type {Collected} from '../eye/runtime.js';
 import type {BodyRuntimeOptions} from '../actions/runtime.js';
 import {createLayerExecution} from '../layers/runtime.js';
-import type {BehaviorChooser} from '../layers/contracts.js';
+import type {BehaviorChooser,TargetScopeVerifier} from '../layers/contracts.js';
 import {canonical} from '../behavior/validation.js';
 import {traceAsync,type TraceRecorder} from '../benchmark/trace.js';
 import type {LocalClock,TutorialPlan} from './types.js';
@@ -11,6 +11,7 @@ export interface TutorialRuntimeOptions extends BodyRuntimeOptions {
   currentSourceClock:()=>LocalClock; maximumLocalAge:number; append:(kind:string,data:unknown)=>Promise<void>;
   chooser?:BehaviorChooser;trace?:TraceRecorder;
   collectEffect?:()=>Promise<Collected>;maxEffectAgeMs?:number;
+  targetScopeVerifier?:TargetScopeVerifier;
 }
 /** The tutorial has no native input port of its own: every action runs L4→L3→Body→gate→hand. */
 export async function runTutorial(options:TutorialRuntimeOptions){
@@ -39,7 +40,7 @@ export async function runTutorial(options:TutorialRuntimeOptions){
   };
   const chooser=options.chooser?{choose:async(request:Parameters<BehaviorChooser['choose']>[0],signal:AbortSignal)=>{modelCalls.jev++;return traceAsync(options.trace,'jev',null,()=>options.chooser!.choose(request,signal),{task_id:plan.task.id});}}:undefined;
   const effectCollect=options.collectEffect?()=>traceAsync(options.trace,'effect',null,()=>options.collectEffect!(),{phase:'L3_independent_effect_collection',hot_path:false}):undefined;
-  const layers=createLayerExecution({...options,collect,append,saveObservations:options.saveObservations??false,behaviorPolicy:{trustedSources:['cv','window','local_ocr'],maxFieldAgeMs:750,maxObservationAgeMs:750,maxEffectFieldAgeMs:effectAge},...(effectCollect?{collectEffect:effectCollect}:{}),...(chooser?{chooser}:{})});
+  const layers=createLayerExecution({...options,collect,append,saveObservations:options.saveObservations??false,behaviorPolicy:{trustedSources:['cv','window','local_ocr'],maxFieldAgeMs:750,maxObservationAgeMs:750,maxEffectFieldAgeMs:effectAge,...(options.targetScopeVerifier?{targetScopeVerifier:options.targetScopeVerifier}:{})},...(effectCollect?{collectEffect:effectCollect}:{}),...(chooser?{chooser}:{})});
   await append('tutorial_plan_bound',{plan,scope:'session_local_evidence',native_quest_id:null,automatic_action_eligible:false});
   const result=await layers.run(plan.task,{task_id:plan.task.id,task_revision:plan.task.revision,run_epoch:identity.run_epoch,mode:options.mode,conditions:[],signal:options.signal},{isCurrent:()=>canonical(options.currentIdentity())===canonical(identity)});
   await layers.drain();

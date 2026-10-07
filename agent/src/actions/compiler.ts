@@ -18,7 +18,7 @@ function validAction(action: BodyAction): boolean {
     move: ['axis'], turn: ['dx'], arc: ['dx'], jump: [], mount: [], dismount: [], fly: ['axis'], cast: ['ability'], interact: ['target_signature'], screen_interact: ['target_signature', 'element_id', 'x', 'y'], click: ['element_id', 'button', 'x', 'y'], ui_key: ['key', 'state_id'], wait: [],
   };
   if (!Object.hasOwn(fields, action.kind)) return false;
-  const names = ['kind', 'duration_ms', ...fields[action.kind]];
+  const names = ['kind', 'duration_ms', ...fields[action.kind], ...(action.kind==='turn'&&'camera_sweep' in action?['camera_sweep']:[])];
   if (Object.keys(action).length !== names.length || names.some((key) => !(key in action))) return false;
   if (action.kind === 'move') return ['forward', 'backward', 'strafe_left', 'strafe_right'].includes(action.axis);
   if (action.kind === 'fly') return ['forward', 'ascend', 'descend', 'brake'].includes(action.axis);
@@ -60,6 +60,22 @@ export function compileBodyAction(action: BodyAction, profile: BodyProfile, obse
   const conditions: ActionCondition[] = [];
   if (profile.character_id !== null) conditions.push(condition('player.character_id', profile.character_id));
   const capability = (cap: BodyCapability): BodyCompilation | null => profile.capabilities.includes(cap) ? null : reject('unsupported', `capability:${cap}`);
+  if(action.kind==='turn'&&action.camera_sweep){
+    const sweep=action.camera_sweep,window=observation.window,state=observation.fields['ui.state'],layout=observation.fields['ui.layout_id'];
+    if(capability('mouse_turn')||profile.mouse_look_button!=='right'||action.duration_ms!==950||sweep.steps!==4||sweep.return_to_origin!==true||!window||
+      Object.keys(sweep).sort().join(',')!=='origin,return_to_origin,steps'||Object.keys(sweep.origin).sort().join(',')!=='x,y'||
+      sweep.origin.x!==Math.floor(window.client_width*.70)||sweep.origin.y!==Math.floor(window.client_height*.62)||action.dx!==Math.round(window.client_width*.12)||
+      state?.status!=='known'||state.source!=='cv'||state.source_observation_id!==observation.id||!state.value||Array.isArray(state.value)||typeof state.value!=='object'||state.value.id!=='tutorial_look_around'||Number(state.value.confidence)<.95||state.value.hard_stop!==null||
+      layout?.status!=='known'||layout.source!=='cv'||layout.value!==profile.layout_id||layout.source_observation_id!==observation.id||state.captured_at_ms!==layout.captured_at_ms||
+      known(observation,'input.cursor_free')!==true||known(observation,'input.mouse_buttons_held')!==false)return reject('blocked','tutorial_camera_sweep_not_current_or_reviewed');
+    conditions.push(condition('ui.state',state.value),condition('ui.layout_id',layout.value),condition('input.cursor_free',true),condition('input.mouse_buttons_held',false));
+    const builder=new TimelineBuilder(950).absoluteMouseMove(sweep.origin.x,sweep.origin.y,0).down({button:'right'},150,800);
+    let previous=0;
+    for(let i=1;i<=4;i++){const cumulative=Math.round(action.dx*i/4);builder.relativeMouseMove(cumulative-previous,0,150+i*100);previous=cumulative;}
+    for(let i=1;i<=4;i++){const cumulative=Math.round(action.dx*(4-i)/4);builder.relativeMouseMove(cumulative-previous,0,550+i*100);previous=cumulative;}
+    builder.up({button:'right'},950);
+    return{status:'ready',action:builder.build(),conditions,resources:['mouse_look'],duration_ms:950};
+  }
   if (action.kind === 'ui_key') {
     const unavailable = capability('ui_key'); if (unavailable) return unavailable;
     const layout = observation.fields['ui.layout_id'], state = observation.fields['ui.state'];

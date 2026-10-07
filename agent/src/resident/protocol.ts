@@ -20,6 +20,7 @@ export interface ResidentInputState {
   cursor_flags:number|null;capture_hwnd:string|null;target_thread_id:number;sampled_qpc_ms:number;reason:string|null;
 }
 export interface ResidentMemorySample {
+  ui_skills?: {status:'known'|'unknown';state_id:string|null;confidence:number;matches:Array<{skill_id:string;state_id:string;signature_id:string;status:'candidate'|'active';hard_stop:boolean;roi_sha256:string}>;knowledge_sha256:string;hard_stop:boolean;started_qpc_ms:number;finished_qpc_ms:number};
   protocol:'wow-resident';version:1;type:'sample';session_id:string;id:string;seq:number;window:ResidentWindow;
   capture:{status:'ok'|'unavailable';method:'wgc';started_qpc_ms:number;finished_qpc_ms:number;request_received_qpc_ms:number;arrived_qpc_ms:number;reason?:{code:string};source_qpc_basis?:'host_frame_arrived';render_timestamp?:{domain:'wgc-system-relative';at_ms:number;alignment:'unverified'}};
   metrics:{mean_luma:number|null;variance_luma:number|null;frame_delta:number|null};
@@ -32,7 +33,7 @@ export interface ResidentHostReady {
   target_scope:'retail_wow'|'recording_fixture';
   protocol:'wow-resident';version:1;type:'ready';session_id:string;channel_generation:string;host_pid:number;host_start_ticks:string;
   windows_clock_id:string;windows_session_id:1;target:ResidentTarget;window:ResidentWindow;native_ready:NativeReady|null;
-  capabilities:{capture:'wgc';fresh_frame:true;memory_roi:true;input:boolean;max_duration_ms:150;controller_lease_ms:750};
+  capabilities:{capture:'wgc';fresh_frame:true;memory_roi:true;input:boolean;max_duration_ms:300|950;controller_lease_ms:750};
   local_clock:{domain:'windows-qpc';at_ms:number};
 }
 export interface ResidentSourceOwner {
@@ -59,8 +60,8 @@ export interface ResidentStopped {
 }
 export interface ResidentError {protocol:'wow-resident';version:1;type:'error';session_id:string;id:string|null;reason:{code:string};local_clock:{domain:'windows-qpc';at_ms:number}}
 export type ResidentMessage=ResidentHostReady|ResidentMemorySample|ResidentEvidence|ResidentReceipt|ResidentStopped|ResidentError;
-export type ResidentOp='heartbeat'|'observe'|'execute'|'cancel'|'release_all'|'shutdown'|'status'|'evidence';
-export interface ResidentCommand {protocol:'wow-resident';version:1;type:'command';session_id:string;id:string;op:ResidentOp;action?:NativeAction;source?:ResidentMemoryFrame;intent?:ResidentIntentBinding;ocr?:boolean}
+export type ResidentOp='heartbeat'|'observe'|'execute'|'cancel'|'release_all'|'shutdown'|'status'|'evidence'|'load_ui_skills';
+export interface ResidentCommand {protocol:'wow-resident';version:1;type:'command';session_id:string;id:string;op:ResidentOp;action?:NativeAction;source?:ResidentMemoryFrame;intent?:ResidentIntentBinding;ocr?:boolean;snapshot_canonical?:string;snapshot_sha256?:string;ui_scope?:{target_scope:'retail_wow'|'recording_fixture';build:string;locale:string;size_bucket:string;ui_scale:number}}
 export async function loadResidentValidator(schemaPath:string,nativeSchemaPath:string):Promise<ValidateFunction<ResidentMessage|ResidentCommand>>{
   const ajv=new Ajv({strict:true,allErrors:true});ajv.addSchema(JSON.parse(await readFile(nativeSchemaPath,'utf8')) as object);
   return ajv.compile<ResidentMessage|ResidentCommand>(JSON.parse(await readFile(schemaPath,'utf8')) as object);

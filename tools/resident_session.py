@@ -31,7 +31,7 @@ def unique(pairs):
 def read_json(path:Path):return json.loads(path.read_text(),object_pairs_hook=unique)
 def validate_config(config:dict)->None:
     required={'version','target','authorized_input','focus_recovery_authorized','max_actions','duration_ms'}
-    if not isinstance(config,dict)or not required<=config.keys()or config.keys()-required-{'dialog_absence_calibration','target_scope','fixture_executable'}:raise ValueError('resident_config_exact_fields')
+    if not isinstance(config,dict)or not required<=config.keys()or config.keys()-required-{'dialog_absence_calibration','target_scope','fixture_executable','ui_skill_practice_authorized','tutorial_prerequisite_authorized'}:raise ValueError('resident_config_exact_fields')
     if type(config['version'])is not int or config['version']!=1:raise ValueError('resident_config_version')
     target=config['target']
     if not isinstance(target,dict)or target.keys()!={'pid','start_ticks','hwnd','class','executable','windows_session_id'}:raise ValueError('resident_target_exact_fields')
@@ -47,7 +47,11 @@ def validate_config(config:dict)->None:
         if target['class']!='WowJevResidentRecordingWindowV1'or not isinstance(target['executable'],str)or PureWindowsPath(target['executable']).name!='ResidentRecordingWindow.exe'or config.get('fixture_executable')!=target['executable']or config['focus_recovery_authorized']or config.get('dialog_absence_calibration')is not None:raise ValueError('resident_fixed_fixture_target_required')
     else:raise ValueError('resident_unknown_target_scope')
     if any(type(config[key])is not bool for key in ['authorized_input','focus_recovery_authorized']):raise ValueError('resident_authorization_boolean')
-    if type(config['max_actions'])is not int or not 0<=config['max_actions']<=(64 if scope=='recording_fixture'else 8)or type(config['duration_ms'])is not int or not 1000<=config['duration_ms']<=300000:raise ValueError('resident_budget_bounds')
+    tutorial=config.get('tutorial_prerequisite_authorized',False)
+    if type(tutorial)is not bool or tutorial and(scope!='retail_wow' or not config['authorized_input']):raise ValueError('resident_tutorial_authorization')
+    practice=config.get('ui_skill_practice_authorized',False)
+    if type(practice)is not bool or practice and(scope!='retail_wow' or not config['authorized_input']):raise ValueError('resident_practice_authorization')
+    if type(config['max_actions'])is not int or not 0<=config['max_actions']<=(64 if scope=='recording_fixture'else 32 if practice else 8)or type(config['duration_ms'])is not int or not 1000<=config['duration_ms']<=300000:raise ValueError('resident_budget_bounds')
     if not config['authorized_input']and(config['max_actions']!=0 or config['focus_recovery_authorized']):raise ValueError('readonly_resident_must_not_enable_input')
     if config.get('dialog_absence_calibration')is not None and not isinstance(config['dialog_absence_calibration'],str):raise ValueError('resident_absence_path')
 

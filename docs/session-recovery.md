@@ -1,12 +1,12 @@
 # Windows会话恢复
 
-2026-10-06用户明确授权A/B/C：受限点击恢复焦点、处理选角/断线、通过战网启动正式服，并仅完成联盟战士“小啊”的第一个教程交谈步骤。授权替代此前“绝不抢前台”和“失焦只停止”，但普通动作仍严格前台。本入口在WSL用TypeScript编排，在Windows session1执行截屏、本地OCR/CV、原生输入及独立释放看门狗。不会把恢复流程称作后台输入支持。
+2026-10-06用户明确授权A/B/C：受限点击恢复焦点、处理选角/断线、通过战网启动正式服，并仅完成联盟战士“小呵”的第一个教程交谈步骤。授权替代此前“绝不抢前台”和“失焦只停止”，但普通动作仍严格前台。本入口在WSL用TypeScript编排，在Windows session1执行截屏、本地OCR/CV、原生输入及独立释放看门狗。不会把恢复流程称作后台输入支持。
 
 ## 执行顺序
 
 1. 只读发现目标进程、窗口、路径/版本/启动时间、会话和客户区DPI。已有WoW则复用当前身份，不重复启动；存在但无可用窗口则有限等待，不把无窗口当进程不存在。
 2. 无WoW时，只读查找战网安装位置，核对实际文件身份后在当前用户session1启动。先观察战网状态；凭据、验证、协议或更新安装界面立即停止。固定`--exec="launch WoW"`仅是一次受限启动尝试，未发现WoW时才考虑当前图上明确健康的正式服进入游戏按钮。禁止启动其它产品/账号/角色或直接绕过战网登录。
-3. 选角时，当前图必须证明选中的金色行是“小啊”、战士、联盟；整屏出现名字不足以证明选中。校准CV逐一核对选中行、名字、职业和联盟徽记；布局变化或任何关键ROI不匹配保持unknown。确认后仅点击当前图的“进入魔兽世界”，再等待独立后图确认进入世界。
+3. 选角时，当前图必须证明选中的金色行是“小呵”、战士、联盟；整屏出现名字不足以证明选中。校准CV逐一核对选中行、名字、职业和联盟徽记；布局变化或任何关键ROI不匹配保持unknown。确认后仅点击当前图的“进入魔兽世界”，再等待独立后图确认进入世界。
 4. 无焦点时，仅使用当前已核验场景中的安全点击位置。原生执行闸在按下前再次核对完整客户区可见性、显示器覆盖、上方窗口区域、落点归属和空闲>5s，固定一次短左键点击。最多75ms等待激活；一旦激活后再失焦即停止，释放后再复核。可见/遮挡不确定、最小化、按钮已被用户按住或前台复核失败都停止；近期输入仅在原阶段预算内只读等到严格空闲>5s，始终不发点击，超时停止。不会连续尝试抢鼠标。
 5. 独立确认可玩世界后立即停止。2026-10-07 起 `recover` 与 `launch` 都不执行NPC交谈；首个教程通过[局部证据到四层执行](tutorial-layered-runtime.md)的独立入口，复用L4/L3/Body/统一闸。当前校准HUD可作为只读world与安全focus锚点，不能输出NPC动作或完成结果；其它world画面需要独立场景证据，unknown仍停止。
 
@@ -22,7 +22,7 @@ GetLastInputInfo仅描述调用会话，且SendInput也可更新时间，不能�
 
 ## 校准与范围
 
-当前包含两份真实本地截图审核后的窄布局校准：2560×1440选中联盟战士“小啊”的卡片，及同尺寸初始教程吉安娜名字/交谈提示。PNG/JSON保留原图SHA、ROI、阈值及审核依据，编译输出冻结并验证参考图SHA。阶段一已增加按客户区与UI比例、锚点变换的ROI匹配；角色、布局或教程证据不匹配会安全停在unknown，不把参考级本地任务包转成当前任务事实。没有角色GUID或游戏内部任务ID可报告。
+当前包含两份真实本地截图审核后的窄布局校准：2560×1440选中联盟战士“小呵”的卡片，及同尺寸初始教程吉安娜名字/交谈提示。PNG/JSON保留原图SHA、ROI、阈值及审核依据，编译输出冻结并验证参考图SHA。阶段一已增加按客户区与UI比例、锚点变换的ROI匹配；角色、布局或教程证据不匹配会安全停在unknown，不把参考级本地任务包转成当前任务事实。没有角色GUID或游戏内部任务ID可报告。
 
 ## 可独立运行的入口
 
@@ -32,9 +32,9 @@ GetLastInputInfo仅描述调用会话，且SendInput也可更新时间，不能�
 bash native/windows/build.sh
 bash tools/session_recovery_build.sh
 python3 tools/recover.py --help
-python3 tools/recover.py launch --recovery-authorized --target-character 小啊 \
+python3 tools/recover.py launch --recovery-authorized --target-character 小呵 \
   --run-dir /home/dw/Projects/wow-jev/out/recovery/launch-01
-python3 tools/recover.py recover --recovery-authorized --target-character 小啊 \
+python3 tools/recover.py recover --recovery-authorized --target-character 小呵 \
   --run-dir /home/dw/Projects/wow-jev/out/recovery/ready-01
 ```
 

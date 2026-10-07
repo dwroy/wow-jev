@@ -270,7 +270,7 @@
         "launch_requested": {"type": "boolean"}, "launch_effect": {"const": "unknown"}, "wow_process_started_confirmed": {"const": false}, "world_entered": {"const": false},
         "started_windows_qpc_ms": {"type": "number", "minimum": 0}, "finished_windows_qpc_ms": {"type": "number", "minimum": 0},
         "observation_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
-        "selected_character": {"type": "object", "required": ["verified", "source", "reason"], "properties": {"verified": {"type": "boolean"}, "source": {"const": "calibrated_cv"}, "reason": {"type": "string"}, "name": {"const": "小啊"}, "class": {"const": "warrior"}, "faction": {"const": "alliance"}, "calibration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "reference_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
+        "selected_character": {"type": "object", "required": ["verified", "source", "reason"], "properties": {"verified": {"type": "boolean"}, "source": {"const": "calibrated_cv"}, "reason": {"type": "string"}, "name": {"const": "小呵"}, "class": {"const": "warrior"}, "faction": {"const": "alliance"}, "calibration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "reference_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
       }
     }
   }

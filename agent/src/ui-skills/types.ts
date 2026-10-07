@@ -25,7 +25,7 @@ export interface UiSkill {
 }
 export interface UiProposal {
   source_observation_id:string;source_frame_id:string;state_id:string;skill_id:string;hard_stop:HardStop|null;
-  element:UiSkill['element'];signature_bbox:Bbox;expected_to_state:string|null;confidence:number;
+  element:UiSkill['element'];signature_bbox:Bbox;signature_anchors?:Array<{id:string;bbox:Bbox}>;expected_to_state:string|null;confidence:number;
   prompt_sha256:string;result_sha256:string;provider:'Seed'|'manual_review';
 }
 export interface UiChoiceRequest {run_id:string;mode:UiMode;scope:UiScope;source:UiSource;state:UiState|null;candidates:UiSkill[];failure_streak:number;goal_state_id:string|null}

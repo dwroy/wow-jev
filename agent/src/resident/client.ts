@@ -93,7 +93,7 @@ export class ResidentClient extends EventEmitter implements ResidentSourceOwner 
     const pending=this.pending.get(message.id??'');if(!pending)throw new Error('resident_unrequested_message');
     if(message.type==='error'){clearTimeout(pending.timer);this.pending.delete(message.id!);pending.reject(new Error(message.reason.code));return;}
     if(message.type==='sample'||message.type==='evidence'){
-      if(pending.op!==(message.type==='sample'?'observe':'evidence'))throw new Error('resident_reply_operation');const sample=message.type==='sample'?message:message.sample;
+      if(pending.op!==(message.type==='sample'?'observe':'evidence')&&!(message.type==='sample'&&pending.op==='load_ui_skills'))throw new Error('resident_reply_operation');const sample=message.type==='sample'?message:message.sample;
       if(sample.memory_frame.target_scope!==this.hostReady.target_scope||sample.memory_frame.channel_generation!==this.hostReady.channel_generation||sample.memory_frame.host_pid!==this.hostReady.host_pid||sample.memory_frame.host_start_ticks!==this.hostReady.host_start_ticks||sample.memory_frame.windows_clock_id!==this.hostReady.windows_clock_id||
         this.current&&sample.seq<=this.current.sample.seq||digest(sample.memory_frame.target)!==digest(this.hostReady.target))throw new Error('resident_frame_identity_or_sequence');
       this.original.set(sample,digest(sample));this.current={sample,hash:digest(sample),received:this.now(),nativeSentQpc:message.local_clock.at_ms};
@@ -110,6 +110,12 @@ export class ResidentClient extends EventEmitter implements ResidentSourceOwner 
       const timer=setTimeout(()=>{this.pending.delete(id);reject(new Error('resident_request_timeout:'+op));if(op==='execute')this.fail(new Error('resident_input_transport_unconfirmed'));},timeout);
       this.pending.set(id,{op,resolve,reject,timer,started:this.now()});try{this.write(op,id,extra);}catch(error){clearTimeout(timer);this.pending.delete(id);reject(error instanceof Error?error:new Error('resident_write_failed'));}
     });
+  }
+  async loadUiSkills(snapshotCanonical:string,snapshotSha256:string,uiScope:NonNullable<ResidentCommand['ui_scope']>):Promise<ResidentMemorySample>{
+    if(createHash('sha256').update(snapshotCanonical).digest('hex')!==snapshotSha256)throw new Error('resident_ui_knowledge_sha');
+    const reply=await this.request('load_ui_skills',{snapshot_canonical:snapshotCanonical,snapshot_sha256:snapshotSha256,ui_scope:uiScope},3000);
+    if(reply.type!=='sample'||reply.ui_skills?.knowledge_sha256!==snapshotSha256)throw new Error('resident_ui_knowledge_reply');
+    return reply;
   }
   async sample(_legacySave=false):Promise<{sample:ResidentMemorySample;started_at_ms:number;received_at_ms:number}>{
     const started=this.now(),reply=await this.request('observe');if(reply.type!=='sample')throw new Error('resident_sample_reply');const bracket={sample:reply,started_at_ms:started,received_at_ms:this.now()};this.brackets.set(reply,{started_at_ms:bracket.started_at_ms,received_at_ms:bracket.received_at_ms});return bracket;
@@ -128,7 +134,7 @@ export class ResidentClient extends EventEmitter implements ResidentSourceOwner 
   async execute(action:NativeAction,options:{id?:string}={}):Promise<NativeReceipt>{
     const binding=this.bound;this.bound=null;if(!binding||!options.id||options.id!==binding.commandId||!this.isFrameActive(binding.source))throw new Error('resident_execute_without_current_gate_source');
     if(actionDigest(action)!==binding.intent.action_sha256)throw new Error('resident_approved_action_changed');
-    if(!('duration_ms'in action)||action.duration_ms<1||action.duration_ms>150)throw new Error('resident_finite_action_bounds');if(action.kind==='timeline')assertNativeTimeline(action);
+    assertResidentActionBounds(action,this.hostReady?.capabilities.max_duration_ms===950);
     const reply=await this.request('execute',{id:options.id,action,source:binding.source,intent:binding.intent},2400);if(reply.type!=='receipt'||reply.native.op!=='execute'||!reply.source||digest(reply.source)!==digest(binding.source)||!reply.intent||digest(reply.intent)!==digest(binding.intent))throw new Error('resident_execute_receipt_source');return reply.native;
   }
   async cancel():Promise<NativeReceipt>{const reply=await this.request('cancel');if(reply.type!=='receipt'||reply.native.op!=='cancel')throw new Error('resident_cancel_release_unconfirmed');return reply.native;}
@@ -143,4 +149,24 @@ export class ResidentClient extends EventEmitter implements ResidentSourceOwner 
     return{stopped,task_deleted:taskDeleted,task_absence_verified:absence,launcher_exit_code:this.exitCode,
       release_scope:nativeConfirmed?'native_receipt_and_ledger':stopped?.release_confirmed&&!this.executorAcquired&&stopped.release_receipt===null&&stopped.ledger_empty===null&&stopped.native_exited===null?'no_executor_acquired':'unconfirmed'};
   }
+}
+
+export function assertResidentActionBounds(action:NativeAction,reviewedCamera=false):void {
+  if(!('duration_ms'in action)||action.duration_ms<1)throw new Error('resident_finite_action_bounds');
+  if(action.kind==='timeline') {
+    assertNativeTimeline(action);
+    if(action.duration_ms>150) {
+      if(reviewedCamera&&isReviewedCameraSweep(action))return;
+      const [move,down,up]=action.events;
+      if(action.duration_ms>300||action.events.length!==3||move?.kind!=='absolute_mouse_move'||move.at_ms!==0||down?.kind!=='button_down'||down.at_ms!==150||up?.kind!=='button_up'||up.button!==down.button||up.at_ms!==action.duration_ms||up.at_ms-down.at_ms<80||up.at_ms-down.at_ms>150)throw new Error('resident_finite_action_bounds');
+    }
+  } else if(action.duration_ms>150)throw new Error('resident_finite_action_bounds');
+}
+export function isReviewedCameraSweep(action:NativeAction):boolean {
+ if(action.kind!=='timeline'||action.duration_ms!==950||action.events.length!==11)return false;
+ const [move,down,...tail]=action.events,up=tail.pop();
+ if(move?.kind!=='absolute_mouse_move'||move.at_ms!==0||down?.kind!=='button_down'||down.button!=='right'||down.at_ms!==150||up?.kind!=='button_up'||up.button!=='right'||up.at_ms!==950)return false;
+ let total=0,out=0;
+ for(let i=0;i<tail.length;i++){const e=tail[i];if(e?.kind!=='relative_mouse_move'||e.at_ms!==250+i*100||e.dy!==0||Math.abs(e.dx)>512||(i<4?e.dx<=0:e.dx>=0))return false;total+=e.dx;if(i<4)out+=e.dx;}
+ return total===0&&out>0&&out<=2048;
 }

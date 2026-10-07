@@ -133,6 +133,7 @@ export class BodyRuntime {
         for (const condition of compiled.conditions) if (condition.field === 'dialog.elements' || condition.field === 'ui.elements') criticalFields.add(condition.field);
       }
       if (action.kind === 'screen_interact') for (const field of ['ui.layout_id', 'target.signature', 'target.screen_interaction', 'input.cursor_free', 'input.mouse_buttons_held']) criticalFields.add(field);
+      if(action.kind==='screen_interact'&&context.conditions.some(c=>c.field==='target.world_npc_surface'))for(const field of ['target.world_npc_surface','tutorial.instruction'])criticalFields.add(field);
       if (action.kind === 'ui_key') for (const field of ['ui.state', 'ui.layout_id']) criticalFields.add(field);
       if (action.kind === 'cast') {
         for (const condition of this.profile.abilities[action.ability]?.conditions ?? []) criticalFields.add(condition.field);

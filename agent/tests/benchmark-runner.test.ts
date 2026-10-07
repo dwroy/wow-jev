@@ -24,7 +24,8 @@ test('paired policies execute the same eleven body-gated actions and confirm onl
   assert.deepEqual(single.metrics.model_calls, { visual: 11, brain: 11, jev: 0, real: 0 });
   assert.deepEqual(layered.metrics.model_calls, { visual: 2, brain: 2, jev: 2, real: 0 });
   assert.equal(layered.metrics.routes.code?.selected, 7); assert.equal(layered.metrics.routes.jev?.selected, 2); assert.equal(layered.metrics.routes.brain?.selected, 2);
-  assert.equal(single.metrics.duration.injected_virtual_ms, 5105); assert.equal(layered.metrics.duration.injected_virtual_ms, 2584);
+  // Two button clicks now include 150ms settling each in both policies.
+  assert.equal(single.metrics.duration.injected_virtual_ms, 5405); assert.equal(layered.metrics.duration.injected_virtual_ms, 2884);
   assert.equal(single.metrics.recognition.visual.selected, 11); assert.equal(layered.metrics.recognition.cv.selected, 9);
 });
 test('zero injected overhead removes any baked-in speed advantage while still running both transports', async () => {
@@ -32,7 +33,7 @@ test('zero injected overhead removes any baked-in speed advantage while still ru
   const config = benchmarkConfig({ costs, scenarios: ['normal'], repeats: 1 });
   const single = await runBenchmarkTrial(spec('single'), config), layered = await runBenchmarkTrial(spec('layered'), config);
   assert.equal(single.terminal.status, 'completed'); assert.equal(layered.terminal.status, 'completed');
-  assert.equal(single.metrics.duration.injected_virtual_ms, 1100); assert.equal(layered.metrics.duration.injected_virtual_ms, 1100);
+  assert.equal(single.metrics.duration.injected_virtual_ms, 1400); assert.equal(layered.metrics.duration.injected_virtual_ms, 1400);
   assert.equal(single.metrics.effective_actions_per_minute.simulated, layered.metrics.effective_actions_per_minute.simulated);
   assert.equal(single.metrics.model_calls.brain, 11); assert.equal(layered.metrics.model_calls.jev, 2);
 });
@@ -40,7 +41,7 @@ test('zero model cost can make layered overhead slower; results follow actual co
   const costs = { ...DEFAULT_BENCHMARK_COSTS, visual_ms: 0, brain_ms: 0, jev_ms: 0 };
   const config = benchmarkConfig({ costs, scenarios: ['normal'], repeats: 1 });
   const single = await runBenchmarkTrial(spec('single'), config), layered = await runBenchmarkTrial(spec('layered'), config);
-  assert.equal(single.metrics.duration.injected_virtual_ms, 1805); assert.equal(layered.metrics.duration.injected_virtual_ms, 1864);
+  assert.equal(single.metrics.duration.injected_virtual_ms, 2105); assert.equal(layered.metrics.duration.injected_virtual_ms, 2164);
   assert.ok(single.metrics.duration.injected_virtual_ms < layered.metrics.duration.injected_virtual_ms);
 });
 for (const scenario of ['unknown', 'identity-change', 'focus-loss', 'cancel', 'no-progress'] as const) {

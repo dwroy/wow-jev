@@ -29,7 +29,8 @@ export type LayerStatus = 'pending' | 'running' | 'completed' | 'blocked' | 'can
 export type MovementAxis = 'forward' | 'backward' | 'strafe_left' | 'strafe_right';
 export type BodyAction =
   | { kind: 'move'; axis: MovementAxis; duration_ms: number }
-  | { kind: 'turn' | 'arc'; dx: number; duration_ms: number }
+  | { kind: 'turn'; dx: number; duration_ms: number; camera_sweep?: { origin: { x: number; y: number }; steps: 4; return_to_origin: true } }
+  | { kind: 'arc'; dx: number; duration_ms: number }
   | { kind: 'jump' | 'mount' | 'dismount'; duration_ms: number }
   | { kind: 'fly'; axis: 'forward' | 'ascend' | 'descend' | 'brake'; duration_ms: number }
   | { kind: 'cast'; ability: string; duration_ms: number }
@@ -66,7 +67,7 @@ export interface BodyOutcome {
 }
 
 export type BehaviorKind = 'kill_target' | 'loot_target' | 'talk_to' | 'accept_quest' | 'turn_in_quest'
-  | 'move_to' | 'fly_to' | 'avoid_hazard' | 'recover_stuck' | 'activate_control';
+  | 'move_to' | 'fly_to' | 'avoid_hazard' | 'recover_stuck' | 'activate_control' | 'tutorial_orient' | 'tutorial_move';
 export type TargetScope = 'retail_wow' | 'recording_fixture';
 /** Runtime capability from the authenticated native collector, never public task params. */
 export interface BoundTargetScope {

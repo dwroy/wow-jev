@@ -39,6 +39,167 @@ const kill = () => spec('kill_target', { target_signature: 'wolf', target_instan
 const candidates = (b: BehaviorSpec): BehaviorCandidate[] => [{ id: 'a', summary: 'primary', behavior: b, conditions: [] }, { id: 'b', summary: 'alternative', behavior: { ...b, id: 'alternative' }, conditions: [] }];
 function task(kind: LayerTaskSpec['kind'], behaviors: BehaviorSpec[], params: LayerTaskSpec['params'] = {}): LayerTaskSpec { return { id: 'task', revision: 1, kind, params, behaviors, max_duration_ms: 10000, max_behaviors: 5 }; }
 
+const orientation=():BehaviorSpec=>spec('tutorial_orient',{state_id:'tutorial_look_around',signature_sha256:'a'.repeat(64),layout_id:'b'.repeat(64),action_duration_ms:950,dx_fraction:.12,origin_x_fraction:.70,origin_y_fraction:.62,curve_steps:4},{max_duration_ms:30000,max_actions:1});
+function tutorialOrientation():Simulation {
+  const s=new Simulation();s.values={
+    'ui.state':{id:'tutorial_look_around',confidence:.95,signature_sha256:'a'.repeat(64),hard_stop:null},
+    'ui.layout_id':'b'.repeat(64),'ui.skill_matches':[{skill_id:'reviewed-look-around',signature_sha256:'a'.repeat(64)}],
+    'input.cursor_free':true,'input.mouse_buttons_held':false,'input.mouse_mode':'world',
+  };return s;
+}
+const tutorialMove=():BehaviorSpec=>spec('tutorial_move',{state_id:'tutorial_move_around',signature_sha256:'a'.repeat(64),layout_id:'b'.repeat(64),action_duration_ms:150},{max_duration_ms:30000,max_actions:1});
+function tutorialMovement():Simulation {
+  const s=tutorialOrientation();s.values['ui.state']={id:'tutorial_move_around',confidence:.95,signature_sha256:'a'.repeat(64),hard_stop:null};
+  s.values['player.movement_mode']='ground';s.values['input.forward_binding']={keys:['W'],mode:'ground',layout_id:'b'.repeat(64)};return s;
+}
+const positiveTalk=():BehaviorSpec=>spec('talk_to',{target_signature:'jaina',action_duration_ms:60,screen_target_positive_only:true},{max_actions:1});
+function positiveNpcSurface():Simulation {
+  const s=new Simulation();s.values={
+    'target.signature':'jaina','tutorial.instruction':'与吉安娜·普罗德摩尔交谈','ui.layout_id':'b'.repeat(64),
+    'target.screen_interaction':{id:'visible-jaina-body',signature:'jaina',layout_id:'b'.repeat(64),x:472,y:252,enabled:true},
+    'target.world_npc_surface':{id:'visible-jaina-body',signature:'jaina',layout_id:'b'.repeat(64),rect:{x:450,y:200,width:64,height:120},point:{x:472,y:252},frame_id:'frame-1',roi_id:'jaina-body',roi_sha256:'c'.repeat(64),calibration_sha256:'d'.repeat(64),visible:true},
+    'input.cursor_free':true,'input.mouse_buttons_held':false,
+  };return s;
+}
+test('opted-in initial talk uses positive NPC surface once without asserting dialog absence',async()=>{
+  const s=positiveNpcSurface(),contexts:ExecutionContext[]=[];const execute=s.executeBody.bind(s);s.executeBody=async(a,o,c)=>{contexts.push(c);return execute(a,o,c);};
+  s.onAction=(_,self)=>{self.values['dialog.open']=true;self.values['dialog.target_signature']='jaina';};
+  const r=await new BehaviorRuntime(s).run(positiveTalk(),ctx());assert.equal(r.status,'completed');assert.equal(r.reason,'dialog_open_confirmed');assert.equal(r.actions,1);assert.equal(r.release,'confirmed');
+  assert.deepEqual(s.actions,[{kind:'screen_interact',target_signature:'jaina',element_id:'visible-jaina-body',x:472,y:252,duration_ms:60}]);
+  assert.equal(s.values['dialog.absence_coverage_complete'],undefined);assert.ok(!contexts[0]!.conditions.some(c=>c.field==='dialog.open'||c.field==='dialog.absence_coverage_complete'));assert.ok(contexts[0]!.conditions.some(c=>c.field==='target.world_npc_surface'));assert.equal(r.game_effect,'unverified');assert.equal(r.scenario_effect,'confirmed');
+});
+test('positive surface is opt-in and existing open dialog keeps the readonly path',async()=>{
+  const normal=positiveNpcSurface();const blocked=await new BehaviorRuntime(normal).run(spec('talk_to',{target_signature:'jaina',action_duration_ms:60},{max_actions:1}),ctx());assert.equal(blocked.status,'blocked');assert.equal(normal.actions.length,0);
+  const open=positiveNpcSurface();open.values['dialog.open']=true;open.values['dialog.target_signature']='jaina';delete open.values['target.world_npc_surface'];
+  const r=await new BehaviorRuntime(open).run(positiveTalk(),ctx());assert.equal(r.status,'completed');assert.equal(r.reason,'dialog_already_open');assert.equal(open.actions.length,0);
+  const wrong=positiveNpcSurface();wrong.values['dialog.open']=true;wrong.values['dialog.target_signature']='other';const w=await new BehaviorRuntime(wrong).run(positiveTalk(),ctx());assert.equal(w.status,'blocked');assert.equal(wrong.actions.length,0);
+});
+test('positive talk rejects unbound, overlaid, stale or non-CV surface and unsafe native cursor',async()=>{
+  for(const fault of ['seed_surface','old_source','stale_instruction','wrong_instruction','wrong_layout','point_not_body','bad_hash','not_visible','held','cursor_source'] as const){
+    const s=positiveNpcSurface();s.source='cv';s.values['window.focused']=true;s.sources['window.focused']='window';s.sources['input.cursor_free']='window';s.sources['input.mouse_buttons_held']='window';
+    const body=s.values['target.world_npc_surface'] as Record<string,JsonValue>;
+    if(fault==='seed_surface')s.sources['target.world_npc_surface']='seed';
+    if(fault==='old_source')s.sourceIds['target.world_npc_surface']='prior-frame';
+    if(fault==='stale_instruction')s.ages['tutorial.instruction']=751;
+    if(fault==='wrong_instruction')s.values['tutorial.instruction']='与其它NPC交谈';
+    if(fault==='wrong_layout')body.layout_id='f'.repeat(64);
+    if(fault==='point_not_body')body.rect={x:0,y:0,width:20,height:20};
+    if(fault==='bad_hash')body.roi_sha256='not-a-sha';
+    if(fault==='not_visible')body.visible=false;
+    if(fault==='held')s.values['input.mouse_buttons_held']=true;
+    if(fault==='cursor_source')s.sources['input.cursor_free']='cv';
+    const r=await new BehaviorRuntime(s,{maxFieldAgeMs:750}).run(positiveTalk(),{...ctx(),mode:'live'});assert.equal(r.status,'blocked',fault);assert.equal(r.actions,0,fault);assert.equal(s.actions.length,0);assert.equal(r.release,'confirmed');
+  }
+});
+test('after positive talk input unknown or old dialog effect never authorizes a second click',async()=>{
+  for(const effect of ['unknown','old_ocr'] as const){
+    const s=positiveNpcSurface();if(effect==='old_ocr')s.onAction=(_,self)=>{self.values['dialog.open']=true;self.values['dialog.target_signature']='jaina';self.ages['dialog.open']=100;};
+    const r=await new BehaviorRuntime(s).run(positiveTalk(),ctx());assert.equal(r.status,'blocked');assert.equal(r.reason,'dialog_effect_not_new_or_unconfirmed');assert.equal(r.actions,1);assert.equal(s.actions.length,1);assert.equal(r.game_effect,'unverified');assert.equal(r.release,'confirmed');
+  }
+  assert.throws(()=>validateBehavior({...positiveTalk(),max_actions:2}),/schema/);assert.throws(()=>validateBehavior({...positiveTalk(),params:{...positiveTalk().params,action_duration_ms:151}}),/schema/);
+  assert.throws(()=>validateBehavior(spec('accept_quest',{target_signature:'jaina',quest_id:'q',screen_target_positive_only:true})),/schema/);
+});
+test('positive talk binds an available current UI state only into Body conditions, not the post dialog path',async()=>{
+  const s=positiveNpcSurface(),state={id:'tutorial_talk_jaina',confidence:.95,signature_sha256:'e'.repeat(64),hard_stop:null};s.values['ui.state']=state;
+  const contexts:ExecutionContext[]=[];const execute=s.executeBody.bind(s);s.executeBody=async(a,o,c)=>{contexts.push(c);return execute(a,o,c);};
+  s.onAction=(_,self)=>{delete self.values['ui.state'];self.values['dialog.open']=true;self.values['dialog.target_signature']='jaina';};
+  const r=await new BehaviorRuntime(s).run(positiveTalk(),ctx());assert.equal(r.status,'completed');assert.equal(r.actions,1);const bound=contexts[0]!.conditions.find(c=>c.field==='ui.state');assert.ok(bound&&bound.op==='eq');assert.deepEqual(bound.value,state);
+  for(const fault of ['seed','old_source','low_confidence','hard_stop'] as const){
+    const bad=positiveNpcSurface();bad.source='cv';bad.values['ui.state']={...state,confidence:fault==='low_confidence'?.9:.95,hard_stop:fault==='hard_stop'?'credentials':null};bad.values['window.focused']=true;bad.sources['window.focused']='window';bad.sources['input.cursor_free']='window';bad.sources['input.mouse_buttons_held']='window';
+    if(fault==='seed')bad.sources['ui.state']='seed';if(fault==='old_source')bad.sourceIds['ui.state']='prior-frame';
+    const blocked=await new BehaviorRuntime(bad).run(positiveTalk(),{...ctx(),mode:'live'});assert.equal(blocked.status,'blocked',fault);assert.equal(blocked.actions,0);assert.equal(bad.actions.length,0);
+  }
+});
+
+test('tutorial movement composes one bound forward150 action through L4/L3 and readonly instruction effect',async()=>{
+  const s=tutorialMovement();s.onAction=(_,self)=>{
+    self.values['ui.state']={id:'tutorial_talk',confidence:.95,signature_sha256:'c'.repeat(64),hard_stop:null};
+    self.values['ui.skill_matches']=[{skill_id:'next-talk-instruction',signature_sha256:'c'.repeat(64)}];
+  };
+  const r=await new TaskRuntime(s,new BehaviorRuntime(s)).run(task('sequence',[tutorialMove()]),{...ctx(),task_id:'task'});
+  assert.equal(r.status,'completed');assert.equal(r.behaviors[0]!.reason,'tutorial_movement_state_changed');assert.deepEqual(s.actions,[{kind:'move',axis:'forward',duration_ms:150}]);
+  assert.equal(r.real_inputs,0);assert.equal(r.game_effect,'unverified');assert.equal(r.scenario_effect,'confirmed');assert.equal(r.release,'confirmed');
+});
+test('tutorial movement cannot use missing, rebound, old-source or nonground forward keys',async()=>{
+  for(const fault of ['missing','other_key','wrong_layout','wrong_mode','old_source','unknown_after'] as const){
+    const s=tutorialMovement();
+    if(fault==='missing')delete s.values['input.forward_binding'];
+    if(fault==='other_key')s.values['input.forward_binding']={keys:['UP'],mode:'ground',layout_id:'b'.repeat(64)};
+    if(fault==='wrong_layout')s.values['input.forward_binding']={keys:['W'],mode:'ground',layout_id:'f'.repeat(64)};
+    if(fault==='wrong_mode')s.values['player.movement_mode']='mounted_ground';
+    if(fault==='old_source')s.sourceIds['input.forward_binding']='prior-frame';
+    if(fault==='unknown_after')s.onAction=(_,self)=>{delete self.values['ui.state'];};
+    const r=await new BehaviorRuntime(s).run(tutorialMove(),ctx());assert.equal(r.status,'blocked',fault);assert.equal(r.actions,fault==='unknown_after'?1:0);assert.equal(s.actions.length,fault==='unknown_after'?1:0);assert.equal(r.game_effect,'unverified');assert.equal(r.release,'confirmed');
+  }
+  assert.throws(()=>validateBehavior({...tutorialMove(),max_actions:2}),/schema/);assert.throws(()=>validateBehavior({...tutorialMove(),params:{...tutorialMove().params,action_duration_ms:151}}),/schema/);
+});
+test('slow readonly lesson effect extends scope age only after a successful action and still needs new source time',async()=>{
+  for(const phase of ['effect','initial','pre_action_source','over_effect_age'] as const){
+    const s=tutorialMovement();s.values['window.scope']='retail_wow';
+    s.onAction=(_,self)=>{self.values['ui.state']={id:'tutorial_talk',confidence:.95,signature_sha256:'c'.repeat(64),hard_stop:null};self.values['ui.skill_matches']=[{skill_id:'next-talk',signature_sha256:'c'.repeat(64)}];};
+    s.onObserve=self=>{
+      if(phase==='initial'&&self.actions.length===0){self.time+=2000;for(const key of Object.keys(self.values))self.ages[key]=2000;}
+      if(self.actions.length===1){const lag=phase==='over_effect_age'?5001:phase==='pre_action_source'?2002:2000;self.time+=2000;for(const key of Object.keys(self.values))self.ages[key]=lag;}
+    };
+    const r=await new BehaviorRuntime(s,{maxFieldAgeMs:750,maxObservationAgeMs:750,maxEffectFieldAgeMs:5000,targetScopeVerifier:o=>({scope:'retail_wow',source_observation_id:o.id,window:o.window!,native_target_id:'d'.repeat(64)})}).run(tutorialMove(),ctx());
+    assert.equal(r.status,phase==='effect'?'completed':'blocked',`${phase}: ${r.reason}`);assert.equal(r.actions,phase==='initial'?0:1);assert.equal(s.actions.length,phase==='initial'?0:1);assert.equal(r.release,'confirmed');
+  }
+});
+
+test('tutorial orient runs once through L4/L3 and confirms only a new learned instruction state',async()=>{
+  const s=tutorialOrientation();s.onAction=(_,self)=>{
+    self.values['ui.state']={id:'tutorial_move',confidence:.95,signature_sha256:'c'.repeat(64),hard_stop:null};
+    self.values['ui.skill_matches']=[{skill_id:'next-movement-instruction',signature_sha256:'c'.repeat(64)}];
+  };
+  const r=await new TaskRuntime(s,new BehaviorRuntime(s)).run(task('sequence',[orientation()]),{...ctx(),task_id:'task'});
+  assert.equal(r.status,'completed');assert.equal(r.behaviors[0]!.reason,'tutorial_orientation_state_changed');
+  assert.deepEqual(s.actions,[{kind:'turn',dx:96,duration_ms:950,camera_sweep:{origin:{x:560,y:372},steps:4,return_to_origin:true}}]);
+  assert.equal(r.real_inputs,0);assert.equal(r.game_effect,'unverified');assert.equal(r.scenario_effect,'confirmed');assert.equal(r.release,'confirmed');assert.equal(r.chooser_calls,0);
+  const intent=s.logs.find(x=>x.kind==='behavior_action_intent')!.data as {action:BodyAction};assert.equal(intent.action.kind,'turn');
+});
+test('tutorial orient needs source-bound CV state, learned signature, layout and safe mouse before live dispatch',async()=>{
+  for(const fault of ['seed','old_source','stale','wrong_signature','held','mouse_mode','hazard','hard_stop'] as const){
+    const s=tutorialOrientation();s.source='cv';s.values['window.focused']=true;s.sources['window.focused']='window';s.values['window.scope']='retail_wow';s.sources['window.scope']='window';s.sources['input.cursor_free']='window';s.sources['input.mouse_buttons_held']='window';
+    if(fault==='seed')s.sources['ui.state']='seed';
+    if(fault==='old_source')s.sourceIds['ui.state']='prior-frame';
+    if(fault==='stale')s.ages['ui.state']=751;
+    if(fault==='wrong_signature')s.values['ui.skill_matches']=[{skill_id:'wrong',signature_sha256:'f'.repeat(64)}];
+    if(fault==='held')s.values['input.mouse_buttons_held']=true;
+    if(fault==='mouse_mode')s.values['input.mouse_mode']='ui';
+    if(fault==='hazard')s.values['hazard.active']=true;
+    if(fault==='hard_stop')s.values['ui.hard_stop']='credentials';
+    const r=await new BehaviorRuntime(s,{maxFieldAgeMs:750,targetScopeVerifier:o=>({scope:'retail_wow',source_observation_id:o.id,window:o.window!,native_target_id:'d'.repeat(64)})}).run(orientation(),{...ctx(),mode:'live'});
+    assert.equal(r.status,'blocked',fault);assert.equal(r.actions,0,fault);assert.equal(s.actions.length,0,fault);assert.equal(r.release,'confirmed');
+  }
+});
+test('tutorial orient unknown, unchanged or stale after evidence cannot cause another turn or completion',async()=>{
+  for(const effect of ['unknown','unchanged','unlearned_state','unknown_instruction','stale_instruction'] as const){
+    const s=tutorialOrientation();s.values['tutorial.instruction']={id:'look',signature_sha256:'a'.repeat(64)};
+    s.onAction=(_,self)=>{
+      if(effect==='unknown')delete self.values['ui.state'];
+      if(effect==='unlearned_state')self.values['ui.state']={id:'in_world',confidence:.95,signature_sha256:'c'.repeat(64),hard_stop:null};
+      if(effect==='unknown_instruction')self.values['tutorial.instruction']={id:'unknown',signature_sha256:'c'.repeat(64)};
+      if(effect==='stale_instruction'){self.values['tutorial.instruction']={id:'move',signature_sha256:'c'.repeat(64)};self.ages['tutorial.instruction']=100;}
+    };
+    const r=await new BehaviorRuntime(s).run(orientation(),ctx());assert.equal(r.status,'blocked',effect);assert.equal(r.reason,'tutorial_orientation_effect_unverified',effect);assert.equal(r.actions,1);assert.equal(r.game_effect,'unverified');assert.equal(s.actions.length,1);assert.equal(r.release,'confirmed');
+  }
+});
+test('tutorial orient independently confirms changed instruction and keeps release uncertainty visible',async()=>{
+  for(const release of ['confirmed','unconfirmed'] as const){
+    const s=tutorialOrientation();s.releaseStatus=release;s.values['tutorial.instruction']={id:'look',signature_sha256:'a'.repeat(64)};
+    s.onAction=(_,self)=>{self.values['tutorial.instruction']={id:'move',signature_sha256:'c'.repeat(64)};};
+    const r=await new BehaviorRuntime(s).run(orientation(),ctx());assert.equal(r.actions,1);assert.equal(r.release,release);assert.equal(r.status,release==='confirmed'?'completed':'blocked');assert.equal(r.game_effect,'unverified');
+    if(release==='confirmed')assert.equal(r.reason,'tutorial_orientation_instruction_changed');
+  }
+});
+test('tutorial orient exact authorization rejects wider, longer and repeatable plans',()=>{
+  for(const patch of [{max_actions:2},{params:{...orientation().params,dx_fraction:.2}},{params:{...orientation().params,action_duration_ms:951}},{params:{...orientation().params,origin_x_fraction:.5}},{params:{...orientation().params,curve_steps:3}}])assert.throws(()=>validateBehavior({...orientation(),...patch}),/behavior_schema/);
+});
+test('cancelled tutorial orientation emits no input and still releases',async()=>{
+  const s=tutorialOrientation(),controller=new AbortController();controller.abort();
+  const r=await new BehaviorRuntime(s).run(orientation(),ctx(controller.signal));assert.equal(r.status,'cancelled');assert.equal(s.actions.length,0);assert.equal(r.release,'confirmed');
+});
+
 test('strict behavior/task params and reward policy reject undeclared or mismatched inputs', () => {
   assert.throws(() => validateBehavior(spec('kill_target', { target_signature: 'wolf', attack_ability: 'attack', surprise: true })), /schema/);
   assert.throws(() => validateBehavior(spec('turn_in_quest', { target_signature: 'npc', quest_id: 'q', reward_policy: 'explicit' })), /reward_policy/);

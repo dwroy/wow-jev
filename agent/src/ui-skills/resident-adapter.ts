@@ -16,7 +16,7 @@ export function uiCharacterConditions(skill:UiSkill,before:UiFrame):ActionCondit
   const enter=/enter[_-]?world/i.test(skill.element.purpose)||skill.element.id==='enter_world'||/^(char_select|character_select)$/.test(skill.state_id)&&/^(world|in_world)$/.test(skill.expected_effect?.state_id??'');
   if(!enter)return[];
   const character=before.collected.observation.fields['ui.selected_character'],value=character?.value;
-  if(character?.status!=='known'||character.source!=='cv'||character.source_observation_id!==before.collected.observation.id||character.captured_at_ms!==before.collected.bracket.started_at_ms||!object(value)||value.name!=='小啊'||value.class!=='warrior'||value.faction!=='alliance')throw new Error('ui_alliance_warrior_selected_identity_required');
+  if(character?.status!=='known'||character.source!=='cv'||character.source_observation_id!==before.collected.observation.id||character.captured_at_ms!==before.collected.bracket.started_at_ms||!object(value)||value.name!=='小呵'||value.class!=='warrior'||value.faction!=='alliance')throw new Error('ui_alliance_warrior_selected_identity_required');
   return[{field:'ui.selected_character',op:'eq',value:structuredClone(value),max_age_ms:750}];
 }
 export interface UiResidentAdapterOptions {
@@ -53,7 +53,7 @@ export function createResidentUiPorts(options:UiResidentAdapterOptions):UiPorts{
     if(!options.registry.owns(before))throw new Error('ui_dispatch_source_not_registered');
     plans.set(intent.id,{intent:structuredClone(intent),compiled_action:structuredClone(intent.action.args)});
     await options.body.bindSource(before,intent,context);
-  },collect:async(save)=>{const c=await options.body.collect(save);if(c.bracket.sample.protocol!=='wow-resident')throw new Error('ui_body_nonresident_source');map(c as Collected<ResidentMemorySample>);return c;}});
+  },collect:async(save)=>{const c=await options.body.collect(save);if(c.bracket.sample.protocol!=='wow-resident')throw new Error('ui_body_nonresident_source');const fresh=map(c as Collected<ResidentMemorySample>);if(fresh.hard_stop||fresh.state?.hard_stop)throw new Error('ui_dispatch_hard_stop');return c;}});
   return{...options.ports,now:options.body.now,
     collect:async(kind,signal)=>map(await options.collect(kind,signal)),
     owns:f=>authentic.get(f)===digest(f)&&options.registry.owns(f.collected),

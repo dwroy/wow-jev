@@ -1,6 +1,6 @@
 # 教程局部证据到四层执行
 
-2026-10-07。首个目标只涉及当前正式服联盟战士“小啊”的“与吉安娜·普罗德摩尔交谈”。这是当前可见教程步骤，不将其伪造为已核实的原生 quest ID、NPC GUID 或任务接取/交付。完成交谈后停止，不点击“接受”或执行随后训练目标。
+2026-10-07。首个目标只涉及当前正式服联盟战士“小呵”的“与吉安娜·普罗德摩尔交谈”。这是当前可见教程步骤，不将其伪造为已核实的原生 quest ID、NPC GUID 或任务接取/交付。完成交谈后停止，不点击“接受”或执行随后训练目标。
 
 ## 恢复与游戏任务的边界
 
@@ -80,7 +80,7 @@ cd ..
 - `window_source={target_scope:"retail_wow",frame_id,seq,windows_clock_id,source_qpc_ms,client_width,client_height,dpi}` 来自真正 session1 WGC 证据，保留原 QPC。仅与同 QPC/同进程布局的新帧比较，窗口源参考最大300s；与元数据 UTC 不相减。
 - `review={reviewer:"root",reviewed_at,expansion_verified:true}` 为独立审核；资料确认扩展不能冒作 CV。未核实 expansion/build/locale/region 或源缺失即 blocked。
 
-输入路径严格接受 `HostReady.target_scope` 与 `memory_frame.target_scope` 的 `retail_wow`。`recording_fixture` 和缺 scope 都在教程、局部事实和 Seed 构造前拒绝；Native身份 target 本身不混入 scope，原 LocalSession exact schema保持不变。角色标识为本会话用户指定的联盟战士“小啊”，没有从窗口推导账户/角色原生ID。
+输入路径严格接受 `HostReady.target_scope` 与 `memory_frame.target_scope` 的 `retail_wow`。`recording_fixture` 和缺 scope 都在教程、局部事实和 Seed 构造前拒绝；Native身份 target 本身不混入 scope，原 LocalSession exact schema保持不变。角色标识为本会话用户指定的联盟战士“小呵”，没有从窗口推导账户/角色原生ID。
 
 `readonly` 取得当前低频完整 PNG 和 Native CV，原图SHA/FrameID/QPC/校准、snapshot和客户端probe核验后，由单写 Python 将真正观察条目存到 agent.sqlite；只读宿主没有输入执行器。`run` 同样登记局部步骤，低频编译原验证的 L4 计划后，重新取得新 hot sample，再经既有任务链执行。`collect(true)` 也只采内存 ROI，不能偷偷编码PNG。动作结束后 `collectEffect` 显式采独立新完整PNG+OCR；只有原 OCR 的中文完整 NPC 标题与左侧关联控件几何配对才登记 `conversation_open`。Python 再从原 `native_evidence.ocr` 重算配对并核对派生 source/time/proof，不相信 caller 改写的 dialog.open。CV 写入也重查原校准JSON/资产SHA、归一化比例/锚点/offset/阈值和 Native ROI 覆盖。
 
@@ -89,7 +89,7 @@ cd ..
 ```bash
 python3 tools/layered_tutorial.py readonly --config CURRENT_CONFIG.json --run-dir /home/dw/Projects/wow-jev/out/CURRENT_READONLY
 python3 tools/layered_tutorial.py bootstrap --snapshot CURRENT_SNAPSHOT.json --image ORIGINAL.png --review ROOT_SAME_SOURCE_REVIEW.json --output /home/dw/Projects/wow-jev/out/CURRENT_ABSENCE.json
-python3 tools/layered_tutorial.py run --config CURRENT_CONFIG.json --run-dir /home/dw/Projects/wow-jev/out/CURRENT_RUN --finite-input-authorized --recovery-authorized --target-character 小啊
+python3 tools/layered_tutorial.py run --config CURRENT_CONFIG.json --run-dir /home/dw/Projects/wow-jev/out/CURRENT_RUN --finite-input-authorized --recovery-authorized --target-character 小呵
 python3 tools/layered_tutorial.py cancel --run-dir /home/dw/Projects/wow-jev/out/CURRENT_RUN
 ```
 

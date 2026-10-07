@@ -16,3 +16,9 @@ cp native/windows/bin/WinInput.exe out/resident-fixtures/
   /out:"$(wslpath -w out/resident-fixtures/NativeVisibleFocusFixture.exe)" \
   "$(wslpath -w tools/NativeVisibleFocusFixture.cs)" </dev/null
 chmod +x out/resident-fixtures/*.exe
+
+"$resident_fixture_csc" /nologo /codepage:65001 /utf8output /optimize+ /platform:x64 /target:exe \
+  /r:System.Core.dll /r:System.Drawing.dll \
+  /out:"$(wslpath -w out/resident-fixtures/UiSkillVisionFixture.exe)" \
+  "$(wslpath -w tools/UiSkillVisionFixture.cs)" </dev/null
+chmod +x out/resident-fixtures/UiSkillVisionFixture.exe

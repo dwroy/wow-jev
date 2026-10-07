@@ -1,0 +1,812 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "scene",
+    "confidence",
+    "stop_reason",
+    "controls",
+    "anchors",
+    "selected_character",
+    "tutorial"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "scene": {
+      "enum": [
+        "world",
+        "character_select",
+        "disconnected",
+        "launcher",
+        "loading",
+        "login",
+        "blocked_auth",
+        "blocked_terms",
+        "blocked_update",
+        "unknown"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "stop_reason": {
+      "enum": [
+        null,
+        "auth",
+        "verification",
+        "terms",
+        "update"
+      ]
+    },
+    "controls": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {
+        "$ref": "#/definitions/control"
+      }
+    },
+    "anchors": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "label",
+          "rect",
+          "confidence"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "[^\\s]"
+          },
+          "rect": {
+            "$ref": "#/definitions/rect"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    },
+    "selected_character": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "value",
+            "confidence"
+          ],
+          "properties": {
+            "status": {
+              "const": "unknown"
+            },
+            "value": {
+              "type": "null"
+            },
+            "confidence": {
+              "const": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "value",
+            "confidence"
+          ],
+          "properties": {
+            "status": {
+              "const": "known"
+            },
+            "value": {
+              "$ref": "#/definitions/character"
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        }
+      ]
+    },
+    "tutorial": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instruction",
+        "npc_name",
+        "dialog_state"
+      ],
+      "properties": {
+        "instruction": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "value",
+                "confidence"
+              ],
+              "properties": {
+                "status": {
+                  "const": "unknown"
+                },
+                "value": {
+                  "type": "null"
+                },
+                "confidence": {
+                  "const": 0
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "value",
+                "confidence"
+              ],
+              "properties": {
+                "status": {
+                  "const": "known"
+                },
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            }
+          ]
+        },
+        "npc_name": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "value",
+                "confidence"
+              ],
+              "properties": {
+                "status": {
+                  "const": "unknown"
+                },
+                "value": {
+                  "type": "null"
+                },
+                "confidence": {
+                  "const": 0
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "value",
+                "confidence"
+              ],
+              "properties": {
+                "status": {
+                  "const": "known"
+                },
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "[^\\s]"
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            }
+          ]
+        },
+        "dialog_state": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "value",
+                "confidence"
+              ],
+              "properties": {
+                "status": {
+                  "const": "unknown"
+                },
+                "value": {
+                  "type": "null"
+                },
+                "confidence": {
+                  "const": 0
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "value",
+                "confidence"
+              ],
+              "properties": {
+                "status": {
+                  "const": "known"
+                },
+                "value": {
+                  "enum": [
+                    "open",
+                    "closed"
+                  ]
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Single source recovery visual observation (no input authority)",
+  "definitions": {
+    "rect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "control": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "status",
+            "rect",
+            "label",
+            "confidence"
+          ],
+          "properties": {
+            "id": {
+              "enum": [
+                "reconnect",
+                "disconnect_ack",
+                "enter_world",
+                "launcher_play",
+                "dialogue_continue",
+                "dialogue_finish",
+                "npc_interact"
+              ]
+            },
+            "status": {
+              "const": "unknown"
+            },
+            "rect": {
+              "type": "null"
+            },
+            "label": {
+              "type": "null"
+            },
+            "confidence": {
+              "const": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "status",
+            "rect",
+            "label",
+            "confidence"
+          ],
+          "properties": {
+            "id": {
+              "enum": [
+                "reconnect",
+                "disconnect_ack",
+                "enter_world",
+                "launcher_play",
+                "dialogue_continue",
+                "dialogue_finish",
+                "npc_interact"
+              ]
+            },
+            "status": {
+              "const": "known"
+            },
+            "rect": {
+              "$ref": "#/definitions/rect"
+            },
+            "label": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "[^\\s]"
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        }
+      ]
+    },
+    "character": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "class",
+        "faction"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "[^\\s]"
+        },
+        "class": {
+          "enum": [
+            "warrior",
+            "paladin",
+            "hunter",
+            "rogue",
+            "priest",
+            "death_knight",
+            "shaman",
+            "mage",
+            "warlock",
+            "monk",
+            "druid",
+            "demon_hunter",
+            "evoker"
+          ]
+        },
+        "faction": {
+          "enum": [
+            "alliance",
+            "horde",
+            "neutral"
+          ]
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pid",
+        "start_ticks",
+        "hwnd",
+        "class",
+        "executable",
+        "session_id"
+      ],
+      "properties": {
+        "pid": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "start_ticks": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,19}$"
+        },
+        "hwnd": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{1,16}$"
+        },
+        "class": {
+          "const": "waApplication Window"
+        },
+        "executable": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "session_id": {
+          "const": 1
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observation_id",
+        "capture_sha256",
+        "width",
+        "height",
+        "target"
+      ],
+      "properties": {
+        "observation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "capture_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "target": {
+          "$ref": "#/definitions/target"
+        },
+        "observation_path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "observed_windows_qpc_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "clock_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "capture_method": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "clock": {
+          "type": [
+            "object",
+            "string"
+          ]
+        },
+        "source_qpc_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "dpi": {
+          "type": "integer",
+          "minimum": 48,
+          "maximum": 768
+        },
+        "layout": {
+          "type": "object"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scene": {
+            "const": "unknown"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "confidence": {
+            "const": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scene": {
+            "const": "blocked_auth"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "stop_reason": {
+            "enum": [
+              "auth",
+              "verification"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scene": {
+            "const": "blocked_terms"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "stop_reason": {
+            "const": "terms"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scene": {
+            "const": "blocked_update"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "stop_reason": {
+            "const": "update"
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "controls": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "reconnect"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "controls": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "disconnect_ack"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "controls": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "enter_world"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "controls": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "launcher_play"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "controls": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "dialogue_continue"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "controls": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "dialogue_finish"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "controls": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "const": "npc_interact"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scene": {
+            "enum": [
+              "blocked_auth",
+              "blocked_terms",
+              "blocked_update"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "controls": {
+            "items": {
+              "properties": {
+                "status": {
+                  "const": "unknown"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scene": {
+            "enum": [
+              "world",
+              "character_select",
+              "disconnected",
+              "launcher",
+              "loading",
+              "login",
+              "unknown"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "stop_reason": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "selected_character": {
+            "properties": {
+              "status": {
+                "const": "known"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "scene": {
+            "const": "character_select"
+          }
+        }
+      }
+    }
+  ]
+}

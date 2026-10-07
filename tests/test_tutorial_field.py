@@ -116,7 +116,7 @@ def test_absence_bootstrap_is_root_same_source_reference_not_fresh_fact(tmp_path
     with pytest.raises(ValidationError):absence_profile(r['snapshot_path'],r['image_path'],rp)
 
 def test_entry_fixed_cli_authorization_and_literal_paths():
-    p=parser();args=p.parse_args(['run','--config','literal $(secret).json','--run-dir','output','--target-character','小啊'])
+    p=parser();args=p.parse_args(['run','--config','literal $(secret).json','--run-dir','output','--target-character','小呵'])
     with pytest.raises(ValueError):build_command(args,ROOT,'node')
     args.finite_input_authorized=True;args.recovery_authorized=True;command=build_command(args,ROOT,'node')
     assert 'literal $(secret).json' in command and command[2].endswith('/tutorial/cli.ts')

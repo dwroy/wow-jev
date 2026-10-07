@@ -22,8 +22,11 @@ SCHEMA_PATH = Path(__file__).with_name('ui-skill-learning.schema.json')
 SQL_PATH = Path(__file__).with_name('ui-skill-schema.sql')
 SCHEMA = parse_json(SCHEMA_PATH.read_bytes())
 NATIVE = parse_json((Path(__file__).resolve().parent.parent / 'protocol/native-input-v1.schema.json').read_bytes())
+AGENT = parse_json((Path(__file__).resolve().parent.parent / 'protocol/agent-v1.schema.json').read_bytes())
+RESIDENT = parse_json((Path(__file__).resolve().parent.parent / 'protocol/resident-session-v1.schema.json').read_bytes())
 TABLES = ('ui_state', 'ui_signature', 'ui_element', 'ui_skill', 'ui_attempt', 'ui_skill_meta', 'ui_skill_request', 'ui_skill_checkpoint')
 HARD_STOP = re.compile(r'密码|验证码|身份验证|安全令牌|协议|许可|更新|安装|下载|password|authenticator|verification|agreement|install|download|update', re.I)
+ACTIVATION_FROZEN = True  # User audit P0: no promotion until supervised governance is implemented.
 
 
 def _validate(value: Any, schema: dict, root: dict | None = None, depth: int = 0) -> None:
@@ -32,10 +35,15 @@ def _validate(value: Any, schema: dict, root: dict | None = None, depth: int = 0
     if depth > 64:
         raise ValidationError('UI skill: schema depth')
     if '$ref' in schema:
-        if not schema['$ref'].startswith('#/'):
-            raise ValidationError('UI skill: nonlocal schema reference')
+        reference = schema['$ref']
+        if not reference.startswith('#/'):
+            prefix, separator, pointer = reference.partition('#')
+            known = {NATIVE['$id']: NATIVE, AGENT['$id']: AGENT, RESIDENT['$id']: RESIDENT}
+            if not separator or prefix not in known or not pointer.startswith('/'):
+                raise ValidationError('UI skill: nonlocal schema reference')
+            root = known[prefix]; reference = '#' + pointer
         child = root
-        for part in schema['$ref'][2:].split('/'):
+        for part in reference[2:].split('/'):
             child = child[part]
         return _validate(value, child, root, depth + 1)
     def matches(child):
@@ -65,7 +73,7 @@ def _validate(value: Any, schema: dict, root: dict | None = None, depth: int = 0
     valid_type = {'object': type(value) is dict, 'array': type(value) is list, 'string': type(value) is str,
                   'integer': type(value) is int, 'number': type(value) in (int, float),
                   'boolean': type(value) is bool, 'null': value is None}
-    if kind is not None and not valid_type.get(kind, False):
+    if kind is not None and not any(valid_type.get(t,False) for t in (kind if isinstance(kind,list) else [kind])):
         raise ValidationError('UI skill: schema type')
     if type(value) is dict:
         if any(key not in value for key in schema.get('required', [])):
@@ -287,6 +295,129 @@ class UiSkills:
         if frame['capture'] is not None:
             _read(frame['capture']); self.runtime.get_artifact(frame['capture']['sha256'])
 
+    def _bound_action(self, document: dict, data: dict, skill: dict) -> None:
+        """Check the saved Body compilation against the actual native dispatch.
+
+        Old bare receipts may remain historical input evidence, but cannot
+        establish which learned operation was performed and never qualify.
+        """
+        if not all(key in document for key in ('compiled_action', 'action_intent', 'intent', 'source')):
+            raise ValidationError('UI skill: compiled action and original intent binding required')
+        original = {k: v for k, v in document.items() if k not in {'compiled_action', 'action_intent'}}
+        _validate(original, RESIDENT['definitions']['receipt'], RESIDENT)
+        compiled, body, binding, source = (document[k] for k in ('compiled_action', 'action_intent', 'intent', 'source'))
+        _validate(compiled, NATIVE['definitions']['action'], NATIVE)
+        _validate(body, AGENT['definitions']['actionIntent'], AGENT)
+        if binding is None or source is None or body['mode'] != 'live' or body['action']['name'] != 'native_input':
+            raise ValidationError('UI skill: live original dispatch binding required')
+        if source['target_scope'] != skill['scope']['target_scope']:
+            raise ValidationError('UI skill: original dispatch target scope mismatch')
+        if canonical_sha256(compiled) != binding['action_sha256'] or body['action']['args'] != compiled:
+            raise ValidationError('UI skill: compiled action digest or Body args mismatch')
+        receipt, before = document['native'], data['before']
+        target = {**source['target']}; target['session_id'] = target.pop('windows_session_id')
+        if target != before['target']:
+            raise ValidationError('UI skill: original dispatch target identity mismatch')
+        if len({data['attempt_id'], document['id'], receipt['id'], body['id'], binding['intent_id']}) != 1 or \
+                document['session_id'] != receipt['session_id'] or source['session_id'] != receipt['session_id']:
+            raise ValidationError('UI skill: action ID or native session mismatch')
+        if body['based_on_observation_id'] != before['observation_id'] or binding['observation_id'] != before['observation_id'] or \
+                body['actor'] != binding['actor'] or body['plan'] != {'id': binding['plan_id'], 'revision': binding['plan_revision']} or \
+                binding['task_id'] != binding['plan_id'] or binding['task_revision'] != binding['plan_revision']:
+            raise ValidationError('UI skill: Body source/actor/plan binding mismatch')
+        if body['window_token'] != f'resident-ui-{before["target"]["pid"]}-{source["channel_generation"]}' or \
+                source['frame_id'] != before['frame_id'] or source['seq'] != before['seq'] or \
+                source['source_qpc_ms'] != before['clock']['ticks'] or source['windows_clock_id'] != before['clock']['clock_id'] or \
+                source['layout_id'] != before['layout_id'] or source['client_width'] != before['width'] or source['client_height'] != before['height'] or \
+                before.get('roi_sha256') is not None and source['roi_sha256'] != before['roi_sha256']:
+            raise ValidationError('UI skill: compiled action native frame binding mismatch')
+        if compiled['kind'] != 'timeline':
+            raise ValidationError('UI skill: unsupported learned action compilation')
+        events = compiled['events']; conditions = body['conditions']
+        def values(field):
+            return [c['value'] for c in conditions if c['field'] == field and c['op'] == 'eq']
+        state_values = values('ui.state')
+        if not state_values or any(type(v) is not dict or v.get('id') != skill['state_id'] or v.get('hard_stop') not in (None, False) for v in state_values):
+            raise ValidationError('UI skill: learned entry state is not bound')
+        if any(value != before['layout_id'] for value in values('ui.layout_id')) or not values('ui.layout_id'):
+            raise ValidationError('UI skill: compiled action layout condition mismatch')
+        action = skill['action']
+        if action is not None:
+            if action['kind'] != 'key' or len(action['keys']) != 1:
+                raise ValidationError('UI skill: unsupported learned input action')
+            duration, key = action['duration_ms'], action['keys'][0]
+            expected = [{'kind': 'key_down', 'at_ms': 0, 'key': key}, {'kind': 'key_up', 'at_ms': duration, 'key': key}]
+            if events != expected or compiled['duration_ms'] != duration:
+                raise ValidationError('UI skill: compiled key differs from learned skill')
+        else:
+            element = self._stored('ui_element', 'element_key', skill['element_key']); bbox = element['bbox']
+            if len(events) != 3 or events[0]['kind'] != 'absolute_mouse_move':
+                raise ValidationError('UI skill: compiled click differs from learned skill')
+            point = events[0]; x, y, duration = point['x'], point['y'], element['duration_ms']
+            if point['at_ms'] != 0 or not bbox['x'] * before['width'] <= x < (bbox['x'] + bbox['width']) * before['width'] or \
+                    not bbox['y'] * before['height'] <= y < (bbox['y'] + bbox['height']) * before['height']:
+                raise ValidationError('UI skill: compiled click outside learned element')
+            expected = [point, {'kind': 'button_down', 'at_ms': 150, 'button': element['button']},
+                        {'kind': 'button_up', 'at_ms': 150 + duration, 'button': element['button']}]
+            if events != expected or compiled['duration_ms'] != 150 + duration:
+                raise ValidationError('UI skill: compiled click differs from learned skill')
+            if element['purpose'] == 'talk_jaina_layered':
+                # A world NPC right click is not a UI button. All world-surface
+                # conditions must refer to the ROI actually used by Native in
+                # this source frame, not an element fallback or old name point.
+                signature = 'visible-name:' + element['label']
+                if element['label'] != '吉安娜·普罗德摩尔' or skill['state_id'] != 'tutorial_talk_jaina' or \
+                        element['button'] != 'right' or duration != 80 or 'ui' in values('input.mouse_mode') or \
+                        not values('input.cursor_free') or any(v is not True for v in values('input.cursor_free')) or \
+                        not values('input.mouse_buttons_held') or any(v is not False for v in values('input.mouse_buttons_held')) or \
+                        not values('target.signature') or any(v != signature for v in values('target.signature')) or \
+                        not values('tutorial.instruction') or any(v != '与吉安娜·普罗德摩尔交谈' for v in values('tutorial.instruction')):
+                    raise ValidationError('UI skill: original world NPC identity or cursor binding mismatch')
+                expected_point = {'id': element['id'], 'signature': signature, 'layout_id': before['layout_id'], 'x': x, 'y': y, 'enabled': True}
+                points, surfaces = values('target.screen_interaction'), values('target.world_npc_surface')
+                if not points or any(v != expected_point for v in points) or len(surfaces) != 1:
+                    raise ValidationError('UI skill: original world NPC point/surface binding mismatch')
+                surface = surfaces[0]
+                if type(surface) is not dict or set(surface) != {'id', 'signature', 'layout_id', 'rect', 'point', 'frame_id', 'roi_id', 'roi_sha256', 'calibration_sha256', 'visible'} or \
+                        surface['id'] != element['id'] or surface['signature'] != signature or surface['layout_id'] != before['layout_id'] or \
+                        surface['point'] != {'x': x, 'y': y} or surface['frame_id'] != source['frame_id'] or surface['visible'] is not True or \
+                        surface['roi_id'] != 'learned-ui-' + skill['skill_id']:
+                    raise ValidationError('UI skill: original world NPC surface source mismatch')
+                rois = [r for r in source['rois'] if r['id'] == surface['roi_id']]
+                if len(rois) != 1:
+                    raise ValidationError('UI skill: original world NPC Native ROI missing or ambiguous')
+                roi = rois[0]; area = {k: roi[k] for k in ('x', 'y', 'width', 'height')}
+                if surface['rect'] != area or surface['roi_sha256'] != roi['sha256'] or surface['calibration_sha256'] != roi['calibration_sha256'] or \
+                        area['width'] < 5 or area['height'] < 5 or x - 2 < area['x'] or y - 2 < area['y'] or \
+                        x + 2 >= area['x'] + area['width'] or y + 2 >= area['y'] + area['height'] or \
+                        area['x'] + area['width'] > before['width'] or area['y'] + area['height'] > before['height']:
+                    raise ValidationError('UI skill: original world NPC body ROI/point mismatch')
+            else:
+                matched = [v for group in values('ui.elements') if type(group) is list for v in group
+                           if type(v) is dict and v.get('id') == element['id'] and v.get('x') == x and v.get('y') == y and
+                           v.get('layout_id') == before['layout_id'] and v.get('enabled') is True]
+                if len(matched) != 1 or 'ui' not in values('input.mouse_mode'):
+                    raise ValidationError('UI skill: original Body element/point binding mismatch')
+        if receipt['input']['events_requested'] != len(events) or receipt['input']['events_inserted'] != len(events):
+            raise ValidationError('UI skill: compiled input events were not fully inserted')
+
+    def _qualified_history(self, skill: dict, after_ordinal: int = 0) -> int:
+        count = 0
+        for live, payload in self.runtime.connection.execute('SELECT live_confirmed,payload FROM ui_attempt WHERE skill_id=? AND ordinal>?',
+                                                            (skill['skill_id'], after_ordinal)):
+            if not live:
+                continue
+            attempt = parse_json(payload)
+            if attempt['native_receipt'] is None or attempt['mode'] != 'live' or attempt['effect']['status'] != 'confirmed' or \
+                    skill['scope']['target_scope'] != 'retail_wow' or attempt['before']['producer'] not in {'resident_wgc', 'recovery_printwindow'}:
+                continue
+            try:
+                self._bound_action(parse_json(_read(attempt['native_receipt'])), attempt, skill)
+            except ValidationError:
+                continue  # Historical unbound data is never promotion evidence.
+            count += 1
+        return count
+
     def _row(self, skill_id: str) -> dict:
         skill = self._stored('ui_skill', 'skill_id', skill_id)
         state = self._stored('ui_state', 'state_key', skill['state_key'])
@@ -311,8 +442,12 @@ class UiSkills:
             for proof in [attempt['native_receipt'], attempt['effect']['proof']]:
                 if proof:
                     _read(proof); self.runtime.get_artifact(proof['sha256'])
-        return {'skill_id': skill_id, 'state_id': skill['state_id'], 'scope': skill['scope'], 'status': row[0], 'revision': row[1],
-                'confirmed_count': row[2], 'failure_streak': row[3], 'last_failure': parse_json(row[4]) if row[4] else None,
+        qualified = self._qualified_history(skill)
+        status = row[0]
+        if status == 'active' and (ACTIVATION_FROZEN or self._qualified_history(skill, row[5]) < 2):
+            status = 'candidate'
+        return {'skill_id': skill_id, 'state_id': skill['state_id'], 'scope': skill['scope'], 'status': status, 'revision': row[1],
+                'confirmed_count': qualified, 'failure_streak': row[3], 'last_failure': parse_json(row[4]) if row[4] else None,
                 'hard_stop': skill['hard_stop'] or state['hard_stop'], 'review': skill['review'], 'element': element,
                 'signature': {**signature, 'review': skill['review']}, 'expected_effect': skill['expected_effect'], 'action': skill['action']}
 
@@ -340,6 +475,7 @@ class UiSkills:
         _validate(receipt, NATIVE['definitions']['receipt'], NATIVE)
         if receipt['op'] != 'execute' or receipt['status'] != 'completed' or receipt['input']['events_inserted'] < 1 or receipt['input']['released'] is not True:
             raise ValidationError('UI skill: actual execute input and release required')
+        self._bound_action(receipt_document, data, skill)
         source = receipt_document.get('source')
         if source is not None and (source.get('frame_id') != before['frame_id'] or source.get('seq') != before['seq'] or source.get('windows_clock_id') != data['windows_clock_id']):
             raise ValidationError('UI skill: receipt source does not match before frame')
@@ -401,22 +537,24 @@ class UiSkills:
                 (data['attempt_id'], data['skill_id'], canonical_sha256(data), int(confirmed), _source_key(data['before']), _source_key(data['after']) if data['after'] else None, receipt_key, canonical(data)))
             ordinal = self.runtime.connection.last_insert_rowid()
             row = self.runtime.connection.execute('SELECT status,confirmed_count,failure_streak,requalify_after FROM ui_skill WHERE skill_id=?', (data['skill_id'],)).fetchone()
-            status, total, streak, floor = row; total += int(confirmed)
+            status, _, streak, floor = row; total = self._qualified_history(skill)
             failed = data['mode'] == 'live' and data['before']['producer'] in {'resident_wgc', 'recovery_printwindow'} and data['effect']['status'] == 'failed'
             streak = streak + 1 if failed else 0 if confirmed else streak
             last_failure = canonical({'attempt_id': data['attempt_id'], 'reason': data['failure_reason'] or 'effect_failed'}) if failed else None
             if status == 'active' and streak >= 2:
                 status = 'degraded'; floor = ordinal
-            valid = self.runtime.connection.execute('SELECT count(*) FROM ui_attempt WHERE skill_id=? AND live_confirmed=1 AND ordinal>?', (data['skill_id'], floor)).fetchone()[0]
+            valid = self._qualified_history(skill, floor)
             if skill['hard_stop']:
                 status = 'hard_stop'
             elif skill['review']['status'] != 'approved':
                 status = 'pending_review'
-            elif valid >= 2:
+            elif valid >= 2 and not ACTIVATION_FROZEN:
                 status = 'active'
+            elif status == 'active' and ACTIVATION_FROZEN:
+                status = 'candidate'
             stats = skill['stats']; stats = {**stats, 'status': status, 'revision': stats['revision'] + 1, 'confirmed_count': total,
                                             'failure_streak': streak, 'requalify_after': floor,
-                                            'last_failure': parse_json(last_failure) if last_failure else stats['last_failure']}
+                                            'last_failure': None if confirmed else parse_json(last_failure) if last_failure else stats['last_failure']}
             skill['stats'] = stats
             self.runtime.connection.execute('UPDATE ui_skill SET status=?,revision=?,confirmed_count=?,failure_streak=?,requalify_after=?,last_failure=?,content_sha256=?,payload=? WHERE skill_id=?',
                 (status, stats['revision'], total, streak, floor, canonical(stats['last_failure']) if stats['last_failure'] else None,
@@ -433,8 +571,8 @@ class UiSkills:
             self.runtime.connection.execute('UPDATE ui_state SET review_status=?,content_sha256=?,payload=? WHERE state_key=?',
                 (data['review']['status'], canonical_sha256(state), canonical(state), skill['state_key']))
             floor = self.runtime.connection.execute('SELECT requalify_after FROM ui_skill WHERE skill_id=?', (data['skill_id'],)).fetchone()[0]
-            count = self.runtime.connection.execute('SELECT count(*) FROM ui_attempt WHERE skill_id=? AND live_confirmed=1 AND ordinal>?', (data['skill_id'], floor)).fetchone()[0]
-            status = 'hard_stop' if skill['hard_stop'] else 'pending_review' if data['review']['status'] != 'approved' else 'active' if count >= 2 else 'candidate'
+            count = self._qualified_history(skill, floor)
+            status = 'hard_stop' if skill['hard_stop'] else 'pending_review' if data['review']['status'] != 'approved' else 'active' if count >= 2 and not ACTIVATION_FROZEN else 'candidate'
             skill['stats'] = {**skill['stats'], 'status': status, 'revision': skill['stats']['revision'] + 1}
             self.runtime.connection.execute('UPDATE ui_skill SET status=?,revision=?,content_sha256=?,payload=? WHERE skill_id=?',
                 (status, skill['stats']['revision'], canonical_sha256(skill), canonical(skill), data['skill_id']))
@@ -469,7 +607,13 @@ class UiSkills:
         for ordinal, skill_id, confirmed, payload in self.runtime.connection.execute('SELECT ordinal,skill_id,live_confirmed,payload FROM ui_attempt ORDER BY ordinal') if self.available else []:
             if skill_id not in selected:
                 continue
-            value = parse_json(payload); counts['attempts'] += 1; counts['live_confirmed'] += confirmed; counts[value['route']] += 1
+            value = parse_json(payload)
+            if confirmed:
+                try:
+                    self._bound_action(parse_json(_read(value['native_receipt'])), value, self._stored('ui_skill', 'skill_id', skill_id))
+                except ValidationError:
+                    confirmed = 0
+            counts['attempts'] += 1; counts['live_confirmed'] += confirmed; counts[value['route']] += 1
             curve.append({'ordinal': ordinal, 'attempt_id': value['attempt_id'], 'skill_id': skill_id, 'mode': value['mode'], 'route': value['route'],
                           'live_confirmed': bool(confirmed), 'cumulative_live_confirmed': counts['live_confirmed'],
                           'cumulative_code_route_ratio': counts['code'] / counts['attempts'], 'latency': value['latency']})

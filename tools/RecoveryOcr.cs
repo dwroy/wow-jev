@@ -13,7 +13,7 @@ using Windows.Storage.Streams;
 public static class RecoveryOcr
 {
     internal static readonly string[] Terms = {
-        "小啊", "战士", "联盟", "进入魔兽世界", "进入游戏", "开始游戏", "魔兽世界",
+        "小呵", "战士", "联盟", "进入魔兽世界", "进入游戏", "开始游戏", "魔兽世界",
         "与吉安娜·普罗德摩尔交谈", "吉安娜·普罗德摩尔", "吉安娜", "普罗德摩尔", "与吉安娜", "交谈", "接受", "完成任务", "继续", "再见", "关闭", "战斗训练", "重连", "重新连接", "断开连接", "断线", "已断开", "连接丢失", "登录", "登陆",
         "账号", "帐号", "密码", "验证码", "验证", "身份验证", "安全令牌", "协议", "同意", "许可", "更新", "安装", "下载", "修复", "扫描", "排队", "加载", "取消",
         "Play", "Reconnect", "Disconnected", "Password", "Authenticator", "Verification", "Agreement", "Update", "Install", "Download" };

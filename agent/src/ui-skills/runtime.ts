@@ -70,7 +70,7 @@ export class UiSkillRuntime {
         }else{result.review_request=await this.review(before,choice.reason,goal,route.candidates,null,signal);result.reason='ui_review_required';return result;}
       }
       if(!skill||skill.hard_stop||skill.review.status!=='approved'||!['active','candidate'].includes(skill.status))throw new UiStop('blocked','ui_choice_not_approved');
-      if(/npc|talk_to|dialogue|quest/i.test(skill.element.purpose))throw new UiStop('blocked','ui_gameplay_requires_layered_tutorial');
+      if(/npc|talk|dialogue|quest/i.test(skill.element.purpose))throw new UiStop('blocked','ui_gameplay_requires_layered_tutorial');
       result.skill_id=skill.skill_id;
       if(skill.action&&(!Number.isSafeInteger(skill.action.duration_ms)||skill.action.duration_ms<1||skill.action.duration_ms>(skill.action.kind==='wait'?1000:150)||skill.action.kind==='key'&&(skill.action.keys.length!==1||!['ESC','ENTER'].includes(skill.action.keys[0]))))throw new UiStop('blocked','ui_key_or_wait_not_finite');
       // Slow results never make an old frame fresh. Native must recognize the
@@ -79,7 +79,7 @@ export class UiSkillRuntime {
       if(!matchingSkills(before,[skill]).length||before.state!.confidence<.95)throw new UiStop('blocked','ui_current_native_match_required');
       if(this.options.mode==='live'&&(/enter[_-]?world/i.test(skill.element.purpose)||skill.element.id==='enter_world')){
         const character=before.collected.observation.fields['ui.selected_character'];const v=character?.value;
-        if(character?.status!=='known'||character.source!=='cv'||character.source_observation_id!==before.source.observation_id||character.captured_at_ms!==before.collected.bracket.started_at_ms||!v||typeof v!=='object'||Array.isArray(v)||v.name!=='小啊'||v.class!=='warrior'||v.faction!=='alliance')throw new UiStop('blocked','ui_alliance_warrior_selected_identity_required');
+        if(character?.status!=='known'||character.source!=='cv'||character.source_observation_id!==before.source.observation_id||character.captured_at_ms!==before.collected.bracket.started_at_ms||!v||typeof v!=='object'||Array.isArray(v)||v.name!=='小呵'||v.class!=='warrior'||v.faction!=='alliance')throw new UiStop('blocked','ui_alliance_warrior_selected_identity_required');
       }
       if(goal&&skill.expected_effect?.state_id!==goal){const path=findUiPath(skills,this.options.scope,before.state!.id,goal);if(path?.[0]?.skill_id!==skill.skill_id)throw new UiStop('blocked','ui_choice_outside_reach_plan');}
       if(this.actions>=this.maxActions)throw new UiStop('blocked','ui_action_budget');this.actions++;const attemptId=`${this.options.run_id}-attempt-${this.actions}`;

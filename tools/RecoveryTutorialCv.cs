@@ -160,7 +160,7 @@ public static class RecoveryCvProfile
                 profile.Card=new Bitmap(path);var rectangle=Rect(Map(reference["rect"]));
                 if(profile.Card.Width!=rectangle.Width||profile.Card.Height!=rectangle.Height)throw new InvalidOperationException("selection_template_dimensions");
                 var character=Map(row["character"]);
-                if((string)character["name"]!="小啊"||(string)character["class"]!="warrior"||(string)character["faction"]!="alliance")
+                if((string)character["name"]!="小呵"||(string)character["class"]!="warrior"||(string)character["faction"]!="alliance")
                     throw new InvalidOperationException("selection_identity");
                 var ids=new HashSet<string>();
                 foreach(object value in (object[])row["regions"])
@@ -372,7 +372,7 @@ public static class RecoveryCvProfile
                 if(verified)
                 {
                     matches++;winner=Base(profile,image);winner["verified"]=true;winner["reason"]="calibrated_regions_match";
-                    winner["regions"]=scores;winner["name"]="小啊";winner["class"]="warrior";winner["faction"]="alliance";winner["ui_scale"]=scale;
+                    winner["regions"]=scores;winner["name"]="小呵";winner["class"]="warrior";winner["faction"]="alliance";winner["ui_scale"]=scale;
                     winner["ui_scale_factor"]=scale*1440/image.Height;
                     var point=Map(profile.Row["safe_focus_point"]);
                     winner["safe_focus_point"]=Obj("x",card.X+Round((Int(point,"x")-reference.X)*scale),

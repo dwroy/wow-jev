@@ -742,6 +742,53 @@
             "cv_finished_ms",
             "response_ms"
           ]
+        },
+        "ui_skills": {
+          "type": "object",
+          "required": [
+            "status",
+            "state_id",
+            "confidence",
+            "matches",
+            "knowledge_sha256",
+            "hard_stop",
+            "started_qpc_ms",
+            "finished_qpc_ms"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "known",
+                "unknown"
+              ]
+            },
+            "state_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "confidence": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "matches": {
+              "type": "array"
+            },
+            "knowledge_sha256": {
+              "$ref": "#/definitions/sha256"
+            },
+            "hard_stop": {
+              "type": "boolean"
+            },
+            "started_qpc_ms": {
+              "type": "number"
+            },
+            "finished_qpc_ms": {
+              "type": "number"
+            }
+          }
         }
       },
       "required": [
@@ -829,7 +876,10 @@
               "type": "boolean"
             },
             "max_duration_ms": {
-              "const": 150
+              "enum": [
+                300,
+                950
+              ]
             },
             "controller_lease_ms": {
               "const": 750
@@ -1251,7 +1301,7 @@
                     "duration_ms": {
                       "type": "integer",
                       "minimum": 1,
-                      "maximum": 150
+                      "maximum": 950
                     }
                   },
                   "required": [
@@ -1279,6 +1329,82 @@
             "source",
             "intent"
           ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "protocol",
+            "version",
+            "type",
+            "session_id",
+            "id",
+            "op",
+            "snapshot_canonical",
+            "snapshot_sha256",
+            "ui_scope"
+          ],
+          "properties": {
+            "protocol": {
+              "const": "wow-resident"
+            },
+            "version": {
+              "const": 1
+            },
+            "type": {
+              "const": "command"
+            },
+            "session_id": {
+              "$ref": "#/definitions/uuid"
+            },
+            "id": {
+              "$ref": "#/definitions/id"
+            },
+            "op": {
+              "const": "load_ui_skills"
+            },
+            "snapshot_canonical": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 60000
+            },
+            "snapshot_sha256": {
+              "$ref": "#/definitions/sha256"
+            },
+            "ui_scope": {
+              "type": "object",
+              "required": [
+                "target_scope",
+                "build",
+                "locale",
+                "size_bucket",
+                "ui_scale"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "target_scope": {
+                  "enum": [
+                    "retail_wow",
+                    "recording_fixture"
+                  ]
+                },
+                "build": {
+                  "type": "string"
+                },
+                "locale": {
+                  "type": "string"
+                },
+                "size_bucket": {
+                  "type": "string"
+                },
+                "ui_scale": {
+                  "type": "number",
+                  "minimum": 0.1,
+                  "maximum": 4
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -1320,7 +1446,7 @@
         "duration_ms": {
           "type": "integer",
           "minimum": 1000,
-          "maximum": 300000
+          "maximum": 950000
         },
         "output": {
           "type": "string",
@@ -1354,6 +1480,12 @@
             "string",
             "null"
           ]
+        },
+        "ui_skill_practice_authorized": {
+          "type": "boolean"
+        },
+        "tutorial_prerequisite_authorized": {
+          "type": "boolean"
         }
       },
       "required": [
