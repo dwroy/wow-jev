@@ -23,6 +23,11 @@ export function uiCharacterConditions(skill:UiSkill,before:UiFrame):ActionCondit
   if(character?.status!=='known'||character.source!=='cv'||character.source_observation_id!==before.collected.observation.id||character.captured_at_ms!==before.collected.bracket.started_at_ms||!object(value)||value.name!=='小呵'||value.class!=='warrior'||value.faction!=='alliance')throw new Error('ui_alliance_warrior_selected_identity_required');
   return[{field:'ui.selected_character',op:'eq',value:structuredClone(value),max_age_ms:750}];
 }
+/** Bind only the selected skill, while unrelated perception matches may vary. */
+export function assertNativeDispatchSkill(sample:ResidentMemorySample,expected:{skill_id:string;signature_id:string;state_id:string;knowledge_sha256:string}):void{
+  const current=sample.ui_skills,match=current?.matches.find(m=>m.skill_id===expected.skill_id);
+  if(!current||current.knowledge_sha256!==expected.knowledge_sha256||current.status!=='known'||current.hard_stop||current.state_id!==expected.state_id||!match||match.signature_id!==expected.signature_id||match.state_id!==expected.state_id||match.hard_stop)throw new Error('ui_selected_native_skill_changed');
+}
 export interface UiResidentAdapterOptions {
   body:BodyRuntimeOptions;registry:Pick<MemoryFrameRegistry,'owns'>;scope:UiScope;
   collect:(kind:'hot'|'evidence'|'effect',signal:AbortSignal)=>Promise<Collected<ResidentMemorySample>>;
@@ -58,14 +63,14 @@ export function createResidentUiPorts(options:UiResidentAdapterOptions):UiPorts{
   };
   const plans=new Map<string,{intent:ActionIntent;compiled_action:NativeAction}>();
   const expectedMotion=new Map<string,NativeAction>();
-  const dispatches=new Map<string,{skill_id:string;route:'reflex'|'slow_path'}>();
+  const dispatches=new Map<string,{skill_id:string;route:'reflex'|'slow_path';signature_id:string;state_id:string;knowledge_sha256:string}>();
   const body=new BodyRuntime({...options.body,saveObservations:false,bindSource:async(before,intent,context)=>{
     if(!options.body.bindSource||intent.mode!=='live'||intent.action.name!=='native_input')throw new Error('ui_original_resident_binding_required');
     if(!options.registry.owns(before))throw new Error('ui_dispatch_source_not_registered');
     const motion=expectedMotion.get(intent.id);if(motion&&canonical(motion)!==canonical(intent.action.args))throw new Error('ui_motion_compilation_changed');
     plans.set(intent.id,{intent:structuredClone(intent),compiled_action:structuredClone(intent.action.args)});
     const dispatch=dispatches.get(intent.id);
-    if(dispatch){const current=(before.bracket.sample as ResidentMemorySample).ui_skills;if(!current||!options.bindUiSource)throw new Error('ui_private_dispatch_binding_required');await options.bindUiSource(before,intent,context,{...dispatch,knowledge_sha256:current.knowledge_sha256});}
+    if(dispatch){const sample=before.bracket.sample as ResidentMemorySample,current=sample.ui_skills;if(!current||!options.bindUiSource)throw new Error('ui_private_dispatch_binding_required');assertNativeDispatchSkill(sample,dispatch);await options.bindUiSource(before,intent,context,{skill_id:dispatch.skill_id,route:dispatch.route,knowledge_sha256:current.knowledge_sha256});}
     else await options.body.bindSource(before,intent,context);
   },collect:async(save)=>{const c=await options.body.collect(save);if(c.bracket.sample.protocol!=='wow-resident')throw new Error('ui_body_nonresident_source');const fresh=map(c as Collected<ResidentMemorySample>);if(fresh.hard_stop||fresh.state?.hard_stop)throw new Error('ui_dispatch_hard_stop');return c;}});
   return{...options.ports,now:options.body.now,
@@ -74,7 +79,8 @@ export function createResidentUiPorts(options:UiResidentAdapterOptions):UiPorts{
     execute:async(skill,before,attemptId,signal,dispatch)=>{
       if(authentic.get(before)!==digest(before)||!options.registry.owns(before.collected))throw new Error('ui_execution_source_not_registered');
       if(!executableUiSkill(skill,options.reviewed_candidate_trial_authorized===true,options.autonomous_trial_authorized===true))throw new Error('ui_adapter_supervisor_review_required');
-      dispatches.set(attemptId,{skill_id:skill.skill_id,route:dispatch?.route??'slow_path'});
+      const knowledge=(before.collected.bracket.sample as ResidentMemorySample).ui_skills?.knowledge_sha256,signature=skill.signature.signature_id;if(!knowledge||typeof signature!=='string'||signature.length<1)throw new Error('ui_native_knowledge_required');
+      dispatches.set(attemptId,{skill_id:skill.skill_id,route:dispatch?.route??'slow_path',signature_id:signature,state_id:skill.state_id,knowledge_sha256:knowledge});
       const e=before.elements.find(e=>e.id===skill.element.id&&e.signature_sha256===skill.signature.sha256&&e.enabled);
       let action:BodyAction;
       if(skill.action?.kind==='key'){
@@ -93,7 +99,7 @@ export function createResidentUiPorts(options:UiResidentAdapterOptions):UiPorts{
       const matches=before.collected.observation.fields['ui.skill_matches'];if(skill.action&&matches?.status!=='known')throw new Error('ui_current_skill_match_unknown');
       // Match confidence varies with rendering. Native's private skill binding
       // and the exact control signature bind the state; confidence is telemetry.
-      const result=await body.execute(action,{command_id:attemptId,...identity,mode:'live',conditions:[...uiCharacterConditions(skill,before),{field:'ui.state',op:'exists',max_age_ms:750},...(skill.action?[{field:'ui.skill_matches',op:'eq' as const,value:structuredClone(matches!.value),max_age_ms:750}]:[{field:'ui.control_signatures',op:'eq' as const,value:structuredClone(signatures!.value),max_age_ms:750}])],signal});
+      const result=await body.execute(action,{command_id:attemptId,...identity,mode:'live',conditions:[...uiCharacterConditions(skill,before),{field:'ui.state',op:'exists',max_age_ms:750},...(skill.action?.kind==='key'?[{field:'ui.skill_matches',op:'exists' as const,max_age_ms:750}]:skill.action?[{field:'ui.skill_matches',op:'eq' as const,value:structuredClone(matches!.value),max_age_ms:750}]:[{field:'ui.control_signatures',op:'eq' as const,value:structuredClone(signatures!.value),max_age_ms:750}])],signal});
       // Registry latest-frame validity may already have advanced during Body's
       // after-collect. This is the actual authenticated source kept at collect.
       const plan=plans.get(attemptId);plans.delete(attemptId);expectedMotion.delete(attemptId);dispatches.delete(attemptId);

@@ -33,6 +33,7 @@ import {prepareUiRunRegistration,registeredUiProvenance,frozenRunSkills,type UiR
 import {freshTutorialObservation} from '../ui-skills/tutorial-observation.js';
 import {unverifiedLayerAttempt} from '../ui-skills/layer-attempt.js';
 import {selectExistingSceneControl,selectKnownTutorialControl,selectCurrentCharacterEntry} from '../ui-skills/scene-choice.js';
+import {awaitCurrentTrainingApproach} from './training-await.js';
 const hash=(x:string|Buffer)=>createHash('sha256').update(x).digest('hex');
 const run=promisify(execFile);
 const fixedRoot=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
@@ -195,7 +196,10 @@ export async function uiField(args:string[]){
    }
    const layerResult=result as {result:{status:string}};result={...layerResult,status:layerResult.result.status};
   }else if(command==='engage'||command==='approach'){
-   let frame=await collect('hot');if(frame.collected.observation.fields['target.entity_kind']?.value!=='training_dummy')frame=await collect('evidence',true);if(frame.state?.id!=='tutorial_attack_training'||frame.collected.observation.fields['target.entity_kind']?.value!=='training_dummy'||frame.collected.observation.fields['target.world_npc_surface']?.status!=='known'){await collect('evidence',true);throw new Error('training_current_dummy_and_instruction_required');}
+   let frame=await collect('hot');
+   if(command==='approach'){const ready=await awaitCurrentTrainingApproach(frame,{collect:()=>collect('hot'),now,signal:controller.signal,budget_ms:3000});await append('training_readonly_ready_wait',{observations:ready.observations,reason:ready.reason,budget_ms:3000,source:ready.frame?.source??null,input_issued:false});if(!ready.frame)throw new Error(ready.reason);frame=ready.frame;}
+   else if(frame.collected.observation.fields['target.entity_kind']?.value!=='training_dummy')frame=await collect('evidence',true);
+   if(frame.state?.id!=='tutorial_attack_training'||frame.collected.observation.fields['target.entity_kind']?.value!=='training_dummy'||frame.collected.observation.fields['target.world_npc_surface']?.status!=='known'){throw new Error('training_current_dummy_and_instruction_required');}
    const approaching=command==='approach';
    if(approaching){await append('persistent_forward_binding',{key:'W',source_artifact:bindingReference,source_semantics:'previous same-character keyboard instruction, persistent frozen BodyProfile; not a current CV keybinding claim',current_ground_source:frame.collected.observation.fields['player.ground_source']??null});}
    const task={id:approaching?'tutorial-approach-warmup':'tutorial-engage-warmup',revision:1,kind:'sequence' as const,params:{},max_duration_ms:12000,max_behaviors:1,behaviors:[{id:'engage-local-training-dummy',kind:approaching?'approach_target' as const:'engage_target' as const,params:{target_signature:'visible-name:作战假人',action_duration_ms:approaching?150:80},max_duration_ms:7000,max_actions:1}]};

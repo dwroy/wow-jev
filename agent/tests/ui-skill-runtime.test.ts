@@ -4,7 +4,8 @@ import {UiSkillRuntime} from '../src/ui-skills/runtime.js';
 import {DEMO_SCOPE,createUiDemo,runUiOfflineDemo,demoSkill} from '../src/ui-skills/demo.js';
 import {routeUi,findUiPath} from '../src/ui-skills/router.js';
 import type {UiProposal} from '../src/ui-skills/types.js';
-import {uiCharacterConditions} from '../src/ui-skills/resident-adapter.js';
+import {uiCharacterConditions,assertNativeDispatchSkill} from '../src/ui-skills/resident-adapter.js';
+import {memorySample} from './fixtures/resident-memory.js';
 import {BodyRuntime,type BodyHand} from '../src/actions/runtime.js';
 import type {NativeReady,NativeReceipt} from '../src/hand/protocol.js';
 import {parseBodyProfile} from '../src/actions/profile.js';
@@ -41,4 +42,18 @@ test('enter-world Body dispatch rechecks the approved character after routing, p
     const result=await body.execute({kind:'ui_key',key:'ENTER',state_id:'char_select',duration_ms:50},{command_id:'enter-1',task_id:'ui-practice',task_revision:1,run_epoch:0,mode:'live',conditions,signal:controller().signal});
     assert.equal(sends,changed?0:1,`${String(changed)} ${result.reason}`);assert.equal(result.status,changed?'blocked':'completed',result.reason??'');
   }
+});
+test('selected Native key signature remains required while unrelated scene matches may change',()=>{
+ const s=memorySample('chosen-key',1),expected={skill_id:'esc',signature_id:'sig-esc',state_id:'tutorial_attack_training',knowledge_sha256:'e'.repeat(64)};
+ const selected={...expected,status:'candidate' as const,hard_stop:false,roi_sha256:'f'.repeat(64)};
+ s.ui_skills={status:'known',state_id:expected.state_id,confidence:.6,matches:[selected],knowledge_sha256:'e'.repeat(64),hard_stop:false,started_qpc_ms:s.memory_frame.source_qpc_ms,finished_qpc_ms:s.local_clock.at_ms};
+ assert.doesNotThrow(()=>assertNativeDispatchSkill(s,expected));s.ui_skills.matches.unshift({...selected,skill_id:'ground',signature_id:'sig-ground'});assert.doesNotThrow(()=>assertNativeDispatchSkill(s,expected));
+ s.ui_skills.matches=s.ui_skills.matches.filter(m=>m.skill_id!=='ground');assert.doesNotThrow(()=>assertNativeDispatchSkill(s,expected));
+ for(const fault of ['missing','signature','state','hard_stop','knowledge']){const x=structuredClone(s);if(fault==='missing')x.ui_skills!.matches=[];if(fault==='signature')x.ui_skills!.matches[0]!.signature_id='changed';if(fault==='state')x.ui_skills!.state_id='other';if(fault==='hard_stop')x.ui_skills!.hard_stop=true;if(fault==='knowledge')x.ui_skills!.knowledge_sha256='a'.repeat(64);assert.throws(()=>assertNativeDispatchSkill(x,expected),/selected_native_skill_changed/);}
+});
+test('pre-dispatch Body refusal keeps its reason without inventing run provenance or input',async()=>{
+ const d=createUiDemo();d.skills[0]!.element.purpose='fixture_control';d.skills[0]!.element.id='fixture_button';d.skills[0]!.expected_effect={state_id:'game_menu',signature_sha256:'c'.repeat(64)};const collect=d.ports.collect;d.ports.collect=async(...args)=>{const f=await collect(...args);f.source.producer='resident_wgc';f.source.clock={domain:'windows-qpc',clock_id:'fault-fixture',ticks:100,unit:'ms'};f.source.target.session_id=1;return f;};
+ d.ports.provenance=async skill=>({run_id:'ui-test',code_sha256:'a'.repeat(64),prompt_sha256:'b'.repeat(64),prompt_version:'fixture',knowledge_sha256:'c'.repeat(64),skill_revision:skill.revision});
+ d.ports.execute=async()=>({status:'blocked',reason:'condition_failed:ui.skill_matches',started_at_ms:0,finished_at_ms:1,before_observation_id:null,after_observation_id:null,receipt:null,release:'confirmed',game_effect:'unverified',evidence_observation_ids:[],real_inputs:0,dispatch_frame:null});
+ const r=await runtime(d,{mode:'live'}).step(controller().signal);assert.equal(r.reason,'condition_failed:ui.skill_matches');assert.equal(r.input_issued,false);assert.equal(r.release,'confirmed');
 });

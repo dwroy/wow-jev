@@ -116,7 +116,7 @@ export class UiSkillRuntime {
       attempt.before=before.source;attempt.native_receipt=this.ports.saveNativeReceipt?await this.call(this.ports.saveNativeReceipt(body),signal):null;
       if(this.options.mode==='live'&&before.collected.bracket.sample.protocol==='wow-resident')attempt.before_native_sample=structuredClone(before.collected.bracket.sample);
       if(body.compiled_action&&!waiting)attempt.actual_action={kind:skill.action?.kind==='key'||skill.action?.kind==='drag'||skill.action?.kind==='move'?skill.action.kind:'click',duration_ms:skill.action?.duration_ms??skill.element.duration_ms,compiled_action:body.compiled_action};
-      if(this.options.mode==='live'&&body.intent?.run_id!==this.options.run_id)throw new UiStop('blocked','ui_body_run_provenance_mismatch');
+      if(this.options.mode==='live'&&(body.intent!==undefined||result.input_issued)&&body.intent?.run_id!==this.options.run_id)throw new UiStop('blocked','ui_body_run_provenance_mismatch');
       const t=receipt?.input_timing;
       if(result.input_issued&&t&&before.source.clock.domain==='windows-qpc'&&t.clock==='windows_qpc'&&Number.isFinite(t.first_send_finished_ms)&&t.first_send_finished_ms>=before.source.clock.ticks)attempt.latency.observe_to_input_ms=t.first_send_finished_ms-before.source.clock.ticks;
       if(body.status!=='completed'||body.release!=='confirmed'||this.options.mode==='live'&&!waiting&&(!result.input_issued||!receipt?.input.released||receipt.input.events_inserted!==receipt.input.events_requested)){
