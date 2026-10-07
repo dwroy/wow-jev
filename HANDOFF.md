@@ -16,6 +16,8 @@ a73f5a0已正常推送唯一codex/agent-system，远端SHA核验一致；Windows
 
 作战假人离线接线：d0049a1原生当前中立姓名glyph/木桩独立chroma定位与一次screen-engage L3 helper，三张独立保存图正例37/44/47ms、菜单完整组合与选角负例拒绝。检测点来自当前木桩patch内部，不复用参考坐标，不宣称GUID/已攻击成功。新engage_target schema仅单次80–150ms与目标签名，Runtime仍走Body/统一闸；输入后只读选中假人确认不等于摧毁/任务完成，不能追加动作。resident唯一schema只新增method枚举，原Source/身份/ROI/点语义保留；宿主编译列表含新纯模块。角色仍安全选角，profile/Collector/field接线后再实测。
 
+c905740已完成profile原件/177前景mask及算法SHA、Collector同源实体/目标栏、field L4/L3入口；全量Python983 passed+3原strict xfail/TS765/765/typecheck、常驻宿主编译通过。新2项profile拒伪原件/错源，helper4项与Collector2项关键检查通过。旧NPC/治理fixture编译列表同步新依赖，纯治理32/32（0桌面、0输入、非live确认）。现场45在任务创建前被旧宿主schema产物校验拒绝（0输入/0任务），已在本树重编译，按已知环境修复续46，不计未知三失败。当前唯一执行端继续只读/进世界/有限engage，效果与任务摧毁另以实际后图确认。
+
 **先前治理v2软件阶段：现场未完成交谈时曾停在选角，历史数字如下。**
 
 最新授权允许游戏内自主执行，self/Seed无需逐点预审；active按独立原后图重算、全已知状态负例、至少两次跨run live确认、最近成功率≥80%晋升，HTML供Claude/user定期抽查与撤销。user拒绝/撤销不能被self覆盖；同一步三次失败/十分钟无进展及凭据、协议、更新、真钱账号/玩家交互/销毁、管理员系统设置仍停止。普通输入保留当前帧、身份、前台、有限时长、取消和释放闸。

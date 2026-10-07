@@ -9,6 +9,7 @@ mkdir -p "$task_output"
   /r:System.Web.Extensions.dll \
   "/out:$(wslpath -w "$task_output/UiSkillGovernanceFixture.exe")" \
   "$(wslpath -w "$task_root/native/windows/UiSkillVision.cs")" \
+  "$(wslpath -w "$task_root/native/windows/TrainingDummyVision.cs")" \
   "$(wslpath -w "$task_root/tools/NpcLocatorFixture.cs")" \
   "$(wslpath -w "$task_root/tools/UiSkillGovernanceFixture.cs")"
 chmod +x "$task_output/UiSkillGovernanceFixture.exe"
