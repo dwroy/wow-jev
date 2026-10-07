@@ -383,6 +383,11 @@ def test_fresh_tutorial_observation_uses_actual_native_source_and_rejects_old_or
         observation = {'protocol':'wow-agent','version':1,'type':'observation','run_id':run['run_id'],'id':frame_source['observation_id'],'observation_seq':frame_source['seq'],
             'at_ms':20,'window':{'token':document['action_intent']['window_token'],'pid':99,'hwnd':'0xabc','client_width':96,'client_height':64,'focused':True},'fields':fields,'artifacts':[]}
         request = {'run_id':run['run_id'],'frame':frame_source,'native_evidence':evidence,'observation':observation}
+        from game_database.ui_skills import validate_request
+        envelope = {'protocol':'wow-ui-skill-learning','version':1,'request_id':'fresh-token-path','op':'register_tutorial_observation','data':request}
+        assert validate_request(envelope)['data']['observation']['window']['token'] == observation['window']['token']
+        bad_token = deepcopy(envelope); bad_token['data']['observation']['window']['token'] = 'secret-api-token'
+        with pytest.raises(ValidationError, match='credential'): validate_request(bad_token)
         got = store.register_tutorial_observation(request)
         assert got['record']['source_clock'] == frame_source['clock'] and got['local_query']['as_of_clock'] == frame_source['clock']
         assert LocalAssertions(db).get(**got['local_query'])['value']['instruction'] == '与吉安娜·普罗德摩尔交谈'
@@ -391,6 +396,11 @@ def test_fresh_tutorial_observation_uses_actual_native_source_and_rejects_old_or
         with pytest.raises(ValidationError, match='binding'): store.register_tutorial_observation(stale)
         wrong = deepcopy(request); wrong['native_evidence']['ocr']['items'][0]['text'] = '下一任务'
         with pytest.raises(ValidationError, match='exact instruction'): store.register_tutorial_observation(wrong)
+        segmented = deepcopy(request)
+        segmented['native_evidence']['ocr']['items'] = [{'text':text,'x':1,'y':1,'width':90,'height':10,'box_scope':'matched_line','matching':'whitelist_normalized_substring'} for text in ('与吉安娜','普罗德摩尔','交谈')]
+        assert not store.register_tutorial_observation(segmented)['inserted']
+        segmented['native_evidence']['ocr']['items'][-1]['y'] = 30
+        with pytest.raises(ValidationError, match='exact instruction'): store.register_tutorial_observation(segmented)
 
 
 def test_autonomous_pending_source_can_learn_active_without_fabricating_human_review(tmp_path):

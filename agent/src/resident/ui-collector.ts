@@ -40,7 +40,7 @@ export class UiResidentCollector {
       if(matched.started_qpc_ms<m.source_qpc_ms||matched.finished_qpc_ms<matched.started_qpc_ms||matched.finished_qpc_ms>s.local_clock.at_ms)throw new Error('ui_native_match_timing');
       for(const match of matched.matches){
         const skill=skills.find(k=>k.skill_id===match.skill_id);if(!skill||match.signature_id!==skill.signature.signature_id)throw new Error('ui_native_signature_not_current_knowledge');
-        const roi=m.rois.find(r=>r.id==='learned-ui-'+skill.skill_id);if(!roi||roi.sha256!==match.roi_sha256||roi.calibration_sha256!==matched.knowledge_sha256)throw new Error('ui_native_roi_not_bound');
+        const dynamic=nativeNpcSurface(m,match),roi=dynamic?.roi??m.rois.find(r=>r.id==='learned-ui-'+skill.skill_id);if((match as unknown as Record<string,unknown>).location&&!dynamic||!roi||roi.sha256!==match.roi_sha256||roi.calibration_sha256!==matched.knowledge_sha256)throw new Error('ui_native_roi_not_bound');
         const governanceMatch=match as unknown as Record<string,unknown>;
         skillMatches.push({skill_id:skill.skill_id,signature_sha256:skill.signature.sha256,active_qualified:governanceMatch.active_qualified===true,...(typeof governanceMatch.negative_validation_sha256==='string'?{negative_validation_sha256:governanceMatch.negative_validation_sha256}:{})});
         if(matched.status==='known'&&match.state_id===matched.state_id){
@@ -82,6 +82,10 @@ export class UiResidentCollector {
       }
     }
     if(elements.length){add('ui.elements',elements.map(({signature_sha256:_,...e})=>e),'cv');add('ui.control_signatures',elements.map(e=>({id:e.id,signature_sha256:e.signature_sha256})),'cv');add('input.mouse_mode','ui','cv');}
+    if(state?.id==='dialog_jaina_warmup'&&matched?.status==='known'){
+      const accept=matched.matches.map(match=>skills.find(k=>k.skill_id===match.skill_id)).find(k=>k?.element.purpose==='quest_accept_jaina_warmup'&&k.element.label==='接受');
+      if(accept&&!hardStop){const b=accept.element.bbox;add('dialog.open',true,'cv');add('dialog.target_signature','visible-name:吉安娜·普罗德摩尔','cv');add('target.signature','visible-name:吉安娜·普罗德摩尔','cv');add('input.mouse_mode','ui','cv');add('dialog.elements',[{id:accept.element.id,role:'accept',quest_id:'session-local.exiles-reach.warmup',x:Math.floor((b.x+b.width/2)*m.client_width),y:Math.floor((b.y+b.height/2)*m.client_height),layout_id:m.layout_id,enabled:true}],'cv');}
+    }
     if(evidence&&ocr){
       const dialog=recognizeTutorialVisual(memorySource(s,id),undefined,evidenceOcr(evidence));
       if(dialog.dialog==='open'&&dialog.target_signature&&dialog.dialog_proof){

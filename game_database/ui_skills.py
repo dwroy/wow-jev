@@ -129,7 +129,16 @@ def _validate(value: Any, schema: dict, root: dict | None = None, depth: int = 0
 
 def validate_request(value: Any) -> dict:
     _validate(value, SCHEMA)
-    _json(value, 'UI skill request')
+    checked = deepcopy(value)
+    if checked['op'] == 'register_tutorial_observation':
+        window = checked['data']['observation']['window']
+        token = window.get('token') if isinstance(window, dict) else None
+        if isinstance(token, str) and re.fullmatch(r'resident-ui-[1-9][0-9]{0,9}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', token):
+            # A schema-validated opaque window identity, not an API token.
+            # The original value is retained and later checked against the
+            # original Native PID/channel generation; all other keys scan.
+            del window['token']
+    _json(checked, 'UI skill request')
     return deepcopy(value)
 
 
@@ -446,7 +455,30 @@ class UiSkills:
                 surface.get('roi_id') != location['roi_id'] or surface.get('roi_sha256') != location['roi_sha256'] or surface.get('calibration_sha256') != location['calibration_sha256'] or \
                 point.get('x') != match['current_point']['x'] or point.get('y') != match['current_point']['y'] or point.get('layout_id') != source['layout_id']:
             raise ValidationError('UI tutorial: fields do not match original current Native location')
-        raw_exact_hint = evidence['ocr']['status'] == 'available' and any(i['text'].strip() == instruction for i in evidence['ocr']['items'])
+        items = evidence['ocr']['items'] if evidence['ocr']['status'] == 'available' else []
+        raw_exact_hint = any(i['text'].strip() == instruction for i in items)
+        # Windows allowlist OCR emits segmented terms with their ORIGINAL
+        # matched-line box. Accept the full NPC/action phrase only when all
+        # three terms independently came from that one line, never elsewhere.
+        lines = {}
+        for item in items:
+            if item.get('box_scope') == 'matched_line' and item.get('matching') == 'whitelist_normalized_substring':
+                box = tuple(item[k] for k in ('x', 'y', 'width', 'height'))
+                lines.setdefault(box, set()).add(item['text'].strip())
+        raw_exact_hint = raw_exact_hint or any({'与吉安娜', '普罗德摩尔', '交谈'} <= terms for terms in lines.values())
+        # OCR may miss the small leading 与. In that case require the full
+        # current independent instruction anchor as well as NPC+action terms
+        # on ONE original line whose box overlaps that anchor by at least half.
+        signature = self._stored('ui_signature', 'signature_id', skill['signature_id'])
+        for index, anchor in enumerate(signature.get('anchors', [])):
+            if anchor.get('id') != 'instruction-current-jaina': continue
+            scores = match.get('scores', {}).get('anchors', [])
+            if index >= len(scores) or scores[index].get('matched') is not True: continue
+            roi = next((r for r in source['rois'] if r['sha256'] == scores[index].get('roi_sha256') and r['calibration_sha256'] == sample['ui_skills']['knowledge_sha256'] and r['id'] == 'learned-ui-' + skill['skill_id'] + '-anchor-' + str(index)), None)
+            if roi is None: continue
+            for (x, y, w, h), terms in lines.items():
+                overlap = max(0, min(x+w, roi['x']+roi['width'])-max(x, roi['x'])) * max(0, min(y+h, roi['y']+roi['height'])-max(y, roi['y']))
+                if {'吉安娜', '普罗德摩尔', '交谈'} <= terms and overlap >= w*h*.5: raw_exact_hint = True
         calibrated = sample.get('cv', {}).get('tutorial_interaction', {})
         cv_hint = calibrated.get('verified') is True and calibrated.get('kind') == 'talk_jaina' and calibrated.get('npc_name') == '吉安娜·普罗德摩尔' and \
             any(r['calibration_sha256'] == calibrated.get('calibration_sha256') for r in source['rois'])
