@@ -86,7 +86,7 @@ bash tools/ui_skill_governance_build.sh
 out/acceptance/native-governance/UiSkillGovernanceFixture.exe
 ```
 
-2026-10-07 的 31 项纯合成故障测试通过，覆盖完整/缺失/失败的负例、self客观采纳、用户撤销、
+2026-10-07 的 32 项纯合成故障测试通过，覆盖完整/缺失/失败的负例、self客观采纳、用户撤销、
 冻结、素材/动作/guard 替换、未知明暗模态、匹配裕度、改名硬停、坏条目隔离、
 固定 NPC 与 primitive 绑定等边界。另有保存图 locator 8 项回归及完整
 WinInput/Watchdog/ResidentHost/Relay 编译通过。fixture 元数据是显式离线输入，

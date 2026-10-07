@@ -1,16 +1,20 @@
-**2026-10-07 最新授权：游戏操作自主执行，无逐点或active人审前置；self/Seed来源必须标明，客观晋升仍独立后图+负例+两次跨run+成功率，定期audit抽查可撤销。遇3次同一步失败/10分钟无进展、凭据/协议/更新、真钱账号/玩家交互/销毁、管理员系统设置才停止。吉安娜交谈后可继续教程。当前首交谈仍0输入；动态定位纯8项已验收，重连09已发并后图到选角，进入11/确认12/镜头13已发且释放。首教程LocalAssertion历史引用已过1h，正在接当前Native帧注册新事实，绝不伪刷新原QPC。断线取证分别约79.84m空闲后返选角、33.00m空闲后WOW51900319，与空闲高度一致但无断线瞬间证据；长开发等待先留选角。治理数据41专项、Native29+8已交隔离提交，尚待新授权/当前事实接口、真实库完整备份迁移、全量及审计报告。**
+**2026-10-07 当前收尾：治理v2软件里程碑全绿；现场超过十分钟无有效教程进展，已停止。最后证据为联盟战士“小呵”的选角页。吉安娜交谈未完成、交谈输入0，两轮/五轮练习未完成。**
 
-**2026-10-07 当前：角色为联盟战士“小呵”。jaina-talk-02只读发现已退选角，0输入；jaina-reenter-03有限进世界、jaina-controls-04有限关闭键位提示，独立后图已确认场景，但原UI自动后验因目标状态不合格仍保留unconfirmed。jaina-orient-07经L4/L3一次950ms视角原语，11/11事件且释放，独立新教程提示确认转换。最新教程为“与吉安娜·普罗德摩尔交谈”；Claude审核新点(.725,.455)，但talk-03因姓名板动态移位无法当前CV确认，0交谈输入。禁止再固化NPC坐标，正在实现当前帧姓名板/黄色轮廓定位。当前没有练习循环或W输入；各任务已删除并回查、释放账本为空。**
+最新授权允许游戏内自主执行，self/Seed无需逐点预审；active按独立原后图重算、全已知状态负例、至少两次跨run live确认、最近成功率≥80%晋升，HTML供Claude/user定期抽查与撤销。user拒绝/撤销不能被self覆盖；同一步三次失败/十分钟无进展及凭据、协议、更新、真钱账号/玩家交互/销毁、管理员系统设置仍停止。普通输入保留当前帧、身份、前台、有限时长、取消和释放闸。
 
-**用户16项严谨性审计正在三个独立模块树实施：数据/审核/独立效果与HTML报告、TS路由与动作出处、Windows动态定位/置信度/异常模态。ACTIVATION_FROZEN保持，既有late-review、self/Seed批准、null目标签名不计晋升；只允许明确有限授权的受审候选试验，不能反射或自升active。真实DB迁移先完整备份；全量回归/报告审核/五轮练习尚未完成，当前工作树检查点不代表最终验收。详见docs/ui-skill-governance-audit.md、docs/acceptance/ui-skill-learning.md。**
+已集成不可变修订/快照、独立学习者后验、坏记录隔离、稳定转移ID、实际drag/move记录、当前NPC姓名板/黄色躯干定位、匹配裕度、模态退慢路、Seed坐标/像素复核及新鲜局部事实→L4/L3接线。真实agent.sqlite完整备份后迁移v2，11条旧记录修订保留历史。审计16技能（6 candidate、8 deprecated、2 alias），0 active、0合格确认；一条失败late-review回执隔离，不回填成功。
 
-**2026-10-07 用户最新纠正：角色名是“小呵”，联盟战士；先前“小啊”是校准标注及报告错误，不代表像素匹配了另一个选中行。历史原件不改写，当前入口/模板标注/最后下发帧角色条件已同步更正。首次技能图进世界运行被宿主预算验证阻止，0游戏输入。**
+最终软件检查：Python942 passed+3原有strict xfail（0普通skip/fail），TS752/752（0skip/cancel/fail）、typecheck；原生纯治理32/32、保存图NPC定位8/8，Resident/Input/Watchdog/Relay编译通过。首次Python940+2失败是两份fixture缺新原生schema字段，修正fixture后完整重跑，原日志保留。源码检查点a3ff44a，当前提交只补验收与交接。
+
+现场重连09后独立图到选角，进入11/确认12/镜头13均发出且释放，但不作为治理v2合格晋升确认。最后enter16选角识别通过、模态guard未就绪，Seed返回非法JSON，0输入；不猜坐标或补录成功。Windows QPC最新源→首MOVE三个审计期样本p50=181.1080ms，未达到150ms；不是最初观察/模型到输入全链成绩。落盘模型调用11次（Jev文本5、Seed视觉6，其中视觉结果失败3），没有active反射命中。所有已创建任务删除并独立回查；只读无执行器的释放不外推物理按键释放。
+
+详见[本次治理验收](docs/acceptance/ui-skill-governance-v2.md)、[真实交谈/性能记录](docs/acceptance/ui-skill-learning.md)。主out的audit-report提供HTML及精确JSON，报告SHA b2ff1380b4e4d4e55ba0b1328a690f43cc11f722213e346379e84ec7787147d2。下次恢复先核验当前会话/身份/帧，补选角模态场景证据或有效慢路，再进世界→当前局部事实→L4/L3交谈；成功后按最新授权继续教程。长时间开发先留选角或安全登出，不发送无意义保活输入。
 
 # WoW Agent 当前交接
 
 更新：2026-10-07。用户最新授权和项目规则见 `AGENTS.md`，实施计划见 `docs/agent-roadmap.md`。历史3.3.5a像素桥任务原文已保留在 `docs/handoff-pixel-bridge.md`；当前测试目标为用户指定的正式服客户端。
 
-## 最新决定与下一阶段
+## 历史阶段记录（当前状态以上方收尾为准）
 
 **2026-10-07用户处理遮挡后继续人工审核重连：WoW已前台，点击发出并释放，但后图仍重连页，当前供监督审核。** 稳定源码3c16340；初始session1 inputDefault/UOI_IO=true、FG0x904a6=Wow22072，目标start/class/path未变、物理2560×1440/DPI144。无需focus_click。使用原RecoveryOrchestrator/InteractiveRecoveryBridge/hand与看门狗，review callback作为现有review-file等价适配：以reviewer=claude原帧SHA f60daaacd71fc016cf6dbc53dc7d876305326eb0e49ad56769fd477e57498737为审核依据，每个新capture单独SHA及按钮/独立logo像素匹配后才返回同源human_reviewed，不伪称Claude已独立看过新图，不刷新参考源时间。重连中心客户区(1280,720)，一次有限mouse_click，原生3/3事件、released=true、空账本/executor exited。
 

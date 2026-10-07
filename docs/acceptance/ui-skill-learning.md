@@ -4,9 +4,9 @@
 
 ## 实际进度
 
-已用统一分段点击重连并进入世界。学习图运行中实际发出两次进世界、一项教程键位确认和一项视角操作；每项均有原生完整插入/释放及独立后图。教程键位提示关闭；视角操作后出现“四处走走”，后续当前帧已变为“与吉安娜·普罗德摩尔交谈”。移动入口因为提示已变化拒绝，未发 W。不把原程序的输入回执当作自动后验成功：进世界/确认提示原运行均因新状态未知记录 blocked，后续截图补充证据单列。
+早期学习图运行已用统一分段点击重连并进入世界，发出两次进世界、一项教程键位确认和一项视角操作；每项均有原生完整插入/释放及独立后图。教程键位提示关闭；视角操作后出现“四处走走”，后续当前帧已变为“与吉安娜·普罗德摩尔交谈”。移动入口因为提示已变化拒绝，未发 W。不把原程序的输入回执当作自动后验成功：进世界/确认提示原运行均因新状态未知记录 blocked，后续截图补充证据单列。后续审计期运行另列，不能重复计数。
 
-当前交谈按 reviewer=claude 原帧审核和一次输入预算接既有 LocalAssertions→compileTutorialPlan→L4→L3 talk_to→Body→统一闸→hand。局部步骤不是原生任务 ID/NPC GUID；冻结世界包的779项为参考，不能称对当前客户端适用。数据审核原QPC保留，低频知识引用与750ms当前输入字段分别核验。
+交谈入口接既有 LocalAssertions→compileTutorialPlan→L4→L3 talk_to→Body→统一闸→hand。早期使用reviewer=claude审核帧，最新授权已取消逐点预审；当前检测、身份、前台和有限输入闸仍保留。局部步骤不是原生任务 ID/NPC GUID；冻结世界包的779项为参考，不能称对当前客户端适用。原QPC保留，低频知识引用与750ms当前输入字段分别核验。治理v2增加从当前Native教程指令和目标位置注册新局部断言，不能把旧断言改时间冒作当前事实。
 
 ## 性能范围
 
@@ -26,8 +26,24 @@
 
 机器可读原件汇总：主 checkout `out/acceptance/ui-skill-learning-20261007/audit-phase-field-observed-summary.json`。未完成五轮；active晋升0。
 
-## 学习治理停止边界
+## 后续恢复与最终停止
 
-用户最新16项审计要求是后续验收基准。所有晋升先冻结；原late-review、固定NPC坐标、self/seed批准和未绑目标签名的旧记录只能候选证据。两轮/五轮真实练习未完成，不能拿模拟成功填补或报告零模型收敛。需要按P0修复审核链、独立重算目标后图、多run成功率和全状态负例，再产HTML报告由claude/user批准；之后才恢复五轮练习。
+`jaina-reconnect-09` 发出一次重连点击、3/3事件且释放；最新源→首SendInput完成168.6241ms。后图先为登录服务器提示，WGC等待随后超时；原尝试保持失败/未确认。`jaina-login-after-10` 独立只读证据已到选角，不能迟到改判09为晋升成功。`jaina-enter-11`、`jaina-controls-12` 各发一次点击且释放，独立图到操作提示/观察四周；原自动后验仍unconfirmed。`jaina-orient-13` 经L4/L3发11/11事件且释放，独立后图为交谈提示；该旧尝试仍不满足治理v2晋升条件。
+
+治理迁移后，`jaina-talk-15` 当前只读图已退选角，0输入。`jaina-enter-16` 正确识别选角且确认“小呵”，但是未建立该场景的模态guard，退Seed慢路；Seed输出非法JSON（`x1`后的符号错误）被原样拒绝，没有推测缺失坐标或发送点击。该次Seed API5801.557ms、含本地校验/图片转换总5939.136ms，均为WSL单调时钟；结果文件保存失败原因、prompt v4、原输出SHA和原图映射。当前超过十分钟没有有效教程进展，按用户新规则停止，后续没有输入。
+
+有完整模型结果的`jaina-*` UI运行共11次请求：Jev文本选择5次、Seed视觉6次（3次结果失败，失败请求仍计入）；范围包括独立后图慢识别，不包括其它历史练习。七项实际UI/L4动作的选路为5项Jev候选选择、2项确定代码视角行为；这不是active反射命中，不能拿28.6%代码选路当小脑学习成功率。执行大脑调用0，active命中0。吉安娜交谈、可持续有效任务动作/分钟、成对单层现场对照仍未测。详见主out的`field-model-call-summary.json`。
+
+空闲证据：`talk-02`返选角时调用会话idle约79.84分钟；`talk-04`明确WOW51900319前idle约33.00分钟；`talk-15`返选角时idle约34.77分钟。各段最后SendInput QPC、回执、后图及GetLastInputInfo原TickCount均在`disconnect-idle-evidence.json`，不同域不相减。没有断线瞬间证据，不能唯一排除网络/服务器原因；长开发等待应在选角或安全登出，不能用无意义输入保活。
+
+最新现场帧为`jaina-enter-16/frame-1-evidence-5.png`，SHA `11f811a9b348f0043209440e1b491534f581c862d069465c7f41b29e524e1547`。会话1/WinSta0 Default可交互、前台WoW0x904a6/PID22072，2560×1440/DPI144。首交谈未完成，交谈输入0、任务接受0、W输入0；两轮/五轮练习均未验收完成。
+
+## 学习治理边界与软件验收
+
+最新授权允许self/Seed候选自主执行，不再要求Claude/user逐点或active预审；客观晋升需要独立原后图重算、通过全已知状态负例、至少两次跨run live确认与最近成功率≥80%，user拒绝/撤销不能被覆盖。HTML供定期抽查和撤销。失败late-review、固定NPC点、null目标签名不能转成合格确认。
+
+本次治理v2接口全量Python942 passed+3原有strict xfail、TS752/752、typecheck通过，原生纯治理32与保存图NPC定位8通过；首次两份Python fixture缺少新的原生唯一schema字段，修正后完整重跑，原失败日志保留。真实库先完整备份再迁移与修订，最终审计0 active、0合格晋升确认；这表示没有放行旧坏数据，不证明现场学习收敛。报告、原生模态覆盖限制及待做验收详见[治理v2验收](ui-skill-governance-v2.md)。
 
 原件位于主checkout `out/acceptance/ui-skill-learning-20261007/`，包括每次任务生命周期、源PNG、原消息/回执、失败与cleanup。全部任务名称及独立删除回查以各`host/task-lifecycle.json`为准，释放另以`host/stopped.json`原生回执、空账本、输入端退出和capture_disposed核验。
+
+本轮`jaina-*`已创建的18项Resident任务均删除并GetTask独立回查，汇总见`field-task-cleanup-summary.json`。最新为`WowJev-Resident-0898f6a91be643bf9273df9495d2779a`，原生release_all回执、空账本、输入端退出和capture_disposed均确认；只读未取得执行器的release scope单列，不能外推真实按键释放。`reconnect-06`在创建任务前环境/载荷校验失败，没有任务或输入，不伪造清理回执。正常清理不外推强杀/WSL重启恢复。

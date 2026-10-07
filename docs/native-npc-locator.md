@@ -5,7 +5,7 @@ maskHeight, exactName)` 在当前完整客户区寻找绿色姓名板，再从�
 轮廓两侧导出身体内侧落点。原参考图只提供字形与样本，不提供输入坐标。多个
 姓名板、缺少黄色轮廓、遮挡或错字形均返回 `unknown`。
 
-此最小实现仅允许审核过的 `tutorial_talk_jaina` 候选；不是技能晋升或通用 NPC
+此最小实现仅支持 `tutorial_talk_jaina` 的当前像素候选；self/Seed来源按最新授权可执行，user拒绝/撤销仍阻止。它不是技能晋升或通用 NPC
 跟踪验收。绿色字形沿用 v3 的既有阈值，RGB 指令和身体色彩阈值均保持原值。
 源和新帧的显著行起点采用同一规则，排除姓名板周围零散海水绿色像素对定位
 原点的影响。黄色两侧轮廓可以不连通；只有高度重合、横向靠近且处于唯一
@@ -18,7 +18,7 @@ maskHeight, exactName)` 在当前完整客户区寻找绿色姓名板，再从�
 "name":"吉安娜·普罗德摩尔","anchor_index":1}}
 ```
 
-要求 `feature_policy` 为 `talk` / `talk_jaina_layered`，正式服且审核通过，主
+要求 `feature_policy` 为 `talk` / `talk_jaina_layered`、正式服且来源未被拒绝/撤销，主
 签名为 `chroma_surface_v1`、该姓名板 anchor 为 `green_glyph_tolerant_v3`，另有
 独立 RGB 指令 anchor；所有特征均要当前匹配。`Regions` 增加一块
 `learned-ui-npc-current-view` 完整客户区内存 ROI。原姓名板位置用于样本相对
