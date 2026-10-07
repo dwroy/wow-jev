@@ -11,7 +11,7 @@ import sys
 from . import recovery_vision as recovery
 from . import seed_worker as seed
 
-PROMPT_VERSION = "ui-skill-retail-v4"
+PROMPT_VERSION = "ui-skill-retail-v5"
 ROOT = Path(__file__).resolve().parent
 SCHEMA_PATH = ROOT / "schemas" / "ui-skill-vision-v4.schema.json"
 SCENES = recovery.SCENES | {"game_menu", "logout_countdown", "queue", "tutorial_controls_intro"}
@@ -127,7 +127,8 @@ def classify_effect(result, expected_state):
 class UiSkillVision(recovery.RecoveryVision):
     def __init__(self, **kwargs):
         super().__init__(prompt_version=PROMPT_VERSION, prompt_path=ROOT / "prompts" / (PROMPT_VERSION + ".txt"),
-                         schema_path=SCHEMA_PATH, model_validator=validate_model_output, **kwargs)
+                         schema_path=SCHEMA_PATH, model_validator=validate_model_output,
+                         coordinate_instruction="bbox只用0–1000整数{x1,y1,x2,y2}角坐标，x2/y2是右/下边界，不是width/height。", **kwargs)
 
     def analyze(self, **kwargs):
         result = super().analyze(**kwargs)
@@ -194,7 +195,7 @@ def main(argv=None):
         call = {"png_path": args.png, "png_sha256": args.png_sha256, "source": source, "output_dir": args.out}
         result = worker.analyze_effect(expected_state=args.expected_state, **call) if args.expected_state else worker.analyze(**call)
         print(json.dumps(result, ensure_ascii=False, allow_nan=False))
-        return 0 if result["status"] == "ok" else 1
+        return 0 if result["status"] in {"ok", "unknown"} else 1
     except (seed.Failure, OSError, ValueError):
         print("ui_skill_vision_startup_failed", file=sys.stderr)
         return 2

@@ -50,7 +50,7 @@ def worker(value, calls=None, **kwargs):
 
 
 def test_v4_versions_coordinates_while_preserving_old_v3_contract():
-    assert uv.PROMPT_VERSION == "ui-skill-retail-v4"
+    assert uv.PROMPT_VERSION == "ui-skill-retail-v5"
     assert (uv.ROOT / "schemas/ui-skill-vision-v3.schema.json").read_bytes() == (uv.ROOT / "schemas/ui-skill-vision-v2.schema.json").read_bytes()
     prompt = (uv.ROOT / "prompts/ui-skill-retail-v3.txt").read_text()
     assert prompt.startswith((uv.ROOT / "prompts/ui-skill-retail-v2.txt").read_text())
@@ -92,7 +92,7 @@ def test_readonly_effect_reuses_exact_original_source_and_records_scene_only(sam
     assert effect["source"]["source_qpc_ms"] == 987.25
     assert effect["game_effect"] == "unverified" and effect["input_authority"] is False
     assert effect["requires_independent_post_input_source_check"] is True
-    assert result["prompt_version"] == "ui-skill-retail-v4" and len(calls) == 1
+    assert result["prompt_version"] == "ui-skill-retail-v5" and len(calls) == 1
     out = sample["output_dir"]
     assert json.loads((out / "result.json").read_text()) == result
     assert json.loads((out / "effect-result.json").read_text()) == effect
@@ -238,3 +238,24 @@ def test_v4_conversion_does_not_relax_anchor_control_overlap():
     control = next(c for c in value["controls"] if c["id"] == "logout")
     control.update(status="known", bbox=copy.deepcopy(value["anchors"][0]["bbox"]), label="返回角色选择", confidence=.99)
     with pytest.raises(uv.seed.Failure, match="anchor_overlaps_control"): uv.validate_model_output(json.dumps(value))
+
+def test_v5_prompt_keeps_v4_geometry_and_blocks_enter_world_behind_any_central_modal():
+    prompt=(uv.ROOT/'prompts/ui-skill-retail-v5.txt').read_text()
+    assert prompt.startswith((uv.ROOT/'prompts/ui-skill-retail-v4.txt').read_text())
+    assert '中央有任何模态对话框' in prompt and 'enter_world必须unknown/null/0' in prompt
+    assert '"schema_version":4' in prompt and '十三控件必须全部保留' in prompt
+
+
+def test_ui_v5_actual_request_json_mode_retry_same_source_and_v4_converter(sample):
+    calls=[]; before=copy.deepcopy(sample['source'])
+    def transport(payload, *_):
+        calls.append(copy.deepcopy(payload))
+        if len(calls)==1: return {'choices':[{'message':{'role':'assistant','content':'{"broken":'},'finish_reason':'stop'}]}
+        return provider(model())
+    result=uv.UiSkillVision(allow_upload=True,transport=transport,credential_loader=lambda _:('unit-test-fake-secret',uv.recovery.MODEL)).analyze(**sample)
+    assert result['status']=='ok' and result['api_calls']['attempted']==2
+    assert result['source']==before and result['coordinate_mapping']['source_schema_version']==4
+    assert all(c['response_format']=={'type':'json_object'} for c in calls)
+    assert result['model_result']['anchors'][0]['rect']=={'x':.82,'y':.08,'width':.12,'height':.04}
+    assert '0–1000整数' in calls[0]['messages'][1]['content'][1]['text']
+    assert result['candidate_authority']=='proposal_only' and result['requires_pixel_ocr_revalidation_before_input'] is True

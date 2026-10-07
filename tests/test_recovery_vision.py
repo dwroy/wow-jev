@@ -211,3 +211,82 @@ def test_cli_disabled_no_source_io_and_persists_stable_result(tmp_path, capsys):
     result = json.loads(capsys.readouterr().out)
     assert code == 1 and result["status"] == "disabled"
     assert (tmp_path / "cli" / "result.json").is_file()
+
+@pytest.mark.parametrize('prefix,suffix', [('```json\n','\n```'), ('说明如下：\n','\n观察结束。')])
+def test_clean_first_json_object_accepts_wrappers_without_symbol_repair(sample, prefix, suffix):
+    value = reconnect_model(); raw = prefix + json.dumps(value, ensure_ascii=False) + suffix
+    result = worker(lambda *_: provider(raw)).analyze(**sample)
+    assert result['status'] == 'ok' and result['api_calls']['attempted'] == 1
+    assert result['model_result'] == value
+    assert (sample['output_dir'] / 'model-output-unvalidated.txt').read_text() == raw
+    assert result['request_attempts'][0]['extraction']['mode'] == 'first_complete_object'
+    assert result['request_attempts'][0]['extraction']['repair'] is False
+
+
+def test_first_object_is_not_skipped_for_a_later_safe_object(sample):
+    first = model(); first.update(scene='blocked_auth', confidence=.99, stop_reason='auth')
+    raw = json.dumps(first, ensure_ascii=False) + '\n' + json.dumps(reconnect_model(), ensure_ascii=False)
+    result = worker(lambda *_: provider(raw)).analyze(**sample)
+    assert result['status'] == 'ok' and result['model_result'] == first
+    assert result['candidate_controls'] == [] and result['api_calls']['attempted'] == 1
+    with pytest.raises(rv.Failure, match='invalid_json'):
+        rv.first_json_object('{broken:1}\n' + json.dumps(first))
+
+
+def test_syntax_failure_retries_once_same_image_and_preserves_both_requests_and_outputs(sample):
+    calls = []; responses = [provider('{"scene":broken}'), provider(reconnect_model())]
+    before = copy.deepcopy(sample['source'])
+    def transport(payload, *_):
+        calls.append(copy.deepcopy(payload)); return responses[len(calls)-1]
+    result = worker(transport).analyze(**sample)
+    assert result['status'] == 'ok' and result['source'] == before == sample['source']
+    assert result['api_calls'] == {'attempted':2, 'completed':2, 'count_scope':'attempted_requests'}
+    assert result['usage'] == {'input_tokens':246, 'output_tokens':90}
+    assert all(c['response_format'] == {'type':'json_object'} for c in calls)
+    assert calls[0]['messages'][1] == calls[1]['messages'][1]
+    assert len(calls[1]['messages']) == 3
+    out = sample['output_dir']; assert (out/'model-output-unvalidated.txt').read_text() == '{"scene":broken}'
+    assert json.loads((out/'model-output-2-unvalidated.txt').read_text()) == reconnect_model()
+    for attempt in result['request_attempts']:
+        for name in ['request_artifact', 'model_output_artifact']:
+            artifact=attempt[name]; assert hashlib.sha256((out/artifact['file']).read_bytes()).hexdigest() == artifact['sha256']
+        assert (out/('attempt-'+str(attempt['index'])+'.json')).is_file()
+    assert result['request_attempts'][0]['retry_scheduled'] is True
+    assert result['request_attempts'][1]['status'] == 'validated'
+    assert 'unit-test-not-a-real-secret' not in ''.join(p.read_text() for p in out.glob('*.json'))
+
+
+def test_two_syntax_failures_return_nonfatal_unknown_without_model_or_candidates(sample):
+    calls=[]
+    def transport(payload, *_): calls.append(payload); return provider('{"broken":')
+    result=worker(transport).analyze(**sample)
+    assert len(calls) == result['api_calls']['attempted'] == result['api_calls']['completed'] == 2
+    assert result['status'] == 'unknown' and result['model_result'] is None and result['candidate_controls'] == []
+    assert result['reason']['code'] == 'invalid_json' and result['json_policy']['failure_is_fatal'] is False
+    assert result['json_policy']['syntax_retry_exhausted'] is True
+    assert result['next_action'] == 'fresh_observation_or_independent_read_only_verifier'
+
+
+@pytest.mark.parametrize('raw', ['{"scene":"unknown","scene":"world"}', '{"confidence":NaN}', '[]'])
+def test_duplicate_nonfinite_or_nonobject_json_is_not_repaired_or_retried(sample, raw):
+    result=worker(lambda *_: provider(raw)).analyze(**sample)
+    assert result['status']=='failed' and result['api_calls']['attempted']==1
+    assert result['model_result'] is None and result['candidate_controls']==[]
+
+
+def test_retry_uses_remaining_api_budget_and_does_not_retry_transport_failure(sample):
+    budgets=[]
+    def transport(payload, key, timeout, *_):
+        budgets.append(timeout)
+        if len(budgets)==1: time.sleep(.01); return provider('{bad}')
+        raise rv.Failure('transport_failed')
+    result=worker(transport,timeout=.1).analyze(**sample)
+    assert len(budgets)==2 and 0<budgets[1]<budgets[0]<=.1
+    assert result['api_calls']=={'attempted':2,'completed':1,'count_scope':'attempted_requests'}
+    assert result['reason']['code']=='transport_failed'
+
+
+def test_cli_nonfatal_unknown_returns_zero_instead_of_stopping_process(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(rv.RecoveryVision, 'analyze', lambda self, **kw: {'status':'unknown','model_result':None,'input_authority':False})
+    code=rv.main(['--png','/absent.png','--png-sha256','bad','--source','/absent.json','--out',str(tmp_path/'out')])
+    assert code==0 and json.loads(capsys.readouterr().out)['status']=='unknown'

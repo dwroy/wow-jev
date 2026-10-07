@@ -51,3 +51,14 @@
 独立工作树，每个可运行里程碑更新HANDOFF并提交；Python+TS+typecheck全绿后仅正常推送codex/agent-system。先端到端最小闭环，离线回归只覆盖重要不变量。未知场景单点研究≤5分钟，直接慢路或审核请求。
 
 普通输入每步校验WoW身份/当前客户区/DPI/前台；恢复激活遵循已授权点位/可见性/空闲闸，不绕系统限制。按键有限、可取消、由独立Windows看门狗释放，断连停止续发。计划任务最低权限启动，结束删除并GetTask回查；不得改系统设置或输入凭据。测试、模拟、记录窗口与真实游戏效果分别报告。
+
+
+### 2026-10-07：视觉 JSON 格式与一次语法重试
+
+UI prompt `ui-skill-retail-v5` 继续使用 schema 4 的 0–1000整数xyxy；恢复 prompt `recovery-retail-v2` 继续使用 schema 1 的 normalized xywh。历史 prompt 保留。Chat实际请求启用 `response_format={"type":"json_object"}`；[官方 Chat API](https://docs.volcengine.com/docs/ark/chat-api?lang=zh)定义该字段，[官方模型列表](https://docs.volcengine.com/docs/ark/model-list?lang=zh)列出mini260428结构化输出支持，[官方结构化输出说明](https://docs.volcengine.com/docs/ark/structured-output-beta?lang=zh)说明JSON模式不代替schema语义校验。
+
+解析允许从围栏/前后说明提取首个完整JSON对象，原响应、提取区间/对象SHA分别保存；不跳过首个坏对象去采纳后面的安全对象，不修引号、逗号、数值、坐标或缺字段。只有 `invalid_json` 语法错误触发一次同图请求，两个请求共用原配置的最多15秒API预算。坐标/身份/硬停语义、重复键、非有限数字、非对象、传输失败和不安全回显均不自动重试。重试仍是原图与原QPC，不授予输入，不更新观察时刻。
+
+每次安全模型原文、请求描述/SHA、prompt版本/SHA、原PNG与派生JPEG引用、失败码和API attempted/completed计数留档；请求描述以JPEG文件/SHA代替图像编码，凭据不存档，不安全秘密/图像回显只留省略原因。两次语法失败返回 `status=unknown`、`model_result=null`、零候选和继续只读观察建议，CLI退出0；不能据此报告识别或游戏成功。UI v5另明确任何中央模态都不能把背景选角的 enter_world 标为known。
+
+离线验证：`python -m pytest -q tests/test_recovery_vision.py tests/test_ui_skill_vision.py` 81/81通过；注入fake transport和合成PNG，不读取凭据、桌面或调用真实模型。

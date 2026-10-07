@@ -366,3 +366,7 @@ UI 和世界屏幕交互仍使用原同帧目标、布局、自由光标条件�
 新增5项回归覆盖 ESC/ENTER 的1/80/150ms、非法按键/时长/文本、能力缺失、状态与布局的旧来源/时间、危险状态、原 BodyRuntime mock 发送、失焦、log后同id换signature以及取消释放。定向 TS 110/110、全树 typecheck、diff check通过；证据 `/tmp/wow-ui-key-targeted.tap`、`/tmp/wow-ui-key-typecheck.log`。仅本地提交，无游戏输入、未推送。此阶段未扩展旧 strict layer replay 的通用 UI 按键任务；正式 UI 学习入口和现场验收由负责人集成。
 
 **2026-10-07自主恢复续跑：autonomous-resume-17先核验当前选中小呵/战士/联盟与按钮，旧恢复统一闸已有限点击进世界并释放。独立后图在船上，但OCR英文误作launcher，原自动恢复结果仍blocked；不回填晋升成功。autonomous-jaina-18只读见键位说明弹窗，0交谈输入。新增同源Seed正常场景+可见按钮框与现有Native控件吻合时选择既有candidate，未知modal不再要求active用的场景guard；Native present/hardstop仍拒绝且不授active。关键测试1项及typecheck通过。**
+
+## 2026-10-07：视觉 JSON 输出约束与一次解析重试（离线）
+
+独立 `.worktrees/vision-json-retry` 从331eea4实现Recovery promptv2/UI promptv5，保旧坐标schema1/4与硬停/像素复核。实际Chat请求带json_object，首个完整对象可从围栏/说明提取，原输出与提取证据不覆盖；仅invalid_json同原图最多重试一次，共用15s API预算，attempted/completed及每次请求/失败原文保留。双语法失败是无模型结果/零候选的nonfatal unknown，CLI exit0让上层继续只读观察，不合成成功或刷新QPC。其它安全/语义错误不重试；中央选角模态不得产生enter_world候选。专项Python81/81、py_compile、diff check通过；未读密钥/访问桌面/调用模型/输入或推送。详见docs/ui-skill-learning.md本次JSON段落；主负责人继续集成和现场验收。
