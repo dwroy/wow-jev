@@ -321,3 +321,12 @@ WSL运行TypeScript编排和Python低频视觉，Windows运行C#5/.NET4截图、
 现场 out/acceptance/click-retry-20261007：同源审核帧SHA85b8f0…a441a76与当前重连按钮/Logo匹配；FG=0x904a6，PID22072，2560×1440/DPI144。请求hold80；MOVE完成→DOWN开始158.4412ms，DOWN完成→UP开始88.4799ms；3/3事件，独立release_all+空账本+executor退出。Windows本地以UP结束为参考预约+1/+3/+8秒图片，实际capture开始+1094.649/+3182.840/+8094.750ms（偏差保留）。+1图显示刷新服务器列表，+8图角色列表加载，随后step-3角色选择CV核实小啊/warrior/alliance。恢复有意maxActions=1，返回recovery_action_budget；input_issued=1、effects_confirmed=1、release=confirmed，不是游戏交谈完成。4个一次性WowJev-SessionRecovery任务均删除并GetTask回查。相关83 TS、27 Python、typecheck与Windows编译通过；全量回归/全局Body timeline覆盖继续整合，未推送。
 
 用户新增操作技能自学习A–F并授权反复登出/进世界和退出/战网重启练习；先已报告本次重连成功，下一步docs/ui-skill-learning.md设计、agent.sqlite技能图/独立学习者、分层路由/审核队列、常驻Windows签名识别、最小2轮练习。凭据/验证/协议/更新仍硬停止，Seed配置等待通知，不查其它密钥。
+## 2026-10-07：全局点击 Timeline 编译时序（独立工作树）
+
+按最新点击决定，在 `.worktrees/click-timeline` / `codex/click-timeline` 从 `b3d0483` 实施 WSL 侧全局 `TimelineBuilder.click` 和 Body `click` / `screen_interact` 编译。点击显式分为 MOVE、150ms settle、DOWN 与 UP；默认和最短 hold 为 80ms，旧 20/50/60ms hold 归一为 80ms。单击默认完整原生 timeline 为 230ms，默认双击每次独立 settle、间隔 80ms，总计 540ms。显式更长 hold 保留，完整 timeline 超过原生 5000ms 上限时编译阻塞。原通用 drag、转向/复合按键的持续持有语义保持各自预算。
+
+UI 和世界屏幕交互仍使用原同帧目标、布局、自由光标条件及统一执行闸。编译返回的 `duration_ms`、原生 timeline 事件和 Body 意图 deadline 使用完整实际计划；既有原生动作 hash/内存批准来源据这些编译参数绑定，不能保留旧 50/60ms 整体时长来批准新动作。模拟 sleep 也使用完整 230ms，游戏输入和游戏效果仍未验证。
+
+验收：TypeScript 定向 102/102、0 跳过/失败（actions-timeline、actions-body、activate-control、memory-frame-gate、tutorial-resident、tutorial-layered），全树 typecheck 与 diff check 通过。日志 `/tmp/wow-click-timeline-targeted.tap`、`/tmp/wow-click-timeline-typecheck.log`。首轮教程契约测试因独立树缺 Python venv 报环境故障；连接主 checkout 既有环境后定向全绿，不删/跳测试。本模块未编译或启动 Windows、未读取凭据/调用模型/发送输入；仅本地提交，不推送。
+
+原生验收由负责人继续：`RunTimeline` 的绝对计划时间本身不能证明真实 MOVE→DOWN ≥150ms 或 DOWN→UP ≥80ms。原生必须以实际 MOVE 完成和 DOWN 完成时刻守住下界，慢 MOVE/检查需顺延，取消或失焦在 DOWN 前必须阻止按下。focus_click 的 own MOVE 更新 GetLastInputInfo，idle 豁免须与 actual DOWN/焦点激活计时分开，不能因此放宽用户按钮与自由光标检查。

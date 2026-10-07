@@ -162,3 +162,61 @@ test('cast stationary and profile conditions remain actual gate checks, live wai
   const result = await waiting.execute({ kind: 'wait', duration_ms: 50 }, context('live'));
   assert.equal(result.status, 'completed'); assert.equal(result.real_inputs, 0); assert.equal(result.release, 'confirmed'); assert.equal(result.game_effect, 'unverified');
 });
+
+test('UI compiler budgets the complete settling and hold timeline and rejects native duration overflow', () => {
+  const observation = bodySample('click-frame', 100).observation;
+  observation.fields['input.mouse_mode']!.value = 'ui';
+  const action = { kind: 'click' as const, element_id: 'accept', button: 'left' as const, x: 100, y: 200, duration_ms: 50 };
+  const compiled = compileBodyAction(action, bodyProfile(), observation);
+  assert.equal(compiled.status, 'ready');
+  if (compiled.status !== 'ready' || !compiled.action) throw new Error('click fixture');
+  assert.equal(action.duration_ms, 50);
+  assert.equal(compiled.duration_ms, 230);
+  assert.equal(compiled.action.duration_ms, 230);
+  assert.deepEqual(compiled.action.events.map(event => [event.kind, event.at_ms]), [
+    ['absolute_mouse_move', 0], ['button_down', 150], ['button_up', 230],
+  ]);
+  const maximum = compileBodyAction({ ...action, duration_ms: 4850 }, bodyProfile(), observation);
+  assert.equal(maximum.status, 'ready');
+  if (maximum.status === 'ready') assert.equal(maximum.duration_ms, 5000);
+  assert.deepEqual(compileBodyAction({ ...action, duration_ms: 4851 }, bodyProfile(), observation),
+    { status: 'blocked', reason: 'click_timeline_duration_exceeds_limit' });
+});
+
+test('world screen interaction preserves source guards while compiling the same 150 plus 80 timing', () => {
+  const observation = bodySample('npc-frame', 100).observation;
+  const profile = parseBodyProfile({ ...bodyProfile(), capabilities: [...bodyProfile().capabilities, 'screen_interact'] });
+  const field = (value: import('../src/core/protocol.js').JsonValue) => ({ status: 'known' as const, value,
+    source: 'simulated' as const, captured_at_ms: 100, source_observation_id: observation.id });
+  observation.fields['target.screen_interaction'] = field({ id: 'npc-point', signature: 'target-one', layout_id: profile.layout_id, x: 500, y: 300, enabled: true });
+  observation.fields['input.cursor_free'] = field(true);
+  observation.fields['input.mouse_buttons_held'] = field(false);
+  const action = { kind: 'screen_interact' as const, target_signature: 'target-one', element_id: 'npc-point', x: 500, y: 300, duration_ms: 60 };
+  const compiled = compileBodyAction(action, profile, observation);
+  assert.equal(compiled.status, 'ready');
+  if (compiled.status !== 'ready' || !compiled.action) throw new Error('screen fixture');
+  assert.equal(compiled.duration_ms, 230);
+  assert.equal(compiled.action.duration_ms, 230);
+  assert.deepEqual(compiled.action.events, [
+    { kind: 'absolute_mouse_move', x: 500, y: 300, at_ms: 0 },
+    { kind: 'button_down', button: 'right', at_ms: 150 },
+    { kind: 'button_up', button: 'right', at_ms: 230 },
+  ]);
+  assert.ok(compiled.conditions.some(condition => condition.field === 'target.screen_interaction'));
+  assert.ok(compiled.conditions.some(condition => condition.field === 'input.cursor_free'));
+  observation.fields['input.cursor_free']!.value = false;
+  assert.equal(compileBodyAction(action, profile, observation).status, 'blocked');
+});
+
+test('Body simulated click uses the expanded complete duration in its input intent and action lease', async () => {
+  let now = 100, sequence = 0, slept = 0;
+  const logs: { kind: string; data: any }[] = [];
+  const runtime = new BodyRuntime({ profile: bodyProfile(), runId: 'run', hand: null, now: () => now, currentIdentity: identity,
+    collect: async () => { const value = bodySample(`click-${sequence++}`, now); value.observation.fields['input.mouse_mode']!.value = 'ui'; return value; },
+    sleep: async duration => { slept = duration; now += duration; }, append: async (kind, data) => { logs.push({ kind, data }); } });
+  const result = await runtime.execute({ kind: 'click', element_id: 'accept', button: 'left', x: 100, y: 200, duration_ms: 50 }, context());
+  assert.equal(result.status, 'completed'); assert.equal(slept, 230); assert.equal(result.real_inputs, 0); assert.equal(result.game_effect, 'unverified');
+  const record = logs.find(log => log.kind === 'body_action_intent')!.data;
+  assert.equal(record.native_action.duration_ms, 230);
+  assert.equal(record.intent.deadline_ms - record.intent.at_ms, 1730);
+});

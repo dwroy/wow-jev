@@ -1,5 +1,8 @@
 import { assertNativeTimeline, type NativeTimeline, type NativeTimelineEvent } from '../hand/protocol.js';
 
+export const CLICK_SETTLE_MS = 150;
+export const DEFAULT_CLICK_HOLD_MS = 80;
+
 export type InputRef = { key: string } | { button: 'left' | 'right' | 'middle' };
 const integer = (value: number, min: number, max: number, label: string): number => {
   if (!Number.isSafeInteger(value) || value < min || value > max) throw new Error(`timeline_builder:${label}`);
@@ -11,6 +14,11 @@ export function isCanonicalKey(key: unknown): key is string {
 const resource = (ref: InputRef): string => 'key' in ref ? `key:${ref.key}` : `button:${ref.button}`;
 function validRef(ref: InputRef): void {
   if ('key' in ref ? !isCanonicalKey(ref.key) : !['left', 'right', 'middle'].includes(ref.button)) throw new Error('timeline_builder:input');
+}
+
+export function clickTiming(hold_ms = DEFAULT_CLICK_HOLD_MS): { settle_ms: number; hold_ms: number; duration_ms: number } {
+  const hold = Math.max(DEFAULT_CLICK_HOLD_MS, integer(hold_ms, 1, 5000, 'click_hold'));
+  return { settle_ms: CLICK_SETTLE_MS, hold_ms: hold, duration_ms: CLICK_SETTLE_MS + hold };
 }
 
 /** DOWN/UP never escape one finite timeline. A DOWN has an explicit local lease. */
@@ -51,12 +59,17 @@ export class TimelineBuilder {
     this.events.push({ kind: 'absolute_mouse_move', at_ms: this.at(at_ms), x: integer(x, 0, 65535, 'x'), y: integer(y, 0, 65535, 'y') });
     return this;
   }
-  click(button: 'left' | 'right' | 'middle', x: number, y: number, at_ms = 0, duration_ms = 50): this {
-    return this.absoluteMouseMove(x, y, at_ms).down({ button }, at_ms, duration_ms).up({ button }, at_ms + duration_ms);
+  click(button: 'left' | 'right' | 'middle', x: number, y: number, at_ms = 0, duration_ms = DEFAULT_CLICK_HOLD_MS): this {
+    const timing = clickTiming(duration_ms), move = this.at(at_ms);
+    const down = this.at(move + timing.settle_ms), up = this.at(move + timing.duration_ms);
+    validRef({ button }); integer(x, 0, 65535, 'x'); integer(y, 0, 65535, 'y');
+    return this.absoluteMouseMove(x, y, move).down({ button }, down, timing.hold_ms).up({ button }, up);
   }
-  doubleclick(button: 'left' | 'right' | 'middle', x: number, y: number, at_ms = 0, press_ms = 40, gap_ms = 80): this {
+  doubleclick(button: 'left' | 'right' | 'middle', x: number, y: number, at_ms = 0, press_ms = DEFAULT_CLICK_HOLD_MS, gap_ms = 80): this {
     integer(gap_ms, 1, 5000, 'gap');
-    return this.click(button, x, y, at_ms, press_ms).click(button, x, y, at_ms + press_ms + gap_ms, press_ms);
+    const timing = clickTiming(press_ms), secondMove = at_ms + timing.duration_ms + gap_ms;
+    this.at(secondMove + timing.duration_ms);
+    return this.click(button, x, y, at_ms, timing.hold_ms).click(button, x, y, secondMove, timing.hold_ms);
   }
   drag(button: 'left' | 'right' | 'middle', from: { x: number; y: number }, to: { x: number; y: number }, duration_ms: number, at_ms = 0, steps = 20): this {
     integer(steps, 1, 100, 'steps'); integer(duration_ms, 1, this.duration_ms - at_ms, 'drag_duration');

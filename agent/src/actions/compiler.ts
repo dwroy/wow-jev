@@ -2,7 +2,7 @@ import type { ActionCondition, JsonValue, Observation } from '../core/protocol.j
 import type { NativeTimeline } from '../hand/protocol.js';
 import type { BodyAction } from '../layers/contracts.js';
 import { BODY_MODES, type BodyBinding, type BodyCapability, type BodyMode, type BodyProfile, type BodySemantic } from './profile.js';
-import { TimelineBuilder } from './timeline.js';
+import { clickTiming, TimelineBuilder } from './timeline.js';
 
 export type BodyCompilation =
   | { status: 'ready'; action: NativeTimeline | null; conditions: ActionCondition[]; resources: string[]; duration_ms: number }
@@ -71,7 +71,8 @@ export function compileBodyAction(action: BodyAction, profile: BodyProfile, obse
     if (known(observation, 'input.cursor_free') !== true || known(observation, 'input.mouse_buttons_held') !== false) return reject('blocked', 'screen_interaction_cursor_not_free');
     if (!observation.window || action.x >= observation.window.client_width || action.y >= observation.window.client_height) return reject('blocked', 'screen_target_outside_client');
     conditions.push(condition('target.signature', action.target_signature), condition('target.screen_interaction', point), condition('ui.layout_id', profile.layout_id), condition('input.cursor_free', true), condition('input.mouse_buttons_held', false));
-    return { status: 'ready', action: new TimelineBuilder(action.duration_ms).click('right', action.x, action.y, 0, action.duration_ms).build(), conditions, resources: ['mouse_world_interaction'], duration_ms: action.duration_ms };
+    const timing = clickTiming(action.duration_ms);
+    return { status: 'ready', action: new TimelineBuilder(timing.duration_ms).click('right', action.x, action.y, 0, timing.hold_ms).build(), conditions, resources: ['mouse_world_interaction'], duration_ms: timing.duration_ms };
   }
   if (action.kind === 'click') {
     const unavailable = capability('ui_click'); if (unavailable) return unavailable;
@@ -83,7 +84,9 @@ export function compileBodyAction(action: BodyAction, profile: BodyProfile, obse
     const window = observation.window;
     if (!window || action.x >= window.client_width || action.y >= window.client_height) return reject('blocked', 'click_outside_client');
     conditions.push(condition('ui.layout_id', profile.layout_id), condition(profile.mouse_mode_field, 'ui'), condition(element.path, element.value));
-    return { status: 'ready', action: new TimelineBuilder(action.duration_ms).click(action.button, action.x, action.y, 0, action.duration_ms).build(), conditions, resources: ['mouse_ui'], duration_ms: action.duration_ms };
+    const timing = clickTiming(action.duration_ms);
+    if (timing.duration_ms > 5000) return reject('blocked', 'click_timeline_duration_exceeds_limit');
+    return { status: 'ready', action: new TimelineBuilder(timing.duration_ms).click(action.button, action.x, action.y, 0, timing.hold_ms).build(), conditions, resources: ['mouse_ui'], duration_ms: timing.duration_ms };
   }
   const mode = known(observation, profile.mode_field);
   if (typeof mode !== 'string' || !BODY_MODES.includes(mode as BodyMode)) return reject('blocked', 'movement_mode_unknown');
