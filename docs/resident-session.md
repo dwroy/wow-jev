@@ -1,5 +1,7 @@
 # Windows 交互会话常驻执行端
 
+2026-10-07最新现场：会话1已有真实WGC帧，批量ROI与真实回调QPC路线经只读核验；当前阻塞为活动console3/会话1输入desktop不可用，输入0。旧RDP断开记录保留为历史，当前证据见[本轮验收](acceptance/console-first-task.md)。
+
 驻留入口只创建一个当前登录用户、最低权限、无触发器的 `/IT` 任务，在会话 1 拉起 `ResidentSessionHost.exe`。会话 0 的固定 `ResidentRelay.exe` 将 JSONL 标准输入输出转接至本机 named pipe。管道只允许当前用户 SID、拒绝远程连接、限定一个实例，并核对双方 PID、启动时间、会话、固定可执行文件路径及 SHA。握手 nonce 不进入普通 trace。没有 TCP、服务、注册表修改、SDK 安装或后台游戏输入。
 
 WSL 互操作创建的 relay 进程曾拒绝来自会话 1 的进程查询。修补只合并 relay 自有进程 DACL 中当前用户的 `PROCESS_QUERY_LIMITED_INFORMATION`（`0x1000`）ACE，保留其它 ACE、无继承；不授予读取内存、修改内存、终止、调试或写 DACL 的对外权限。进程退出后对象及该 ACE 消失。`relay-access.json` 记录前后 ACE 数、实际增加的权限及 SID 哈希；对端仍必须独立查询 PID 对应的路径、SHA 和启动时间。失败时停止。依据为微软的 [GetCurrentProcess](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-getcurrentprocess)、[SetEntriesInAcl](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-setentriesinaclw) 和 [SetSecurityInfo](https://learn.microsoft.com/en-us/windows/win32/api/aclapi/nf-aclapi-setsecurityinfo) 文档。会话身份从已拥有的管道句柄读取，不依赖跨会话的 `ProcessIdToSessionId` 查询权限。[GetNamedPipeClientSessionId](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getnamedpipeclientsessionid)

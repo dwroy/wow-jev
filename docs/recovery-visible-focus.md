@@ -27,3 +27,6 @@ TS 恢复闸绑定原观察与全部目标字段，并再次核验上述事实�
 跨语言定义在 `protocol/session-recovery-v1.schema.json` 的 `recovery_focus_point_safety`；原生输入 action 的可选 `visibility_mode` 在 `protocol/native-input-v1.schema.json`。完整客户区证明仍用原 `recovery_safety`，点证明单独放在 `window.recovery_focus_candidates`，不能把点证明改名当完整客户区证明。
 
 本模块子 agent 只做 Linux 离线验证：新 TS 35/35、原恢复 TS 45/45、Python 桥接 27/27、typecheck 通过，日志在工作树 `out/acceptance/console-visible-focus`。另次原手客户端回归 6/16，10 项发生 mock 子进程提前退出，待负责人复查，不能称这组全绿。`tools/NativeVisibleFocusFixture.cs` 提供 24 项无窗口/截屏/输入的纯原生检查，由负责人构建运行；本模块尚未调用 Windows，也没有现场激活或游戏效果结论。实际现场成功、取消与释放按负责人原始证据独立记录。
+
+
+主负责人最终验证：hand16/16、全量TS680/680、Python820passed+3原有strict xfail、typecheck，纯visible-point24/24与Resident78/78通过。早期子agentmock退出及首次全量stdin写失败竞态原件保留，后一项已修实际错误信息后完整复验。现场只读点证明均拒绝，当前输入desktop UOI_IO=false/GetCursorInfo错误5、活动console3有LogonUI而WoW会话1仍RDP。没有真实激活、AltTab、窗口移动或游戏输入；可见点实现不代表现场通过。最终证据见[本轮验收](acceptance/console-first-task.md)。

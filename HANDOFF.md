@@ -4,6 +4,14 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-07本轮收尾：全量全绿，console首交谈因输入桌面阻塞而停止。** 实现a251575及断线诊断修补1b35c7d，最终完整Git快照TS680/680、Python820passed+3原有strict xfail（收集823，0fail/普通skip）、typecheck；原644TS全部保留、新增36。原生纯Resident78/78、visible-point24/24通过，编译和离屏验证不替代游戏成功。首次TS679/680为stdin写失败竞态消息未明确unconfirmed，补实际客户端错误信息后完整重跑，不改/删/skip用例，全部原失败保留。
+
+最新原生事实：活动console是session3且LogonUI18948/winlogon18172；WoW仍session1 WTSActive/RDP-Tcp#0/protocol2/unlocked。WinSta0/Default但UOI_IO=false，GetCursorInfo错误5，FG0；Claude0x2106a0与Chrome0x400ce实际遮挡WoW，坐标与3840×2160物理显示器覆盖已确认。未观察到session1已转物理console。需要用户在物理显示器登录/解锁正确会话，或重连会话1且RDP可见、点击WoW、留>5s空闲并通知；不读/输入凭据，不改系统设置，不在不可核验的输入桌面发AltTab或盲目搬窗。
+
+首任务未完成，当前世界角色/任务/键位未重验、本轮facts未写；游戏输入、程序Seed/Jev/大脑调用、确认效果均0。TraceRecorder35条实际只读记录，观察→输入及输入→效果n=0/unknown，150ms目标未测。readonly-03 n=3 ROI p50 67.871ms、CV9.672ms、真实回调→Windows响应83.488ms，只读热路径成绩不可冒称动作端到端；原compositor时间单独未对时。四个Resident和一个纯desktop /IT任务全删除，最终逐项GetTask80070002回查、执行助手为空；no_executor_acquired不冒称强杀释放。详细原件/任务名/测试失败与重跑见docs/acceptance/console-first-task.md和主out/acceptance/console-first-task-20261007。
+
+软件与最终验收记录分步提交，主树只ff-only集成，按当前授权仅正常推codex/agent-system，不force、不推game-db-*；受保护bundle/HANDOFF原备份SHA复查。停止现场，不自动重连/等待轮询或继续下一任务；收到用户修正桌面通知后重新只读核验，再恢复世界→局部事实/L4/L3/统一闸/hand首交谈。
+
 **2026-10-07现场已停止：当前活动console不是WoW所在会话1。** a251575完成真实FrameArrived QPC/批量ROI/显式可见背景点闸/只读命中窗口诊断。readonly-04及input-desktop-05实测WinSta0/Default但UOI_IO=false、GetCursorInfo错误5、FG0；actual console session3且有LogonUI/winlogon，WoW会话1仍WTSActive/RDP-Tcp#0/protocol2/unlocked。不是仅仅未激活WoW；未观察到用户预期的session1物理console转移。Claude0x2106a0、Chrome0x400ce在WoW上方覆盖全部候选点，完整客户区位于3840×2160显示器内，DPI/坐标错误假设不成立。需要用户让会话1真正显示于可交互桌面（本机登录/解锁正确会话，或保持RDP可见并点击WoW），输入desktop/自由光标可核验后再继续；不给密码、不修改会话/系统设置，不在安全桌面发Alt+Tab，也不移动窗口来掩盖输入desktop不可用。所有本轮游戏输入/模型为0，首交谈未完成，当前角色/任务/键位未获得新证据。
 
 共同快照a251575首轮全量Python820passed+3原有strict xfail（收集823，0fail/普通skip）；TS679/680，一项disconnect断线回归在并发下由stdin写失败先于exit事件报native_write_failed，释放状态仍unconfirmed但错误信息漏写这个边界。保留原失败，修正实际客户端写失败的消息为native_write_failed; release remains unconfirmed，不放宽/跳过/删除测试。补丁提交后完整套件重新验收，全绿后才主集成/正常推codex/agent-system。Windows四个只读常驻任务和一个纯desktop诊断任务均删除，最终独立回查及详细验收正在整理。
