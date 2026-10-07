@@ -179,7 +179,7 @@ export class NativeInputClient extends EventEmitter {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.fail(new Error(`native_timeout: ${op}; release remains unconfirmed`)), timeoutMs);
       this.pending.set(commandId, { op, resolve, reject, timer });
-      this.child.stdin.write(`${JSON.stringify(command)}\n`, (error) => { if (error) this.fail(new Error('native_write_failed')); });
+      this.child.stdin.write(`${JSON.stringify(command)}\n`, (error) => { if (error) this.fail(new Error('native_write_failed; release remains unconfirmed')); });
     });
   }
 

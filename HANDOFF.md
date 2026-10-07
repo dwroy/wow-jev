@@ -4,6 +4,10 @@
 
 ## 最新决定与下一阶段
 
+**2026-10-07现场已停止：当前活动console不是WoW所在会话1。** a251575完成真实FrameArrived QPC/批量ROI/显式可见背景点闸/只读命中窗口诊断。readonly-04及input-desktop-05实测WinSta0/Default但UOI_IO=false、GetCursorInfo错误5、FG0；actual console session3且有LogonUI/winlogon，WoW会话1仍WTSActive/RDP-Tcp#0/protocol2/unlocked。不是仅仅未激活WoW；未观察到用户预期的session1物理console转移。Claude0x2106a0、Chrome0x400ce在WoW上方覆盖全部候选点，完整客户区位于3840×2160显示器内，DPI/坐标错误假设不成立。需要用户让会话1真正显示于可交互桌面（本机登录/解锁正确会话，或保持RDP可见并点击WoW），输入desktop/自由光标可核验后再继续；不给密码、不修改会话/系统设置，不在安全桌面发Alt+Tab，也不移动窗口来掩盖输入desktop不可用。所有本轮游戏输入/模型为0，首交谈未完成，当前角色/任务/键位未获得新证据。
+
+共同快照a251575首轮全量Python820passed+3原有strict xfail（收集823，0fail/普通skip）；TS679/680，一项disconnect断线回归在并发下由stdin写失败先于exit事件报native_write_failed，释放状态仍unconfirmed但错误信息漏写这个边界。保留原失败，修正实际客户端写失败的消息为native_write_failed; release remains unconfirmed，不放宽/跳过/删除测试。补丁提交后完整套件重新验收，全绿后才主集成/正常推codex/agent-system。Windows四个只读常驻任务和一个纯desktop诊断任务均删除，最终独立回查及详细验收正在整理。
+
 **2026-10-07 console首任务恢复进行中。** 用户最新授权覆盖此前离线等待：会话1已由用户tscon转console，允许空闲闸内可见点激活，必要时另经统一闸Alt+Tab或仅移动/最小化遮挡窗口；每次切换独立复核前台，失败释放停止。独立树console-session基线90bf5c8，recovery仍只到可玩世界，首交谈仍须world引用/局部facts→L4→L3→Body闸→hand，不能在恢复中绕过任务链。
 
 本轮readonly-01 WTSActive/Default/WGC19回调，但原compositor时间比宿主QPC领先约15ms；修正为真实FrameArrived QPC与未重复render戳，原render域未对时单独保存。readonly-02成功取三帧/断线实图，ROI约589ms；批量GPU读取后readonly-03 ROI67–80ms/CV9–22ms、源→响应83–115ms，n=3零输入，尚非观察→输入成绩。WowPID22072/start639268827443062278/HWND0x904a6/物理2560×1440/DPI144仍一致、FG0；四个背景点击点point_patch_not_target，正在只读核对具体遮挡和输入desktop。当前游戏输入/模型/首任务完成均0，不宣称p50<150ms达成。
