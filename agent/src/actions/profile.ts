@@ -6,7 +6,7 @@ export const BODY_MODES = ['ground', 'mounted', 'swimming', 'steady_flight', 'sk
 export type BodyMode = typeof BODY_MODES[number];
 export const BODY_SEMANTICS = ['forward', 'backward', 'strafe_left', 'strafe_right', 'jump', 'mount', 'dismount', 'interact', 'fly_forward', 'fly_ascend', 'fly_descend', 'fly_brake'] as const;
 export type BodySemantic = typeof BODY_SEMANTICS[number];
-export const BODY_CAPABILITIES = ['ground_move', 'mouse_turn', 'jump', 'mount', 'dismount', 'fly', 'cast', 'interact', 'screen_interact', 'ui_click'] as const;
+export const BODY_CAPABILITIES = ['ground_move', 'mouse_turn', 'jump', 'mount', 'dismount', 'fly', 'cast', 'interact', 'screen_interact', 'ui_click', 'ui_key'] as const;
 export type BodyCapability = typeof BODY_CAPABILITIES[number];
 export interface BodyBinding { keys: string[]; modes: BodyMode[]; conditions: ActionCondition[] }
 export interface AbilityBinding extends BodyBinding { movement: 'allowed' | 'stationary' }

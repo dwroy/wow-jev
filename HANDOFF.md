@@ -346,3 +346,9 @@ UI 和世界屏幕交互仍使用原同帧目标、布局、自由光标条件�
 新增 `tools/ClickTimelineTimingFixture.cs` 直接调用同一生产 helper，无窗口/截屏/SendInput。29项检查覆盖 MOVE/DOWN 自身延迟、显式 hold、双击、MOVE后取消/丢焦无 DOWN、DOWN后取消的 fake owned release、250ms上限、形态隔离与批准计划不变。复用原纯 safety 42项/visible point 24项全部通过；这些既有几何/空账本测试不冒充新 click 实际时序证明。Windows 四模块编译、TypeScript定向105/105、typecheck、diff check通过。原件 `/tmp/wow-click-timeline-native-fixture.json`、`/tmp/wow-click-native-safety.json`、`/tmp/wow-click-native-visible.json`、`/tmp/wow-click-native-build.log`、`/tmp/wow-click-timeline-native-targeted.tap`。
 
 `click_timing` 对标准 timeline 记录第一 click 的真实原始 MOVE/DOWN/UP区间，hold_requested取该 click 的计划 UP-DOWN（默认80），不能误用整条230/540时长；整体 input_timing仍保留最后实际输入。预登记但没有发送DOWN的清理UP不写成click UP，双click后续紧急释放不覆盖第一click记录。输入已发出边界仍为第一成功 MOVE，不宣称游戏效果。仅本地提交、未推送、无真实游戏输入；Resident总时长准入调整和主集成/现场由负责人继续。
+
+## 2026-10-07：受当前 UI 状态约束的 Body 按键
+
+新增显式 `ui_key` capability 和 BodyAction `{kind:'ui_key',key:'ESC'|'ENTER',state_id,duration_ms:1..150}`，仅编译有限 key_down/key_up，不增加 click settle、不开放文本或其它键。必须当前 known 原生 CV `ui.state` 与 `ui.layout_id` 同 observation/capture，布局等于 profile、状态 id 等于请求；完整 `{id,confidence,signature_sha256,hard_stop}` 保存为独立条件快照。正常 hard_stop=null（兼容旧 false）；危险/未知/畸形状态拒绝。BodyRuntime 保留统一闸、前台/来源/时效/批准重验、取消与释放，不猜 movement mode。未新增跨语言 Body wire，原 NativeTimeline schema 继续约束实际原生动作。
+
+新增5项回归覆盖 ESC/ENTER 的1/80/150ms、非法按键/时长/文本、能力缺失、状态与布局的旧来源/时间、危险状态、原 BodyRuntime mock 发送、失焦、log后同id换signature以及取消释放。定向 TS 110/110、全树 typecheck、diff check通过；证据 `/tmp/wow-ui-key-targeted.tap`、`/tmp/wow-ui-key-typecheck.log`。仅本地提交，无游戏输入、未推送。此阶段未扩展旧 strict layer replay 的通用 UI 按键任务；正式 UI 学习入口和现场验收由负责人集成。

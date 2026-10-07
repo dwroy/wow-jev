@@ -36,6 +36,7 @@ export type BodyAction =
   | { kind: 'interact'; target_signature: string; duration_ms: number }
   | { kind: 'screen_interact'; target_signature: string; element_id: string; x: number; y: number; duration_ms: number }
   | { kind: 'click'; element_id: string; button: 'left' | 'right'; x: number; y: number; duration_ms: number }
+  | { kind: 'ui_key'; key: 'ESC' | 'ENTER'; state_id: string; duration_ms: number }
   | { kind: 'wait'; duration_ms: number };
 
 export interface ExecutionContext {

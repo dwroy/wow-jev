@@ -126,13 +126,14 @@ export class BodyRuntime {
         ? { ...base, mode: 'live', window_token: before.observation.window?.token ?? '', action: { name: 'native_input', args: compiled.action } }
         : { ...base, mode: 'simulated', window_token: before.observation.window?.token ?? null, action: { name: 'simulate_noop', args: {} } };
       const criticalFields = new Set<string>();
-      if (compiled.action !== null && action.kind !== 'click' && action.kind !== 'screen_interact' && action.kind !== 'wait') criticalFields.add(this.profile.mode_field);
+      if (compiled.action !== null && action.kind !== 'click' && action.kind !== 'screen_interact' && action.kind !== 'ui_key' && action.kind !== 'wait') criticalFields.add(this.profile.mode_field);
       if (action.kind === 'turn' || action.kind === 'arc' || action.kind === 'click') criticalFields.add(this.profile.mouse_mode_field);
       if (action.kind === 'click') {
         criticalFields.add('ui.layout_id');
         for (const condition of compiled.conditions) if (condition.field === 'dialog.elements' || condition.field === 'ui.elements') criticalFields.add(condition.field);
       }
       if (action.kind === 'screen_interact') for (const field of ['ui.layout_id', 'target.signature', 'target.screen_interaction', 'input.cursor_free', 'input.mouse_buttons_held']) criticalFields.add(field);
+      if (action.kind === 'ui_key') for (const field of ['ui.state', 'ui.layout_id']) criticalFields.add(field);
       if (action.kind === 'cast') {
         for (const condition of this.profile.abilities[action.ability]?.conditions ?? []) criticalFields.add(condition.field);
         if (this.profile.abilities[action.ability]?.movement === 'stationary') criticalFields.add('player.moving');

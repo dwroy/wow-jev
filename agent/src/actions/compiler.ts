@@ -15,7 +15,7 @@ const condition = (field: string, value: JsonValue): ActionCondition => ({ field
 function validAction(action: BodyAction): boolean {
   if (!action || typeof action !== 'object' || !Number.isSafeInteger(action.duration_ms) || action.duration_ms < 1 || action.duration_ms > 5000) return false;
   const fields: Record<BodyAction['kind'], string[]> = {
-    move: ['axis'], turn: ['dx'], arc: ['dx'], jump: [], mount: [], dismount: [], fly: ['axis'], cast: ['ability'], interact: ['target_signature'], screen_interact: ['target_signature', 'element_id', 'x', 'y'], click: ['element_id', 'button', 'x', 'y'], wait: [],
+    move: ['axis'], turn: ['dx'], arc: ['dx'], jump: [], mount: [], dismount: [], fly: ['axis'], cast: ['ability'], interact: ['target_signature'], screen_interact: ['target_signature', 'element_id', 'x', 'y'], click: ['element_id', 'button', 'x', 'y'], ui_key: ['key', 'state_id'], wait: [],
   };
   if (!Object.hasOwn(fields, action.kind)) return false;
   const names = ['kind', 'duration_ms', ...fields[action.kind]];
@@ -24,6 +24,7 @@ function validAction(action: BodyAction): boolean {
   if (action.kind === 'fly') return ['forward', 'ascend', 'descend', 'brake'].includes(action.axis);
   if (action.kind === 'turn' || action.kind === 'arc') return Number.isSafeInteger(action.dx) && Math.abs(action.dx) <= 32767;
   if (action.kind === 'cast') return typeof action.ability === 'string' && action.ability.length > 0 && action.ability.length <= 128;
+  if (action.kind === 'ui_key') return ['ESC', 'ENTER'].includes(action.key) && typeof action.state_id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(action.state_id) && action.duration_ms <= 150;
   if (action.kind === 'interact') return typeof action.target_signature === 'string' && action.target_signature.length > 0 && action.target_signature.length <= 256;
   if (action.kind === 'screen_interact') return typeof action.target_signature === 'string' && action.target_signature.length > 0 && action.target_signature.length <= 256 && typeof action.element_id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(action.element_id) && Number.isSafeInteger(action.x) && action.x >= 0 && Number.isSafeInteger(action.y) && action.y >= 0 && action.duration_ms <= 150;
   if (action.kind === 'click') return typeof action.element_id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(action.element_id) &&
@@ -59,6 +60,21 @@ export function compileBodyAction(action: BodyAction, profile: BodyProfile, obse
   const conditions: ActionCondition[] = [];
   if (profile.character_id !== null) conditions.push(condition('player.character_id', profile.character_id));
   const capability = (cap: BodyCapability): BodyCompilation | null => profile.capabilities.includes(cap) ? null : reject('unsupported', `capability:${cap}`);
+  if (action.kind === 'ui_key') {
+    const unavailable = capability('ui_key'); if (unavailable) return unavailable;
+    const layout = observation.fields['ui.layout_id'], state = observation.fields['ui.state'];
+    if (layout?.status !== 'known' || layout.source !== 'cv' || layout.value !== profile.layout_id || layout.source_observation_id !== observation.id ||
+        state?.status !== 'known' || state.source !== 'cv' || state.source_observation_id !== observation.id || state.captured_at_ms !== layout.captured_at_ms ||
+        !state.value || Array.isArray(state.value) || typeof state.value !== 'object') return reject('blocked', 'ui_state_or_layout_not_current_cv');
+    const value = state.value;
+    if (Object.keys(value).length !== 4 || value.id !== action.state_id || ['unknown', 'unsupported', 'unavailable'].includes(action.state_id) ||
+        typeof value.confidence !== 'number' || !Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1 ||
+        typeof value.signature_sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(value.signature_sha256) || value.hard_stop !== null && value.hard_stop !== false)
+      return reject('blocked', 'ui_state_unbound_or_changed');
+    conditions.push(condition('ui.state', structuredClone(value)), condition('ui.layout_id', profile.layout_id));
+    return { status: 'ready', action: new TimelineBuilder(action.duration_ms).press([action.key], 0, action.duration_ms).build(),
+      conditions, resources: ['keyboard_ui'], duration_ms: action.duration_ms };
+  }
   if (action.kind === 'screen_interact') {
     const unavailable = capability('screen_interact'); if (unavailable) return unavailable;
     const layout = observation.fields['ui.layout_id'], target = observation.fields['target.screen_interaction'];

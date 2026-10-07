@@ -11,7 +11,7 @@ const identity = () => ({ task_id: 'task', task_revision: 1, run_epoch: 1 });
 const window = { token: 'target-token', hwnd: '0xabc', pid: 99 };
 function mockHand(send: (action: NativeAction, id: string) => Promise<NativeReceipt>) {
   const ready: NativeReady = { protocol: 'wow-input', version: 1, type: 'ready', session_id: 'hand-session', executor_pid: 1, watchdog_pid: 2,
-    window: { ...window, client_width: 1000, client_height: 800, focused: true }, capabilities: { keys: ['E', 'D', 'S', 'F', 'G', 'SPACE', '1'], max_duration_ms: 5000, heartbeat_lease_ms: 1000, timeline: true }, local_clock: { domain: 'windows-qpc', at_ms: 9999999 } };
+    window: { ...window, client_width: 1000, client_height: 800, focused: true }, capabilities: { keys: ['E', 'D', 'S', 'F', 'G', 'SPACE', '1', 'ESC', 'ENTER'], max_duration_ms: 5000, heartbeat_lease_ms: 1000, timeline: true }, local_clock: { domain: 'windows-qpc', at_ms: 9999999 } };
   let cancels = 0;
   const receipt = (id: string, count = 0, op: NativeReceipt['op'] = 'execute', status: NativeReceipt['status'] = 'completed'): NativeReceipt => ({ protocol: 'wow-input', version: 1, type: 'receipt', id, session_id: ready.session_id, op, status,
     input: { status: count ? 'released' : 'not_sent', events_requested: count, events_inserted: count, released: true }, effect: { status: 'unknown' }, timing: { clock: 'windows_qpc', started_ms: 9000000, finished_ms: 9000001 }, local_clock: { domain: 'windows-qpc', at_ms: 9999999 } });
@@ -219,4 +219,104 @@ test('Body simulated click uses the expanded complete duration in its input inte
   const record = logs.find(log => log.kind === 'body_action_intent')!.data;
   assert.equal(record.native_action.duration_ms, 230);
   assert.equal(record.intent.deadline_ms - record.intent.at_ms, 1730);
+});
+
+const uiKeyProfile = () => parseBodyProfile({ ...bodyProfile(), capabilities: [...bodyProfile().capabilities, 'ui_key'] });
+const uiKey = { kind: 'ui_key' as const, key: 'ESC' as const, state_id: 'world', duration_ms: 80 };
+function uiKeySample(id = 'ui-before', at = 100) {
+  const sample = bodySample(id, at, 'live');
+  // UI keys do not infer movement or mouse mode; only current native CV state.
+  delete sample.observation.fields['player.movement_mode'];
+  delete sample.observation.fields['input.mouse_mode'];
+  sample.observation.fields['ui.state'] = { status: 'known', value: { id: 'world', confidence: 0.99, signature_sha256: 'c'.repeat(64), hard_stop: null },
+    source: 'cv', captured_at_ms: at, source_observation_id: id };
+  return sample;
+}
+
+test('ui_key requires explicit capability and compiles ESC/ENTER finite holds without click settle or movement mode', () => {
+  const sample = uiKeySample(), profile = uiKeyProfile();
+  assert.deepEqual(compileBodyAction(uiKey, bodyProfile(), sample.observation), { status: 'unsupported', reason: 'capability:ui_key' });
+  for (const key of ['ESC', 'ENTER'] as const) for (const duration_ms of [1, 80, 150]) {
+    const result = compileBodyAction({ ...uiKey, key, duration_ms }, profile, sample.observation);
+    assert.equal(result.status, 'ready');
+    if (result.status !== 'ready') throw new Error('UI key fixture');
+    assert.deepEqual(result.action, { kind: 'timeline', duration_ms, events: [
+      { kind: 'key_down', key, at_ms: 0 }, { kind: 'key_up', key, at_ms: duration_ms },
+    ] });
+    assert.equal(result.duration_ms, duration_ms);
+    assert.deepEqual(result.conditions.map(c => c.field), ['ui.state', 'ui.layout_id']);
+    assert.deepEqual(result.conditions[0], { field: 'ui.state', op: 'eq', value: sample.observation.fields['ui.state']!.value, max_age_ms: 750 });
+    assert.notEqual('value' in result.conditions[0]! ? result.conditions[0].value : null, sample.observation.fields['ui.state']!.value);
+  }
+  for (const bad of [
+    { ...uiKey, key: 'A' }, { ...uiKey, key: 'CTRL' }, { ...uiKey, key: 'esc' }, { ...uiKey, key: 'ESC', text: 'credentials' },
+    { ...uiKey, duration_ms: 0 }, { ...uiKey, duration_ms: 151 }, { ...uiKey, duration_ms: 1.5 }, { ...uiKey, state_id: '' },
+  ]) assert.deepEqual(compileBodyAction(bad as BodyAction, profile, sample.observation), { status: 'blocked', reason: 'invalid_body_action' });
+  assert.throws(() => parseBodyProfile({ ...profile, capabilities: [...profile.capabilities, 'arbitrary_ui_text'] }), /invalid/);
+});
+
+test('ui_key refuses unknown, foreign-source, changed layout/state and dangerous or malformed native state', () => {
+  const mutations: ((sample: ReturnType<typeof uiKeySample>) => void)[] = [
+    s => { s.observation.fields['ui.state']!.status = 'unknown'; s.observation.fields['ui.state']!.value = null; },
+    s => { s.observation.fields['ui.state']!.value = 'world'; },
+    s => { s.observation.fields['ui.state']!.value = ['world']; },
+    s => { s.observation.fields['ui.state']!.source_observation_id = 'old'; },
+    s => { s.observation.fields['ui.state']!.captured_at_ms = 99; },
+    s => { s.observation.fields['ui.layout_id']!.value = 'other-layout'; },
+    s => { s.observation.fields['ui.layout_id']!.source_observation_id = 'old'; },
+    s => { s.observation.fields['ui.layout_id']!.source = 'manual'; },
+    ...(['seed', 'manual', 'simulated', 'local_ocr'] as const).map(source => (s: ReturnType<typeof uiKeySample>) => { s.observation.fields['ui.state']!.source = source; }),
+    ...(['credentials', 'two_factor', 'terms', 'update', true, undefined] as const).map(hard_stop => (s: ReturnType<typeof uiKeySample>) => {
+      const value = s.observation.fields['ui.state']!.value as Record<string, any>; value.hard_stop = hard_stop;
+    }),
+    s => { (s.observation.fields['ui.state']!.value as Record<string, any>).id = 'other-state'; },
+    s => { (s.observation.fields['ui.state']!.value as Record<string, any>).confidence = NaN; },
+    s => { (s.observation.fields['ui.state']!.value as Record<string, any>).signature_sha256 = 'not-a-native-signature'; },
+  ];
+  for (const mutate of mutations) {
+    const sample = uiKeySample(); mutate(sample);
+    assert.equal(compileBodyAction(uiKey, uiKeyProfile(), sample.observation).status, 'blocked');
+  }
+  const unknown = uiKeySample(); (unknown.observation.fields['ui.state']!.value as Record<string, any>).id = 'unknown';
+  assert.equal(compileBodyAction({ ...uiKey, state_id: 'unknown' }, uiKeyProfile(), unknown.observation).status, 'blocked');
+});
+
+test('ui_key live dispatch uses BodyRuntime and current full-state conditions without game-effect claims', async () => {
+  let seq = 0; const actions: NativeAction[] = [], logs: { kind: string; data: any }[] = [];
+  const fake = mockHand(async (action, id) => { actions.push(action); return fake.receipt(id, action.kind === 'timeline' ? action.events.length : 0); });
+  const runtime = new BodyRuntime({ profile: uiKeyProfile(), runId: 'run', hand: fake.hand, now: () => 100, currentIdentity: identity,
+    expectedWindow: window, collect: async () => uiKeySample(`ui-${seq++}`), append: async (kind, data) => { logs.push({ kind, data }); } });
+  const outcome = await runtime.execute(uiKey, context('live'));
+  assert.equal(outcome.status, 'completed'); assert.equal(outcome.real_inputs, 1); assert.equal(outcome.release, 'confirmed'); assert.equal(outcome.game_effect, 'unverified');
+  assert.deepEqual(actions, [{ kind: 'timeline', duration_ms: 80, events: [{ kind: 'key_down', key: 'ESC', at_ms: 0 }, { kind: 'key_up', key: 'ESC', at_ms: 80 }] }]);
+  const intent = logs.find(log => log.kind === 'body_action_intent')!.data.intent;
+  assert.deepEqual(intent.conditions.map((c: any) => c.field), ['ui.state', 'ui.layout_id']);
+  assert.equal(intent.conditions[0].value.signature_sha256, 'c'.repeat(64));
+});
+
+test('ui_key runtime rejects stale native fields, focus loss and full-state mutation before dispatch', async () => {
+  for (const mutation of ['stale_state', 'stale_layout', 'focus', 'changed_signature']) {
+    let sends = 0; const sample = uiKeySample();
+    if (mutation === 'stale_state' || mutation === 'stale_layout') for (const path of ['ui.state', 'ui.layout_id']) sample.observation.fields[path]!.captured_at_ms = 99;
+    if (mutation === 'focus') { sample.observation.window!.focused = false; sample.bracket.sample.window.focused = false; }
+    const fake = mockHand(async (action, id) => { sends++; return fake.receipt(id, action.kind === 'timeline' ? action.events.length : 0); });
+    const runtime = new BodyRuntime({ profile: uiKeyProfile(), runId: 'run', hand: fake.hand, now: () => 100, currentIdentity: identity,
+      expectedWindow: window, collect: async () => sample, append: async kind => {
+        if (kind === 'body_action_intent' && mutation === 'changed_signature') (sample.observation.fields['ui.state']!.value as Record<string, any>).signature_sha256 = 'd'.repeat(64);
+      } });
+    const outcome = await runtime.execute(uiKey, context('live'));
+    assert.equal(outcome.status, 'blocked', mutation); assert.equal(sends, 0, mutation);
+    if (mutation === 'changed_signature') assert.equal(outcome.reason, 'condition_failed:ui.state');
+  }
+});
+
+test('ui_key cancellation retains the existing native cancel and release ledger contract', async () => {
+  const abort = new AbortController(); let seq = 0;
+  const fake = mockHand(async (_action, id) => new Promise(resolve => setTimeout(() => {
+    abort.abort(); resolve(fake.receipt(id, 2, 'execute', 'cancelled'));
+  }, 5)));
+  const runtime = new BodyRuntime({ profile: uiKeyProfile(), runId: 'run', hand: fake.hand, now: () => 100, currentIdentity: identity,
+    expectedWindow: window, collect: async () => uiKeySample(`ui-cancel-${seq++}`) });
+  const result = await runtime.execute(uiKey, { ...context('live'), signal: abort.signal });
+  assert.equal(result.status, 'cancelled'); assert.equal(result.release, 'confirmed'); assert.ok(fake.cancels() > 0);
 });
