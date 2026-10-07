@@ -70,7 +70,7 @@ export class UiSkillRuntime {
       }else if(route.owner==='reflex'){result.owner='reflex';skill=route.candidates[0]!;}
       else{
         result.owner=route.owner;
-        if(route.owner==='seed'){before=await this.call(this.ports.collect('evidence',signal),signal);this.frame(before);}
+        if(route.owner==='seed'){before=await this.call(this.ports.collect('evidence',signal),signal);this.frame(before);route={...route,candidates:matchingSkills(before,skills,this.options.reviewed_candidate_trial_authorized===true,this.options.autonomous_trial_authorized===true)};}
         const request:UiChoiceRequest={run_id:this.options.run_id,mode:this.options.mode,scope:this.options.scope,source:before.source,state:before.state,candidates:route.candidates,failure_streak:this.failures,goal_state_id:goal};
         const chooser=route.owner==='jev'?this.ports.chooseJev:this.ports.chooseSeed;
         choice=chooser?await this.call(chooser(request,signal),signal):{status:'unavailable',reason:`${route.owner}_not_configured`};

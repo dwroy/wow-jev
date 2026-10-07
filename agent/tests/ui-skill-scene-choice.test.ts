@@ -1,6 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createUiDemo} from '../src/ui-skills/demo.js';
 import {selectExistingSceneControl,selectKnownTutorialControl} from '../src/ui-skills/scene-choice.js';
+import {UiSkillRuntime} from '../src/ui-skills/runtime.js';
 test('Seed normal scene selects existing current candidate without modal guard or active qualification',async()=>{
  const d=createUiDemo(),f=await d.ports.collect('evidence',new AbortController().signal),s=d.skills[0]!;
  f.state!.id='char_select';s.state_id='char_select';s.element.purpose='enter_world';s.status='candidate';f.recognition!.modal_status='unknown';
@@ -20,4 +21,11 @@ test('known controls panel requires same-frame OCR in its Native-matched button 
  const r={run_id:'test',mode:'live' as const,scope:f.scope,source:f.source,state:f.state,candidates:[s],failure_streak:0,goal_state_id:'in_world'};
  assert.equal(selectKnownTutorialControl(r,f)?.decision_owner,'code');assert.equal(s.status,'candidate');
  for(const mutate of [(x:typeof f)=>{x.native_evidence!.ocr=null},(x:typeof f)=>{x.native_evidence!.artifact.sha256='f'.repeat(64)},(x:typeof f)=>{x.recognition!.modal_status='present'},(x:typeof f)=>{x.elements=[]}]){const x=structuredClone(f);mutate(x);assert.equal(selectKnownTutorialControl(r,x),null);}
+});
+test('a newly known evidence frame refreshes candidates after an unknown first hot frame',async()=>{
+ const d=createUiDemo({unknown:true}),original=d.ports.collect;
+ d.ports.collect=async(kind,signal)=>{if(kind==='evidence')d.setUnknown(false);return original(kind,signal);};
+ d.ports.chooseSeed=async r=>{assert.equal(r.state?.id,'character_select');assert.equal(r.candidates[0]?.skill_id,'enter_world');return{status:'selected',skill_id:'enter_world',source_observation_id:r.source.observation_id,source_frame_id:r.source.frame_id,decision_owner:'code'};};
+ const r=await new UiSkillRuntime({run_id:'ui-test',mode:'simulated',authorized:true,autonomous_trial_authorized:true,scope:d.skills[0]!.scope},d.ports).step(new AbortController().signal);
+ assert.equal(r.owner,'code');assert.equal(r.input_issued,false);assert.equal(d.executions,1);assert.equal(r.attempt!.route,'simulated');
 });
