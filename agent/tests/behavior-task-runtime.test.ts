@@ -53,6 +53,10 @@ function tutorialMovement():Simulation {
   s.values['player.movement_mode']='ground';s.values['input.forward_binding']={keys:['W'],mode:'ground',layout_id:'b'.repeat(64)};return s;
 }
 const positiveTalk=():BehaviorSpec=>spec('talk_to',{target_signature:'jaina',action_duration_ms:60,screen_target_positive_only:true},{max_actions:1});
+test('screen engage schema permits one bounded action without arbitrary inputs',()=>{
+  const base=spec('engage_target',{target_signature:'visible-name:作战假人',action_duration_ms:80},{max_actions:1});validateBehavior(base);
+  for(const bad of [{...base,max_actions:2},{...base,params:{...base.params,action_duration_ms:79}},{...base,params:{...base.params,action_duration_ms:151}},{...base,params:{...base.params,key:'1'}}])assert.throws(()=>validateBehavior(bad),/schema/);
+});
 function positiveNpcSurface():Simulation {
   const s=new Simulation();s.values={
     'target.signature':'jaina','tutorial.instruction':'与吉安娜·普罗德摩尔交谈','ui.layout_id':'b'.repeat(64),

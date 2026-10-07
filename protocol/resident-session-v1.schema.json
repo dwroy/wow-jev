@@ -1798,7 +1798,7 @@
       ],
       "properties": {
         "method": {
-          "const": "current_nameplate_yellow_outline_v1"
+          "enum": ["current_nameplate_yellow_outline_v1", "current_neutral_nameplate_v1"]
         },
         "name": {
           "type": "string",

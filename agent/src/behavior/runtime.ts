@@ -2,6 +2,7 @@ import type { ActionCondition, JsonValue, Observation } from '../core/protocol.j
 import type { BehaviorPorts, BehaviorResult, BehaviorSpec, BodyAction, ExecutionContext, MovementAxis, TargetScopeVerifier, BoundTargetScope } from '../layers/contracts.js';
 import { RunLease, cleanupBound } from './lease.js';
 import {uiStateRecognized} from '../actions/ui-recognition.js';
+import {nextScreenEngage} from './screen-engage.js';
 import { bindingError, conditionError, validateConditions, hash, observationError, readKnown, validateBehavior, value, resolveTargetScope, targetScopeKey, type FieldPolicy } from './validation.js';
 
 export interface BehaviorExecutionResult extends BehaviorResult { input_count_scope: 'known' | 'lower_bound'; scenario_effect: 'confirmed' | 'unverified'; }
@@ -66,7 +67,8 @@ export class BehaviorRuntime {
         const confirmingTalk = spec.kind === 'talk_to' && state.lastActionAt !== undefined;
         const confirmingLesson = tutorialLesson && state.lastActionAt !== undefined;
         const confirmingQuest = (spec.kind==='accept_quest'||spec.kind==='turn_in_quest') && state.questSubmitted===true;
-        const confirmingReadonly = confirmingTalk || confirmingLesson || confirmingQuest;
+        const confirmingEngage = spec.kind==='engage_target' && state.lastActionAt!==undefined;
+        const confirmingReadonly = confirmingTalk || confirmingLesson || confirmingQuest || confirmingEngage;
         // Relax source age only for terminal, read-only effect verification.
         // No action decision uses this policy after an input has completed.
         const effectPolicy = { ...policy, maxAgeMs: this.options.maxEffectFieldAgeMs ?? policy.maxAgeMs };
@@ -83,7 +85,7 @@ export class BehaviorRuntime {
         const invalid = observationError(o, { ...policy, maxAgeMs: confirmingReadonly ? effectPolicy.maxAgeMs : this.options.maxObservationAgeMs ?? 1000 }, runId) ??
           (confirmingReadonly && (o.at_ms > policy.now || policy.now - o.at_ms > (this.options.maxObservationAgeMs ?? 1000)) ? 'observation_stale_or_future' : null) ??
           (confirmingReadonly && context.mode === 'live' && (readKnown(o, 'window.focused', effectPolicy, true, state.lastActionAt)?.source !== 'window' || readKnown(o, 'window.focused', effectPolicy, true, state.lastActionAt)?.value !== true) ? 'post_effect_foreground_evidence_unknown' : null) ??
-          conditionError(o, context.conditions, policy) ?? (confirmingTalk || confirmingQuest ? null : bindingError(spec, o, policy));
+          conditionError(o, context.conditions, policy) ?? (confirmingTalk || confirmingQuest || confirmingEngage ? null : bindingError(spec, o, policy));
         if (invalid) { result.status = 'blocked'; result.reason = invalid; break; }
         if (previous && (o.id === previous.id || o.observation_seq <= previous.observation_seq || o.at_ms < previous.at_ms)) { result.status = 'blocked'; result.reason = 'observation_not_new'; break; }
         const windowId = o.window ? `${o.window.token}:${o.window.hwnd}:${o.window.pid}:${o.window.client_width}:${o.window.client_height}` : undefined;
@@ -97,6 +99,7 @@ export class BehaviorRuntime {
           else decision=this.confirmTalk(spec,o,effectPolicy,state);
         } else if(confirmingLesson) decision=hazardous?finish('blocked',spec.kind==='tutorial_move'?'tutorial_movement_hazard_observed':'tutorial_orientation_hazard_observed'):this.tutorialLesson(spec,o,effectPolicy,state);
         else if(confirmingQuest) decision=hazardous?finish('blocked','post_action_hazard_observed'):this.dialog(spec,o,effectPolicy,state,80);
+        else if(confirmingEngage) decision=hazardous?finish('blocked','post_action_hazard_observed'):nextScreenEngage(spec.params,o,effectPolicy,state);
         else if(hazardous&&(spec.kind==='activate_control'||tutorialLesson)) decision=finish('blocked',tutorialLesson?spec.kind==='tutorial_move'?'tutorial_movement_hazard_observed':'tutorial_orientation_hazard_observed':'control_activation_hazard_observed');
         else if (hazardous && spec.kind !== 'avoid_hazard') {
           const released = await lease.wait(() => this.ports.release('hazard_preempt'));
@@ -161,6 +164,7 @@ export class BehaviorRuntime {
     if (spec.kind === 'activate_control') return this.activateControl(spec,o,p,s,Number(spec.params.action_duration_ms??50));
     if (spec.kind === 'tutorial_orient'||spec.kind==='tutorial_move') return this.tutorialLesson(spec,o,p,s);
     if (spec.kind === 'kill_target') return this.kill(spec, o, p, s, duration);
+    if (spec.kind === 'engage_target') return nextScreenEngage(spec.params,o,p,s);
     if (spec.kind === 'loot_target') return this.loot(spec, o, p, s, duration);
     if (['talk_to', 'accept_quest', 'turn_in_quest'].includes(spec.kind)) return this.dialog(spec, o, p, s, duration);
     if (spec.kind === 'move_to' || spec.kind === 'fly_to') return this.navigate(spec, o, p, s, duration);
