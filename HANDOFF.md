@@ -1,3 +1,11 @@
+**最新冻结3a9c7bb完整验收：Python985 passed＋3项既有strict xfail、TS774/774、typecheck通过，0普通skip/fail/cancel。首交谈人工验收confirmed不变；“热身”0/1。最近独立68新帧确认选角（QPC270383353.8127）。**
+
+63实际进入世界3/3并释放，ground未匹配，0W；64安全ESC被整份ui.skill_matches等值误拒（0输入），无intent前置拒绝又被误写run_provenance_mismatch。现只对按键放行无关候选波动，当前选中skill_id/signature_id/state_id和原知识SHA必须一致，Native私有绑定、身份/前台/750ms不变；原拒绝reason准确保留。65实际AFK坐姿，全部签名unknown，Seed1次API完成但输出契约未采纳，0输入。用65当前帧教程+独立hotbar修订既有ESC candidate，66实际ESC2/2释放、后图菜单；67登出3/3释放，68独立新帧确认选角SHA ea5753643efc3d62c98fd4cb8c7d9e1b227b8ef2ddc060d90f3e4c5fac0d2678。临时任务删除回查、空账本/执行端退出/capture关闭均确认；原后验超时/存储失败不追认晋升。63UP→66首DOWN15.7405分钟，再次违反十分钟前回程，作为遗留未达标记录。
+
+新增≤3秒只读hot新帧等待，复用原L3当前ground/scene/body前置；旧帧、模型地面、身份/layout/clock变化、失焦、硬停、取消及超时拒绝，0W，不改算法/阈值。完整绿后续进入→择帧→单次W150→当帧假人有限攻击，下一现场结果再追加，禁止留世界开发。完整原日志主out/integration/3a9c7bb-*；原生源未变沿用已过c4522eb编译/治理32与ground14，不将离屏检查算现场成功。
+
+audit-checkpoint-68 JSON SHA09a625a491280bc460a126cafde0fb6c49541c4a6846c2ad1685ae6cb6eac883；HTML18,434,381字节、JPEG长边≤512，全部记录/负例/原图链接保留；23技能、0active、0治理合格确认。最新源→首SendInput：63进世界188.3928、66ESC231.5385、67登出235.1701ms，分别n=1，不称p50、不含较早规划/模型；150ms目标未达，输入与游戏效果分记。
+
 **最新完整地面接线验收c4522eb：Python985 passed＋3项既有strict xfail、TS769/769、typecheck通过，0普通skip/fail/cancel。Windows宿主/NPC/治理fixture构建通过，纯治理32/32；地面原生14/14保存图检查。** 完整日志主out/integration/c4522eb-*。首轮受限环境IPC/WSL互操作失败日志单独保留，正常授权测试权限实际重跑全绿，不跳过原生测试。最近独立现场62确认角色在选角，热身仍0/1；完整绿后唯一执行端续恢复→一次W150ms→后图→当帧假人攻击。地面候选不晋升active，输入发出与伤害/1/1确认分开；现场结果随后追加。
 
 地面修补904cc78已离线冻结：standing_boots_deck_v1以当前双靴暗色轮廓/靴底甲板支持加独立deck纹理复核，只适用当前教程站立场景；候选修订3、不晋升active。三独立55正例与菜单/选角/旧姿态保存负例、跳起/单靴/蓝水等关键检查合计14/14，Collector与approach helper8项TS、4项Python/typecheck通过。Root补齐宿主及旧NPC/治理fixture构建源依赖，完整冻结回归随后记录；当前仍安全选角、W0、“热身”0/1。算法/来源/修订原件主out/acceptance/ui-skill-learning-20261007/ground-contact-checkpoint/。

@@ -33,3 +33,13 @@
 Python985 passed＋3项既有strict xfail、TS769/769、typecheck全部通过，0普通skip/fail/cancel。Windows常驻宿主/NPC/治理fixture编译成功，纯治理32/32无桌面无输入；standing_boots_deck_v1保存图/故障检查14/14，三张同run独立后图不能计为两个live run晋升。首轮沙箱阻断IPC及WSL互操作的失败原日志另保留，正常授权权限重跑后才报告全绿。
 
 地面算法SHA f6df43cc6a0da2b7eadcad2ffd37c3597a30a0a4392528d08ee4e3d88c38ba2b；运行candidate修订3绑定原56站立源图、完整暗色mask、独立deck及真实Native score/同帧ROI，AFK坐姿/跳起/未知尺寸拒绝。W仍持续键位配置，不伪称当帧OCR。该视觉证据仅适用当前站立教程场景，不是通用地面物理真值。完整原件ground-contact-checkpoint，待真实150ms有限靠近与伤害/目标后图，不把14项保存图检查写成现场成功。
+
+## 63–68：按键候选误拒修补与有界等待
+
+63实际进入世界3/3释放；保存图中动态光照使full-dark35脚部mask IoU.64235/前景比1.38553，deck RGB均差43.564、fraction>.24=.88733，ground未匹配，0W。64另一新帧ground已匹配IoU.9662，证明未知不能当成永久unsupported。64安全ESC因整份ui.skill_matches等值条件误拒，0输入；现按键仅要求当前存在识别，且私有dispatch复核选中skill_id/signature_id/state_id/原知识SHA，不能换修订或缺选中技能。Body前置拒绝无intent时保原reason，实际发出仍严格查run provenance。
+
+65当前AFK，全部签名unknown，1次Seed API完成但输出契约不合法未采纳，0输入。用65原帧教程提示+独立hotbar修订现有ESC候选；66实际ESC2/2 released并后图菜单，67登出3/3 released，68独立只读确认char_select（QPC270383353.8127、PNG SHA ea5753643efc3d62c98fd4cb8c7d9e1b227b8ef2ddc060d90f3e4c5fac0d2678）。临时任务删除/回查与67空账本/输入端退出/captureDispose已确认；68只读无执行器，不冒充物理释放。本轮仍未发W/攻击，“热身”0/1。63最后UP269101514.0485→66首DOWN270045945.4734为15.7405分钟，违反十分钟前回程；原67后图超时、66存储失败不改写晋升成功。
+
+3a9c7bb增加最多3000ms有界只读择新hot帧：复用L3 ground/scene/body条件、原750ms，源target/layout/clock一致；旧帧、Seed冒充地面、失焦/硬停、取消/采集不返回均拒绝。等待没有input dispatch；超时0W并优先安全回程。完整Python985+3原strict xfail、TS774/774、typecheck，0普通skip/fail/cancel；原生源未变，无需重复既有c4522eb编译与32/14原生检查。
+
+更新审计23技能/0active/0合格确认，audit-checkpoint-68 JSON SHA09a625a491280bc460a126cafde0fb6c49541c4a6846c2ad1685ae6cb6eac883，HTML18,434,381字节、512px JPEG、全部记录与原图保留。63/66/67各自源→首SendInput188.3928/231.5385/235.1701ms，分别n=1，不称稳态p50；最初规划与模型不在这一最新源区间。
