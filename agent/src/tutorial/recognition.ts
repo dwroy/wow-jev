@@ -7,6 +7,30 @@ import {fileSource,memorySource,residentVisual,evidenceOcr,type TutorialSourcePr
 import type {ResidentEvidence,ResidentMemorySample} from '../resident/protocol.js';
 import {FIRST_TUTORIAL_INSTRUCTION,FIRST_TUTORIAL_KEY,FIRST_TUTORIAL_NPC} from './plan.js';
 const SHA=/^[a-f0-9]{64}$/;
+const normalized=(text:string)=>text.replace(/[\s·•・.。]/g,'');
+/** OCR words may share a native matched-line box. Join only one physical line. */
+function npcHeaders(items:import('../recovery/types.js').RecoveryOcrItem[],width:number,height:number){
+  const rows=items.filter(i=>i.x>=0&&i.y>=0&&i.x+i.width<width*.44&&i.y+i.height<height*.25&&i.height<height*.08);
+  const groups=new Map<string,typeof rows>();
+  for(const i of rows){const key=`${i.y}:${i.height}`;const group=groups.get(key)??[];group.push(i);groups.set(key,group);}
+  const headers=[];
+  for(const group of groups.values()){
+    const words=[...group].sort((a,b)=>a.x-b.x),text=words.map(i=>i.text).join('');
+    if(!normalized(text).includes(normalized(FIRST_TUTORIAL_NPC)))continue;
+    const x=Math.min(...words.map(i=>i.x)),y=words[0]!.y,right=Math.max(...words.map(i=>i.x+i.width));
+    headers.push({x,y,width:right-x,height:words[0]!.height});
+  }
+  return headers;
+}
+
+/** Positive tracker text only; no OCR result is an absence or input authorization. */
+export function tutorialQuestTracker(source:TutorialSourceProof,items:import('../recovery/types.js').RecoveryOcrItem[]){
+  const rows=items.filter(i=>i.x>source.width*.72&&i.y>source.height*.18&&i.y+i.height<source.height*.88);
+  const title=rows.find(i=>normalized(i.text)==='热身');
+  const objective=rows.find(i=>/^[01]\/1摧毁作战假人$/.test(normalized(i.text)));
+  if(!title||!objective||objective.y<title.y||objective.y-title.y>source.height*.13)return [];
+  return [{quest_id:'session-local.exiles-reach.warmup',label:'热身',target_signature:`visible-name:${FIRST_TUTORIAL_NPC}`,objective:objective.text}];
+}
 export interface TutorialRecognition {
   observation_id:string; capture_sha256:string|null; source_proof:TutorialSourceProof; layout_id:string|null; calibration_sha256:string|null;
   instruction_present:boolean; target_signature:string|null; screen_point:{x:number;y:number}|null;
@@ -22,8 +46,8 @@ export function recognizeTutorialVisual(source:TutorialSourceProof,cv:TutorialVi
     result.instruction_present=true;result.target_signature=`visible-name:${FIRST_TUTORIAL_NPC}`;result.screen_point=structuredClone(point);result.calibration_sha256=cv.calibration_sha256;result.layout_id=source.kind==='resident_memory_roi'?source.layout_id:`tutorial:${s.width}x${s.height}:${cv.calibration_sha256.slice(0,16)}`;
   }
   if(ocr.length){
-    const headers=ocr.filter(i=>i.text===FIRST_TUTORIAL_NPC&&i.x>=0&&i.y>=0&&i.x+i.width<s.width*.44&&i.y+i.height<s.height*.25&&i.height<s.height*.08);
-    const controls=ocr.filter(i=>/^(接受|继续|再见|完成任务|关闭)$/.test(i.text)&&i.x+i.width<s.width*.44&&i.y>s.height*.2&&i.y+i.height<s.height*.9&&i.width<s.width*.2&&i.height<s.height*.08);
+    const headers=npcHeaders(ocr,s.width,s.height);
+    const controls=ocr.filter(i=>/^(接受|拒绝|继续|再见|完成|完成任务|关闭)$/.test(normalized(i.text))&&i.x+i.width<s.width*.44&&i.y>s.height*.2&&i.y+i.height<s.height*.9&&i.width<s.width*.2&&i.height<s.height*.08);
     if(headers.length===1){const header=headers[0]!,control=controls.find(i=>i.y>header.y+header.height&&Math.abs(i.x+i.width/2-header.x-header.width/2)<s.width*.22);if(control){result.dialog='open';result.dialog_proof={header:{x:header.x,y:header.y,width:header.width,height:header.height},control:{x:control.x,y:control.y,width:control.width,height:control.height}};result.target_signature=`visible-name:${FIRST_TUTORIAL_NPC}`;}}
   }
   return result;

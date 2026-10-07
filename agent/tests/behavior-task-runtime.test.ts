@@ -99,6 +99,23 @@ test('after positive talk input unknown or old dialog effect never authorizes a 
   assert.throws(()=>validateBehavior({...positiveTalk(),max_actions:2}),/schema/);assert.throws(()=>validateBehavior({...positiveTalk(),params:{...positiveTalk().params,action_duration_ms:151}}),/schema/);
   assert.throws(()=>validateBehavior(spec('accept_quest',{target_signature:'jaina',quest_id:'q',screen_target_positive_only:true})),/schema/);
 });
+test('current NPC task panel confirms talk without a selected world target or dialog delta',async()=>{
+  for(const fault of ['none','wrong_npc','stale','no_portrait'] as const){
+    const s=positiveNpcSurface();s.values['ui.layout_id']='b'.repeat(64);
+    s.onAction=(_,self)=>{delete self.values['target.signature'];self.values['dialog.npc_quest_panel']={kind:'npc_quest',target_signature:fault==='wrong_npc'?'other':'jaina',portrait:fault!=='no_portrait',parchment:true,controls:['accept','reject'],signature_sha256:'c'.repeat(64),roi_sha256:'d'.repeat(64),layout_id:'b'.repeat(64)};if(fault==='stale')self.ages['dialog.npc_quest_panel']=100;};
+    const r=await new BehaviorRuntime(s).run(positiveTalk(),ctx());assert.equal(r.status,fault==='none'?'completed':'blocked',fault);assert.equal(r.reason,fault==='none'?'npc_quest_panel_confirmed':'dialog_effect_not_new_or_unconfirmed');assert.equal(r.actions,1);assert.equal(s.actions.length,1);assert.equal(r.release,'confirmed');
+  }
+});
+test('talk tracker alternative needs an independently sourced before list and a new matching quest',async()=>{
+  for(const fault of ['none','existing','no_before','no_proof','wrong_npc'] as const){
+    const s=positiveNpcSurface(),entry={quest_id:'q',target_signature:fault==='wrong_npc'?'other':'jaina'};
+    if(fault!=='no_before')s.values['quest.tracker.entries']=fault==='existing'?[entry]:[];
+    s.values['quest.tracker.source']={capture_sha256:'a'.repeat(64),source_frame_id:'frame',source_qpc_ms:1234};
+    const observe=s.observe.bind(s);s.observe=async()=>{const o=await observe();if(o.fields['quest.tracker.source'])o.fields['quest.tracker.source']!.source_clock={domain:'windows-qpc',value_ms:1234};return o;};
+    s.onAction=(_,self)=>{self.values['quest.tracker.entries']=[entry];if(fault==='no_proof')delete self.values['quest.tracker.source'];};
+    const r=await new BehaviorRuntime(s).run(positiveTalk(),ctx());assert.equal(r.status,fault==='none'?'completed':'blocked',fault);assert.equal(r.reason,fault==='none'?'quest_tracker_entry_added_confirmed':'dialog_effect_not_new_or_unconfirmed');assert.equal(r.actions,1);assert.equal(s.actions.length,1);
+  }
+});
 test('positive talk binds an available current UI state only into Body conditions, not the post dialog path',async()=>{
   const s=positiveNpcSurface(),state={id:'tutorial_talk_jaina',confidence:.95,signature_sha256:'e'.repeat(64),hard_stop:null};s.values['ui.state']=state;
   const contexts:ExecutionContext[]=[];const execute=s.executeBody.bind(s);s.executeBody=async(a,o,c)=>{contexts.push(c);return execute(a,o,c);};
@@ -264,6 +281,15 @@ test('dialog accept uses explicit element and new accepted evidence; loot requir
   const corpse = battle(); corpse.values['target.dead'] = true; corpse.values['target.lootable'] = true;
   corpse.onAction = (_, self) => Object.assign(self.values, { 'loot.target_signature': 'wolf', 'loot.completed': true });
   assert.equal((await new BehaviorRuntime(corpse).run(spec('loot_target', { target_signature: 'wolf' }), ctx())).status, 'completed');
+});
+test('submitted quest effect can be slow readonly while its input retains the original freshness gate',async()=>{
+  for(const phase of ['effect','initial','unchanged'] as const){
+    const s=new Simulation();s.values={'window.scope':'retail_wow','target.signature':'npc','dialog.open':true,'dialog.target_signature':'npc','dialog.elements':[{id:'accept-q',role:'accept',quest_id:'q',x:10,y:20,enabled:true}]};
+    s.onAction=(_,self)=>{if(phase!=='unchanged'){self.values['quest.q.accepted']=true;delete self.values['target.signature'];}};
+    s.onObserve=self=>{if(phase==='initial'&&self.actions.length===0||self.actions.length===1){self.time+=2000;for(const key of Object.keys(self.values))self.ages[key]=2000;}};
+    const r=await new BehaviorRuntime(s,{maxFieldAgeMs:750,maxObservationAgeMs:750,maxEffectFieldAgeMs:5000,targetScopeVerifier:o=>({scope:'retail_wow',source_observation_id:o.id,window:o.window!,native_target_id:'d'.repeat(64)})}).run(spec('accept_quest',{target_signature:'npc',quest_id:'q',action_duration_ms:80}),ctx());
+    assert.equal(r.status,phase==='effect'?'completed':'blocked',`${phase}: ${r.reason}`);assert.equal(s.actions.length,phase==='initial'?0:1);assert.equal(r.release,'confirmed');
+  }
 });
 test('turn-in uses explicit reward and verifies both delivered/reward; none policy blocks reward choices', async () => {
   const s = new Simulation(); s.values = { 'target.signature': 'npc', 'dialog.open': true, 'dialog.target_signature': 'npc', 'quest.q.completed': true, 'quest.q.turned_in': false, 'quest.q.reward_received': false,

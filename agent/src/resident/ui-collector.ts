@@ -9,7 +9,7 @@ import type {ResidentMemorySample,ResidentMemoryFrame} from './protocol.js';
 import type {UiFrame,UiSkill,UiScope,UiSource,UiState,UiElement,HardStop} from '../ui-skills/types.js';
 import type {TargetScopeVerifier} from '../layers/contracts.js';
 import {canonical} from '../behavior/validation.js';
-import {recognizeTutorialVisual} from '../tutorial/recognition.js';
+import {recognizeTutorialVisual,tutorialQuestTracker} from '../tutorial/recognition.js';
 import {memorySource,evidenceOcr} from '../tutorial/tagged-evidence.js';
 const sha=(x:Buffer|string)=>createHash('sha256').update(x).digest('hex');
 /** Trusted current-native mapper. JSON from models/DB never creates a current CV field. */
@@ -84,13 +84,24 @@ export class UiResidentCollector {
     if(elements.length){add('ui.elements',elements.map(({signature_sha256:_,...e})=>e),'cv');add('ui.control_signatures',elements.map(e=>({id:e.id,signature_sha256:e.signature_sha256})),'cv');add('input.mouse_mode','ui','cv');}
     if(state?.id==='dialog_jaina_warmup'&&matched?.status==='known'){
       const accept=matched.matches.map(match=>skills.find(k=>k.skill_id===match.skill_id)).find(k=>k?.element.purpose==='quest_accept_jaina_warmup'&&k.element.label==='接受');
-      if(accept&&!hardStop){const b=accept.element.bbox;add('dialog.open',true,'cv');add('dialog.target_signature','visible-name:吉安娜·普罗德摩尔','cv');add('target.signature','visible-name:吉安娜·普罗德摩尔','cv');add('input.mouse_mode','ui','cv');add('dialog.elements',[{id:accept.element.id,role:'accept',quest_id:'session-local.exiles-reach.warmup',x:Math.floor((b.x+b.width/2)*m.client_width),y:Math.floor((b.y+b.height/2)*m.client_height),layout_id:m.layout_id,enabled:true}],'cv');}
+      if(accept&&!hardStop){const b=accept.element.bbox;add('dialog.open',true,'cv');add('dialog.target_signature','visible-name:吉安娜·普罗德摩尔','cv');add('target.signature','visible-name:吉安娜·普罗德摩尔','cv');add('input.mouse_mode','ui','cv');add('dialog.elements',[{id:accept.element.id,role:'accept',quest_id:'session-local.exiles-reach.warmup',x:Math.floor((b.x+b.width/2)*m.client_width),y:Math.floor((b.y+b.height/2)*m.client_height),layout_id:m.layout_id,enabled:true}],'cv');
+        // All named components must match the current Native signature; labels
+        // or a model's scene description alone cannot assert a task panel.
+        const anchors=Array.isArray(accept.signature.anchors)?accept.signature.anchors.map((a:unknown)=>a&&typeof a==='object'&&'id' in a?a.id:null):[];
+        const match=matched.matches.find(row=>row.skill_id===accept.skill_id);
+        if(match&&anchors.includes('npc-portrait')&&anchors.includes('quest-parchment'))add('dialog.npc_quest_panel',{kind:'npc_quest',target_signature:'visible-name:吉安娜·普罗德摩尔',portrait:true,parchment:true,controls:['accept'],signature_sha256:accept.signature.sha256,roi_sha256:match.roi_sha256,layout_id:m.layout_id},'cv');
+      }
     }
     if(evidence&&ocr){
-      const dialog=recognizeTutorialVisual(memorySource(s,id),undefined,evidenceOcr(evidence));
+      const source=memorySource(s,id),items=evidenceOcr(evidence);
+      const dialog=recognizeTutorialVisual(source,undefined,items);
       if(dialog.dialog==='open'&&dialog.target_signature&&dialog.dialog_proof){
         add('dialog.open',true,'local_ocr');add('dialog.target_signature',dialog.target_signature,'local_ocr');add('target.signature',dialog.target_signature,'local_ocr');
         add('dialog.paired_ocr_proof',{...dialog.dialog_proof,capture_sha256:evidence.artifact.sha256,source_frame_id:m.frame_id,source_qpc_ms:m.source_qpc_ms},'local_ocr');
+      }
+      if(evidence.ocr?.status==='available'){
+        add('quest.tracker.entries',tutorialQuestTracker(source,items),'local_ocr');
+        add('quest.tracker.source',{capture_sha256:evidence.artifact.sha256,source_frame_id:m.frame_id,source_qpc_ms:m.source_qpc_ms},'local_ocr');
       }
     }
     const observation:Observation={protocol:'wow-agent',version:1,type:'observation',run_id:this.options.runId,id,at_ms:bracket.received_at_ms,observation_seq:s.seq,window:{token:'resident-ui-'+m.target.pid+'-'+m.channel_generation,hwnd:s.window.hwnd,pid:s.window.pid,client_width:s.window.client_width,client_height:s.window.client_height,focused:s.window.focused},fields,artifacts:[]};

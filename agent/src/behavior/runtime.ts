@@ -8,10 +8,13 @@ export interface BehaviorExecutionResult extends BehaviorResult { input_count_sc
 export interface BehaviorOptions { maxFieldAgeMs?: number; maxObservationAgeMs?: number; trustedSources?: ReadonlyArray<string>; maxEffectFieldAgeMs?: number; targetScopeVerifier?: TargetScopeVerifier; }
 export interface BehaviorRunOptions { isCurrent?: () => boolean; }
 type Decision = { action: BodyAction; conditions: ActionCondition[]; state: string } | { status: BehaviorResult['status']; reason: string; effect?: boolean };
-interface State { initialAlive: boolean; killActionAt?: number; killActionObservation?: string; lastActionAt?: number; lastActionObservation?: string; initialProgress?: number; lastProgress?: number; noProgress: number; recoverAttempts: number; safeFrames: number; lastSafeId?: string; rewardSelected: boolean; controlBefore?: { activation_count: number; state_token: string; frame_nonce: number; layout_id: string }; orientationInstruction?: { id: string; signature_sha256: string }; }
+interface State { initialAlive: boolean; killActionAt?: number; killActionObservation?: string; lastActionAt?: number; lastActionObservation?: string; initialProgress?: number; lastProgress?: number; noProgress: number; recoverAttempts: number; safeFrames: number; lastSafeId?: string; rewardSelected: boolean; questSubmitted?: boolean; trackerBefore?: string[]; controlBefore?: { activation_count: number; state_token: string; frame_nonce: number; layout_id: string }; orientationInstruction?: { id: string; signature_sha256: string }; }
 const finish = (status: BehaviorResult['status'], reason: string, effect = false): Decision => ({ status, reason, effect });
 const condition = (field: string, v: JsonValue, age: number): ActionCondition => ({ field, op: 'eq', value: v, max_age_ms: age });
 const axes = new Set<MovementAxis>(['forward', 'backward', 'strafe_left', 'strafe_right']);
+function imageProof(field:import('../core/protocol.js').ObservedField|null):boolean {
+  const v=field?.value;return !!(v&&typeof v==='object'&&!Array.isArray(v)&&typeof v.capture_sha256==='string'&&/^[a-f0-9]{64}$/.test(v.capture_sha256)&&typeof v.source_frame_id==='string'&&v.source_frame_id.length>0&&typeof v.source_qpc_ms==='number'&&field?.source_clock?.domain==='windows-qpc'&&field.source_clock.value_ms===v.source_qpc_ms);
+}
 
 /** Local bounded state machines. Choosing a behavior is outside this action loop. */
 export class BehaviorRuntime {
@@ -62,7 +65,8 @@ export class BehaviorRuntime {
         const tutorialLesson=spec.kind==='tutorial_orient'||spec.kind==='tutorial_move';
         const confirmingTalk = spec.kind === 'talk_to' && state.lastActionAt !== undefined;
         const confirmingLesson = tutorialLesson && state.lastActionAt !== undefined;
-        const confirmingReadonly = confirmingTalk || confirmingLesson;
+        const confirmingQuest = (spec.kind==='accept_quest'||spec.kind==='turn_in_quest') && state.questSubmitted===true;
+        const confirmingReadonly = confirmingTalk || confirmingLesson || confirmingQuest;
         // Relax source age only for terminal, read-only effect verification.
         // No action decision uses this policy after an input has completed.
         const effectPolicy = { ...policy, maxAgeMs: this.options.maxEffectFieldAgeMs ?? policy.maxAgeMs };
@@ -79,7 +83,7 @@ export class BehaviorRuntime {
         const invalid = observationError(o, { ...policy, maxAgeMs: confirmingReadonly ? effectPolicy.maxAgeMs : this.options.maxObservationAgeMs ?? 1000 }, runId) ??
           (confirmingReadonly && (o.at_ms > policy.now || policy.now - o.at_ms > (this.options.maxObservationAgeMs ?? 1000)) ? 'observation_stale_or_future' : null) ??
           (confirmingReadonly && context.mode === 'live' && (readKnown(o, 'window.focused', effectPolicy, true, state.lastActionAt)?.source !== 'window' || readKnown(o, 'window.focused', effectPolicy, true, state.lastActionAt)?.value !== true) ? 'post_effect_foreground_evidence_unknown' : null) ??
-          conditionError(o, context.conditions, policy) ?? (confirmingTalk ? null : bindingError(spec, o, policy));
+          conditionError(o, context.conditions, policy) ?? (confirmingTalk || confirmingQuest ? null : bindingError(spec, o, policy));
         if (invalid) { result.status = 'blocked'; result.reason = invalid; break; }
         if (previous && (o.id === previous.id || o.observation_seq <= previous.observation_seq || o.at_ms < previous.at_ms)) { result.status = 'blocked'; result.reason = 'observation_not_new'; break; }
         const windowId = o.window ? `${o.window.token}:${o.window.hwnd}:${o.window.pid}:${o.window.client_width}:${o.window.client_height}` : undefined;
@@ -89,24 +93,25 @@ export class BehaviorRuntime {
         let decision: Decision;
         const hazardous = value(o, 'hazard.active', confirmingReadonly?effectPolicy:policy, true, confirmingReadonly?state.lastActionAt:undefined) === true;
         if (confirmingTalk) {
-          const target = readKnown(o, 'target.signature', effectPolicy, true, state.lastActionAt);
-          const open = readKnown(o, 'dialog.open', effectPolicy, true, state.lastActionAt);
-          const dialogTarget = readKnown(o, 'dialog.target_signature', effectPolicy, true, state.lastActionAt);
           if (hazardous) decision = finish('blocked', 'post_action_hazard_observed');
-          else if (target?.value !== spec.params.target_signature || open?.value !== true || dialogTarget?.value !== spec.params.target_signature) decision = finish('blocked', 'dialog_effect_not_new_or_unconfirmed');
-          else decision = finish('completed', 'dialog_open_confirmed', true);
+          else decision=this.confirmTalk(spec,o,effectPolicy,state);
         } else if(confirmingLesson) decision=hazardous?finish('blocked',spec.kind==='tutorial_move'?'tutorial_movement_hazard_observed':'tutorial_orientation_hazard_observed'):this.tutorialLesson(spec,o,effectPolicy,state);
+        else if(confirmingQuest) decision=hazardous?finish('blocked','post_action_hazard_observed'):this.dialog(spec,o,effectPolicy,state,80);
         else if(hazardous&&(spec.kind==='activate_control'||tutorialLesson)) decision=finish('blocked',tutorialLesson?spec.kind==='tutorial_move'?'tutorial_movement_hazard_observed':'tutorial_orientation_hazard_observed':'control_activation_hazard_observed');
         else if (hazardous && spec.kind !== 'avoid_hazard') {
           const released = await lease.wait(() => this.ports.release('hazard_preempt'));
           if (released !== 'confirmed') { outcomeUnconfirmed = true; result.status = 'blocked'; result.reason = 'hazard_release_unconfirmed'; break; }
           decision = this.avoid(o, policy, state, 200, 1, false);
           await lease.wait(() => this.ports.append('behavior_hazard_preempt', { behavior_id: spec.id, observation_id: o.id }));
-        } else decision = this.decide(spec, o, policy, state);
+        } else {
+          if(spec.kind==='talk_to'&&state.lastActionAt===undefined){const trackerPolicy={...policy,trustedSources:[...(policy.trustedSources??['cv','window']),'local_ocr']},entries=readKnown(o,'quest.tracker.entries',trackerPolicy,true),proof=readKnown(o,'quest.tracker.source',trackerPolicy,true);if(entries&&imageProof(proof)&&Array.isArray(entries.value))state.trackerBefore=entries.value.filter(e=>e&&typeof e==='object'&&!Array.isArray(e)&&typeof e.quest_id==='string').map(e=>String((e as Record<string,JsonValue>).quest_id));}
+          decision = this.decide(spec, o, policy, state);
+        }
         await lease.wait(() => this.ports.append('behavior_state', { behavior_id: spec.id, observation_id: o.id, state: 'action' in decision ? decision.state : decision.reason, actions: result.actions, task_revision: context.task_revision, run_epoch: context.run_epoch }));
         if ('status' in decision) {
           result.status = decision.status; result.reason = decision.reason; if(scope?.scope==='recording_fixture'){result.fixture_effect=decision.effect?'confirmed':'unverified';result.game_effect='unverified';}else result.game_effect = decision.effect ? 'confirmed' : 'unverified'; break;
         }
+        if(confirmingReadonly){result.status='blocked';result.reason='readonly_effect_cannot_dispatch';break;}
         if (result.actions >= spec.max_actions) { result.status = 'blocked'; result.reason = 'behavior_action_budget'; break; }
         if (!current()) { result.status = 'cancelled'; result.reason = 'cancelled_or_revision_changed'; break; }
         // An action must fit the remaining behavior lease, not merely start within it.
@@ -133,6 +138,7 @@ export class BehaviorRuntime {
         if (result.input_count_scope === 'lower_bound') { result.status = 'blocked'; result.reason = 'body_input_count_lower_bound'; break; }
         if (out.release !== 'confirmed') { result.status = 'blocked'; result.reason = 'body_release_unconfirmed'; break; }
         if (out.status !== 'completed') { result.status = out.status; result.reason = out.reason ?? `body_${out.status}`; break; }
+        if(decision.state==='accepting_quest'||decision.state==='turning_in_quest')state.questSubmitted=true;
         if (decision.action.kind !== 'wait') { state.lastActionAt = out.finished_at_ms; state.lastActionObservation = o.id; }
         if (decision.action.kind === 'cast' && spec.kind === 'kill_target') { state.killActionAt = out.finished_at_ms; state.killActionObservation = o.id; }
       }
@@ -160,6 +166,17 @@ export class BehaviorRuntime {
     if (spec.kind === 'move_to' || spec.kind === 'fly_to') return this.navigate(spec, o, p, s, duration);
     if (spec.kind === 'avoid_hazard') return this.avoid(o, p, s, duration, Number(spec.params.safe_observations ?? 2), true);
     return this.recover(spec, o, p, s, duration);
+  }
+  private confirmTalk(spec:BehaviorSpec,o:Observation,p:FieldPolicy,s:State):Decision {
+    const panel=readKnown(o,'dialog.npc_quest_panel',p,true,s.lastActionAt),v=panel?.value;
+    if(v&&typeof v==='object'&&!Array.isArray(v)&&v.kind==='npc_quest'&&v.target_signature===spec.params.target_signature&&v.portrait===true&&v.parchment===true&&Array.isArray(v.controls)&&v.controls.some(c=>['accept','reject','continue','complete'].includes(String(c)))&&typeof v.signature_sha256==='string'&&/^[a-f0-9]{64}$/.test(v.signature_sha256)&&typeof v.roi_sha256==='string'&&/^[a-f0-9]{64}$/.test(v.roi_sha256)&&v.layout_id===value(o,'ui.layout_id',p,true,s.lastActionAt))return finish('completed','npc_quest_panel_confirmed',true);
+    const ocrPolicy={...p,trustedSources:[...(p.trustedSources??['cv','window']),'local_ocr']};
+    const paired=readKnown(o,'dialog.paired_ocr_proof',ocrPolicy,true,s.lastActionAt);
+    const open=readKnown(o,'dialog.open',imageProof(paired)?ocrPolicy:p,true,s.lastActionAt),target=readKnown(o,'dialog.target_signature',imageProof(paired)?ocrPolicy:p,true,s.lastActionAt);
+    if(open?.value===true&&target?.value===spec.params.target_signature)return finish('completed','dialog_open_confirmed',true);
+    const entries=readKnown(o,'quest.tracker.entries',ocrPolicy,true,s.lastActionAt),proof=readKnown(o,'quest.tracker.source',ocrPolicy,true,s.lastActionAt);
+    if(s.trackerBefore&&imageProof(proof)&&entries&&Array.isArray(entries.value)&&entries.value.some(e=>e&&typeof e==='object'&&!Array.isArray(e)&&e.target_signature===spec.params.target_signature&&typeof e.quest_id==='string'&&!s.trackerBefore!.includes(e.quest_id)))return finish('completed','quest_tracker_entry_added_confirmed',true);
+    return finish('blocked','dialog_effect_not_new_or_unconfirmed');
   }
   private tutorialLesson(spec:BehaviorSpec,o:Observation,p:FieldPolicy,s:State):Decision {
     const moving=spec.kind==='tutorial_move',prefix=moving?'tutorial_movement':'tutorial_orientation';
