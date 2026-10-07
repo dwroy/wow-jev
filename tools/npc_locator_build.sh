@@ -10,3 +10,4 @@ mkdir -p "$task_output"
   "/out:$(wslpath -w "$task_output/NpcLocatorFixture.exe")" \
   "$(wslpath -w "$task_root/native/windows/UiSkillVision.cs")" \
   "$(wslpath -w "$task_root/tools/NpcLocatorFixture.cs")"
+chmod +x "$task_output/NpcLocatorFixture.exe"
