@@ -46,7 +46,7 @@ export class UiResidentCollector {
         if(matched.status==='known'&&match.state_id===matched.state_id){
           // Same state may expose multiple independently matched elements; route chooses among them.
           if(!state||skill.action?.kind==='key')state={id:match.state_id,confidence:matched.confidence,signature_sha256:skill.signature.sha256,hard_stop:match.hard_stop?stopKind((match as unknown as Record<string,unknown>).hard_stop_kind):null};
-          const b=skill.element.bbox;if(!skill.action&&!/(?:npc|talk|dialogue|quest)/i.test(skill.element.purpose))elements.push({id:skill.element.id,x:Math.floor((b.x+b.width/2)*m.client_width),y:Math.floor((b.y+b.height/2)*m.client_height),layout_id:m.layout_id,enabled:true,signature_sha256:skill.signature.sha256});
+          const b=skill.element.bbox;if(!skill.action&&!/(?:npc|talk|dialogue|quest|engage|attack|training)/i.test(skill.element.purpose))elements.push({id:skill.element.id,x:Math.floor((b.x+b.width/2)*m.client_width),y:Math.floor((b.y+b.height/2)*m.client_height),layout_id:m.layout_id,enabled:true,signature_sha256:skill.signature.sha256});
         }
       }
     }
@@ -81,6 +81,15 @@ export class UiResidentCollector {
         add('target.world_npc_surface',{id:entry.element.id,signature,layout_id:m.layout_id,rect,point,frame_id:m.frame_id,roi_id:roi.id,roi_sha256:roi.sha256,calibration_sha256:roi.calibration_sha256,visible:true},'cv');
       }
     }
+    if(state?.id==='tutorial_attack_training'&&matched?.status==='known'){
+      const entry=matched.matches.map(match=>skills.find(k=>k.skill_id===match.skill_id)).find(k=>k?.element.purpose==='engage_training_dummy_layered'&&k.element.label==='作战假人');
+      const match=entry?matched.matches.find(row=>row.skill_id===entry.skill_id):null;const surface=nativeNpcSurface(m,match);
+      if(entry&&surface&&surface.name==='作战假人'){
+        state={id:'tutorial_attack_training',confidence:matched.confidence,signature_sha256:entry.signature.sha256,hard_stop:null};add('ui.state',state as unknown as JsonValue,'cv');
+        const {point,rect,roi}=surface,signature='visible-name:作战假人';add('tutorial.instruction','攻击一个作战假人','cv');add('target.entity_kind','training_dummy','cv');add('target.signature',signature,'cv');add('input.mouse_mode','world','cv');
+        add('target.screen_interaction',{id:entry.element.id,signature,layout_id:m.layout_id,...point,enabled:true},'cv');add('target.world_npc_surface',{id:entry.element.id,signature,layout_id:m.layout_id,rect,point,frame_id:m.frame_id,roi_id:roi.id,roi_sha256:roi.sha256,calibration_sha256:roi.calibration_sha256,visible:true},'cv');
+      }
+    }
     if(elements.length){add('ui.elements',elements.map(({signature_sha256:_,...e})=>e),'cv');add('ui.control_signatures',elements.map(e=>({id:e.id,signature_sha256:e.signature_sha256})),'cv');add('input.mouse_mode','ui','cv');}
     if(state?.id==='dialog_jaina_warmup'&&matched?.status==='known'){
       const accept=matched.matches.map(match=>skills.find(k=>k.skill_id===match.skill_id)).find(k=>k?.element.purpose==='quest_accept_jaina_warmup'&&k.element.label==='接受');
@@ -104,6 +113,10 @@ export class UiResidentCollector {
         add('quest.tracker.source',{capture_sha256:evidence.artifact.sha256,source_frame_id:m.frame_id,source_qpc_ms:m.source_qpc_ms},'local_ocr');
       }
     }
+    if(evidence&&ocr&&evidence.ocr?.status==='available'&&Array.isArray(evidence.ocr.items)){
+      const target=(evidence.ocr.items as Array<Record<string,unknown>>).find(item=>item.text==='作战假人'&&[item.x,item.y,item.width,item.height].every(n=>typeof n==='number'&&Number.isSafeInteger(n))&&Number(item.x)>=m.client_width*.65&&Number(item.y)>=m.client_height*.60&&Number(item.x)+Number(item.width)<=m.client_width&&Number(item.y)+Number(item.height)<=m.client_height*.78);
+      if(target){add('target.selected_signature','visible-name:作战假人','local_ocr');add('target.selection_source',{kind:'current_target_frame_ocr',label:'作战假人',capture_sha256:evidence.artifact.sha256,source_frame_id:m.frame_id,source_qpc_ms:m.source_qpc_ms,box:{x:Number(target.x),y:Number(target.y),width:Number(target.width),height:Number(target.height)}},'local_ocr');}
+    }
     const observation:Observation={protocol:'wow-agent',version:1,type:'observation',run_id:this.options.runId,id,at_ms:bracket.received_at_ms,observation_seq:s.seq,window:{token:'resident-ui-'+m.target.pid+'-'+m.channel_generation,hwnd:s.window.hwnd,pid:s.window.pid,client_width:s.window.client_width,client_height:s.window.client_height,focused:s.window.focused},fields,artifacts:[]};
     let capture:UiSource['capture']=null;
     if(evidence){const filename='frame-'+ ++this.serial+'-'+basename(evidence.artifact.windows_path.replaceAll('\\','/')),path=join(this.options.directory,filename);await copyFile(join(client.runDir,basename(evidence.artifact.windows_path.replaceAll('\\','/'))),path).catch(async()=>{const {execFile}=await import('node:child_process');const {promisify}=await import('node:util');const {stdout}=await promisify(execFile)('/usr/bin/wslpath',['-u',evidence.artifact.windows_path]);await copyFile(stdout.trim(),path);});if(sha(await readFile(path))!==evidence.artifact.sha256)throw new Error('ui_full_png_sha');capture={path,sha256:evidence.artifact.sha256};}
@@ -121,7 +134,7 @@ export class UiResidentCollector {
 export function nativeNpcSurface(m:ResidentMemoryFrame,raw:unknown):{point:{x:number;y:number};rect:{x:number;y:number;width:number;height:number};name:string;roi:ResidentMemoryFrame['rois'][number]}|null{
   if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
   const match=raw as Record<string,any>,location=match.location,point=match.current_point,rect=match.current_rect;
-  if(!location||location.method!=='current_nameplate_yellow_outline_v1'||location.name!=='吉安娜·普罗德摩尔'||location.point_semantics!=='detected_body_interior'||location.frame_id!==m.frame_id||location.source_qpc_ms!==m.source_qpc_ms||location.layout_id!==m.layout_id)return null;
+  if(!location||!((location.method==='current_nameplate_yellow_outline_v1'&&location.name==='吉安娜·普罗德摩尔')||(location.method==='current_neutral_nameplate_v1'&&location.name==='作战假人'))||location.point_semantics!=='detected_body_interior'||location.frame_id!==m.frame_id||location.source_qpc_ms!==m.source_qpc_ms||location.layout_id!==m.layout_id)return null;
   const roi=m.rois.find(r=>r.id===location.roi_id&&r.id==='learned-ui-npc-current-view');
   if(!roi||location.roi_sha256!==roi.sha256||location.calibration_sha256!==roi.calibration_sha256||!point||!rect||
     !['x','y'].every(k=>Number.isSafeInteger(point[k]))||!['x','y','width','height'].every(k=>Number.isSafeInteger(rect[k]))||

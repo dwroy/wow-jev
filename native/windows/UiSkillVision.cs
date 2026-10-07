@@ -1,3 +1,4 @@
+using TrainingDummyVision = WowJev.Resident.TrainingDummyVision;
 // Read-only learned UI matcher. Knowledge may propose no input; Body/hand retain authority.
 using System;
 using System.Collections.Generic;
