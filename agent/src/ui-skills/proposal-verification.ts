@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {inflateSync} from 'node:zlib';
-import type {Bbox,UiFrame,UiProposal} from './types.js';
+import type {Bbox,UiFrame,UiProposal,UiSkill} from './types.js';
+import {canonical} from '../behavior/validation.js';
 const hash=(b:Buffer)=>createHash('sha256').update(b).digest('hex');
 const bad=():never=>{throw new Error('ui_proposal_png_unsupported_or_invalid');};
 /** Bounded RGB/RGBA PNG decode for evidence verification, never an input port. */
@@ -29,18 +30,41 @@ function pixels(image:ReturnType<typeof decodeEvidencePng>,bbox:Bbox){
   return{x,y,width:right-x,height:bottom-y,pixels:n,variance:n?square/n-(sum/n)**2:0,contrast:max-min};
 }
 const text=(v:string)=>v.replace(/[\s·。.!！:：]/g,'').toLocaleLowerCase();
-export function verifyProposalPixels(proposal:UiProposal,frame:UiFrame,png:Buffer){
+/** Same cell-center RGB algorithm used by Python templates and Windows CV. */
+export function scoreProposalTemplate(image:ReturnType<typeof decodeEvidencePng>,bbox:Bbox,part:Record<string,unknown>){
+  const area=pixels(image,bbox),tw=Number(part.template_width),th=Number(part.template_height),maxMean=Number(part.max_mean_abs_error),maxFraction=Number(part.max_fraction_above_24);
+  if(!Number.isSafeInteger(tw)||tw<1||tw>64||!Number.isSafeInteger(th)||th<1||th>32||!Number.isFinite(maxMean)||maxMean<0||maxMean>12||!Number.isFinite(maxFraction)||maxFraction<0||maxFraction>.1||typeof part.rgb_base64!=='string'||typeof part.template_sha256!=='string')throw new Error('ui_pixel_template_bounds');
+  const template=Buffer.from(part.rgb_base64,'base64');if(template.length!==tw*th*3||hash(template)!==part.template_sha256)throw new Error('ui_pixel_template_sha');
+  const sampled=Buffer.alloc(template.length);let sum=0,over=0;
+  for(let y=0;y<th;y++)for(let x=0;x<tw;x++){const sx=area.x+Math.min(area.width-1,Math.floor((x+.5)*area.width/tw)),sy=area.y+Math.min(area.height-1,Math.floor((y+.5)*area.height/th));for(let c=0;c<3;c++){const i=(y*tw+x)*3+c,value=image.rgb[(sy*image.width+sx)*3+c]!;sampled[i]=value;const delta=Math.abs(value-template[i]!);sum+=delta;if(delta>24)over++;}}
+  const mean_abs_error=sum/template.length,fraction_above_24=over/template.length;
+  return{matched:mean_abs_error<=maxMean&&fraction_above_24<=maxFraction,algorithm:'rgb_cell_center_v1',template_sha256:part.template_sha256,current_sample_sha256:hash(sampled),source_capture_sha256:part.source_capture_sha256??null,thresholds:{max_mean_abs_error:maxMean,max_fraction_above_24:maxFraction},mean_abs_error,fraction_above_24};
+}
+export function verifyProposalPixels(proposal:UiProposal,frame:UiFrame,png:Buffer,knownSkills:UiSkill[]=[]){
   const failed=(reason:string)=>({status:'failed' as const,source_observation_id:frame.source.observation_id,source_frame_id:frame.source.frame_id,capture_sha256:frame.source.capture?.sha256??'',reason});
   try{
     const evidence=frame.native_evidence,source=frame.source;
     if(!source.capture||proposal.source_observation_id!==source.observation_id||proposal.source_frame_id!==source.frame_id||hash(png)!==source.capture.sha256||!evidence||evidence.artifact.sha256!==source.capture.sha256||evidence.artifact.source_frame_id!==source.frame_id||evidence.artifact.source_qpc_ms!==source.clock.ticks||evidence.sample.memory_frame.frame_id!==source.frame_id)return failed('pixel_ocr_source_not_same_original_frame');
+    const m=evidence.sample.memory_frame,{windows_session_id,...nativeTarget}=m.target;
+    if(source.producer!=='resident_wgc'||source.clock.domain!=='windows-qpc'||m.windows_clock_id!==source.clock.clock_id||m.source_qpc_ms!==source.clock.ticks||m.seq!==source.seq||evidence.sample.seq!==source.seq||m.layout_id!==source.layout_id||m.client_width!==source.width||m.client_height!==source.height||canonical({...nativeTarget,session_id:windows_session_id})!==canonical(source.target))return failed('pixel_ocr_native_identity_not_source');
     const image=decodeEvidencePng(png);if(image.width!==source.width||image.height!==source.height||evidence.artifact.width!==image.width||evidence.artifact.height!==image.height)return failed('pixel_dimensions_not_source');
     const patch=pixels(image,proposal.element.bbox),ocr=evidence.ocr;
-    if(!ocr||ocr.status!=='available'||!Array.isArray(ocr.items))return failed('same_frame_ocr_unavailable');
-    const labelInside=(label:string,area:typeof patch)=>(ocr.items as Array<Record<string,unknown>>).filter(item=>typeof item.text==='string'&&text(item.text)===text(label)&&['x','y','width','height'].every(k=>typeof item[k]==='number'&&Number.isFinite(item[k]))).some(item=>{
+    const labelInside=(label:string,area:typeof patch)=>((ocr?.status==='available'&&Array.isArray(ocr.items)?ocr.items:[]) as Array<Record<string,unknown>>).filter(item=>typeof item.text==='string'&&text(item.text)===text(label)&&['x','y','width','height'].every(k=>typeof item[k]==='number'&&Number.isFinite(item[k]))).some(item=>{
       const x=Number(item.x),y=Number(item.y),w=Number(item.width),h=Number(item.height),inside=Math.max(0,Math.min(x+w,area.x+area.width)-Math.max(x,area.x))*Math.max(0,Math.min(y+h,area.y+area.height)-Math.max(y,area.y));return w>0&&h>0&&inside/(w*h)>=.75;
     });
-    if(!labelInside(proposal.element.label,patch))return failed('ocr_label_not_inside_model_bbox');
+    if(!labelInside(proposal.element.label,patch)){
+      // Texture is only a structural check. Without OCR, require an existing
+      // exact labeled control template plus its independent state anchors.
+      for(const known of knownSkills){
+        const reference=known.signature.source as UiFrame['source']|undefined,raw=known.signature.anchors as Array<Record<string,unknown>>|undefined;
+        if(known.hard_stop||known.review.status==='rejected'||known.state_id!==proposal.state_id||canonical(known.scope)!==canonical(frame.scope)||known.action||text(known.element.label)!==text(proposal.element.label)||/npc|talk|quest|dialogue/i.test(known.element.purpose)||!reference?.capture||known.signature.source_capture_sha256!==reference.capture.sha256||!raw?.length||raw.some(a=>a.source_capture_sha256!==reference.capture!.sha256)||reference.width!==source.width||reference.height!==source.height||reference.layout_id!==source.layout_id)continue;
+        const control=scoreProposalTemplate(image,proposal.element.bbox,known.signature);if(!control.matched)continue;
+        const context=raw.map(anchor=>{const bbox=anchor.bbox as Bbox,area=pixels(image,bbox);return{area,score:scoreProposalTemplate(image,bbox,anchor)};});
+        if(context.some(a=>!a.score.matched||a.area.pixels<16||Math.min(a.area.x+a.area.width,patch.x+patch.width)>Math.max(a.area.x,patch.x)&&Math.min(a.area.y+a.area.height,patch.y+patch.height)>Math.max(a.area.y,patch.y)))continue;
+        return{status:'passed' as const,source_observation_id:source.observation_id,source_frame_id:source.frame_id,capture_sha256:source.capture.sha256,reason:'same_frame_pixels_existing_labeled_template_and_state_anchors',verification_path:'pixels_only_existing_control_template',measurements:{control,anchors:context,source_skill_id:known.skill_id,source_signature_sha256:known.signature.sha256},input_authority:false};
+      }
+      return failed('ocr_missing_and_existing_semantic_pixel_template_not_verified');
+    }
     if(patch.pixels<16||patch.contrast<24||patch.variance<4)return failed('model_bbox_pixels_not_textured');
     if(!proposal.signature_anchors?.length)return failed('independent_pixel_anchor_required');
     const anchors=proposal.signature_anchors.map(a=>pixels(image,a.bbox));

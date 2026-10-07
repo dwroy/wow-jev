@@ -62,7 +62,7 @@ export interface ResidentStopped {
 export interface ResidentError {protocol:'wow-resident';version:1;type:'error';session_id:string;id:string|null;reason:{code:string};local_clock:{domain:'windows-qpc';at_ms:number}}
 export type ResidentMessage=ResidentHostReady|ResidentMemorySample|ResidentEvidence|ResidentReceipt|ResidentStopped|ResidentError;
 export type ResidentOp='heartbeat'|'observe'|'execute'|'cancel'|'release_all'|'shutdown'|'status'|'evidence'|'load_ui_skills';
-export interface ResidentCommand {protocol:'wow-resident';version:1;type:'command';session_id:string;id:string;op:ResidentOp;action?:NativeAction;source?:ResidentMemoryFrame;intent?:ResidentIntentBinding;ocr?:boolean;snapshot_canonical?:string;snapshot_sha256?:string;ui_scope?:{target_scope:'retail_wow'|'recording_fixture';build:string;locale:string;size_bucket:string;ui_scale:number}}
+export interface ResidentCommand {protocol:'wow-resident';version:1;type:'command';session_id:string;id:string;op:ResidentOp;action?:NativeAction;source?:ResidentMemoryFrame;intent?:ResidentIntentBinding;ocr?:boolean;snapshot_canonical?:string;snapshot_sha256?:string;negative_validation_canonical?:string;negative_validation_sha256?:string;ui_scope?:{target_scope:'retail_wow'|'recording_fixture';build:string;locale:string;size_bucket:string;ui_scale:number}}
 export async function loadResidentValidator(schemaPath:string,nativeSchemaPath:string):Promise<ValidateFunction<ResidentMessage|ResidentCommand>>{
   const ajv=new Ajv({strict:true,allErrors:true});ajv.addSchema(JSON.parse(await readFile(nativeSchemaPath,'utf8')) as object);
   return ajv.compile<ResidentMessage|ResidentCommand>(JSON.parse(await readFile(schemaPath,'utf8')) as object);

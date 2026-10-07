@@ -36,3 +36,13 @@ test('already-at-goal read does not report a game effect without an issued actio
  assert.equal((await r.reach('character_select',new AbortController().signal)).status,'completed');assert.equal(d.executions,0);
  assert.equal((d.events.at(-1)!.data as any).game_effect,'unverified');
 });
+test('autonomous new proposal persists a candidate and requires a registered new knowledge run before input',async()=>{
+ const d=createUiDemo({unknown:true});d.ports.chooseSeed=async r=>({status:'proposed',proposal:{source_observation_id:r.source.observation_id,source_frame_id:r.source.frame_id,state_id:'character_select',skill_id:'new-enter',hard_stop:null,element:{...d.skills[0]!.element,id:'new-enter'},signature_bbox:d.skills[0]!.element.bbox,expected_to_state:'world',confidence:1,prompt_sha256:'a'.repeat(64),result_sha256:'b'.repeat(64),provider:'Seed'}});
+ const r=await new UiSkillRuntime({run_id:'ui-test',mode:'simulated',authorized:true,autonomous_trial_authorized:true,scope:DEMO_SCOPE},d.ports).step(new AbortController().signal);
+ assert.equal(r.reason,'ui_knowledge_changed_new_run_required');assert.equal(r.review_request,null);assert.equal(d.executions,0);assert.equal(d.skills.at(-1)!.proposer,'synthetic_fixture');assert.equal(d.skills.at(-1)!.review.reviewer,'unreviewed');
+});
+test('three same-step nonprogress attempts stop before a fourth dispatch and timeouts remain separate failures',async()=>{
+ const d=createUiDemo({active:true,effectFails:true}),runner=new UiSkillRuntime({run_id:'ui-test',mode:'simulated',authorized:true,scope:DEMO_SCOPE},d.ports);
+ for(let i=0;i<3;i++)assert.equal((await runner.step(new AbortController().signal)).reason,'ui_effect_timeout');
+ assert.equal((await runner.step(new AbortController().signal)).reason,'ui_same_step_three_nonprogress');assert.equal(d.executions,3);assert.equal(d.skills[0]!.failure_streak,0);
+});

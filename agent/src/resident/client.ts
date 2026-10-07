@@ -112,9 +112,10 @@ export class ResidentClient extends EventEmitter implements ResidentSourceOwner 
       this.pending.set(id,{op,resolve,reject,timer,started:this.now()});try{this.write(op,id,extra);}catch(error){clearTimeout(timer);this.pending.delete(id);reject(error instanceof Error?error:new Error('resident_write_failed'));}
     });
   }
-  async loadUiSkills(snapshotCanonical:string,snapshotSha256:string,uiScope:NonNullable<ResidentCommand['ui_scope']>):Promise<ResidentMemorySample>{
+  async loadUiSkills(snapshotCanonical:string,snapshotSha256:string,uiScope:NonNullable<ResidentCommand['ui_scope']>,negative?:{canonical:string;sha256:string}):Promise<ResidentMemorySample>{
     if(createHash('sha256').update(snapshotCanonical).digest('hex')!==snapshotSha256)throw new Error('resident_ui_knowledge_sha');
-    const reply=await this.request('load_ui_skills',{snapshot_canonical:snapshotCanonical,snapshot_sha256:snapshotSha256,ui_scope:uiScope},3000);
+    if(negative&&createHash('sha256').update(negative.canonical).digest('hex')!==negative.sha256)throw new Error('resident_ui_negative_sha');
+    const reply=await this.request('load_ui_skills',{snapshot_canonical:snapshotCanonical,snapshot_sha256:snapshotSha256,ui_scope:uiScope,...(negative?{negative_validation_canonical:negative.canonical,negative_validation_sha256:negative.sha256}:{})},3000);
     if(reply.type!=='sample'||reply.ui_skills?.knowledge_sha256!==snapshotSha256)throw new Error('resident_ui_knowledge_reply');
     return reply;
   }
@@ -129,7 +130,7 @@ export class ResidentClient extends EventEmitter implements ResidentSourceOwner 
       throw new Error('resident_intent_source_binding');
     if(intent.action?.name!=='native_input')throw new Error('resident_intent_not_native');
     if(uiSkill){const current=sample.ui_skills,match=current?.matches.find(m=>m.skill_id===uiSkill.skill_id),raw=match as unknown as Record<string,unknown>|undefined;
-      if(!current||uiSkill.knowledge_sha256!==current.knowledge_sha256||!match||!['reflex','slow_path'].includes(uiSkill.route)||uiSkill.route==='reflex'&&(raw?.active_qualified!==true||(current as unknown as {modal?:{status:string}}).modal?.status!=='clear'))throw new Error('resident_ui_dispatch_not_current');
+      if(!current||current.status!=='known'||current.hard_stop||uiSkill.knowledge_sha256!==current.knowledge_sha256||!match||match.state_id!==current.state_id||match.hard_stop||!['reflex','slow_path'].includes(uiSkill.route)||uiSkill.route==='reflex'&&(raw?.active_qualified!==true||(current as unknown as {modal?:{status:string}}).modal?.status!=='clear'))throw new Error('resident_ui_dispatch_not_current');
     }
     const binding:ResidentIntentBinding={observation_id:before.observation.id,intent_id:intent.id,actor:intent.actor,plan_id:intent.plan.id,plan_revision:intent.plan.revision,
       task_id:context.task_id,task_revision:context.task_revision,run_epoch:context.run_epoch,gate_id:digest({intent,context:{...context,signal:undefined},ui_skill:uiSkill??null}),action_sha256:actionDigest(intent.action.args),...(uiSkill?{ui_skill:structuredClone(uiSkill)}:{})};

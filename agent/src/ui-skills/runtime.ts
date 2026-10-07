@@ -6,12 +6,13 @@ const sha=(s:string)=>/^[0-9a-f]{64}$/.test(s);
 const finite=(v:number,lo:number,hi:number)=>Number.isFinite(v)&&v>=lo&&v<=hi;
 class UiStop extends Error {constructor(readonly status:'blocked'|'cancelled'|'failed',reason:string){super(reason);}}
 export class UiSkillRuntime {
-  private started:number;private actions=0;private sequence=0;private failures=0;private busy=false;
+  private started:number;private actions=0;private sequence=0;private failures=0;private busy=false;private nonProgress=new Map<string,number>();
   private reviewRequests=new Map<string,UiReviewRequest>();private reviewFrames=new Map<string,UiFrame>();private checks:number[];private maxActions:number;private total:number;private age:number;private timeout:number;
   constructor(readonly options:UiRuntimeOptions,readonly ports:UiPorts){
     if(!options.authorized||!['live','simulated'].includes(options.mode)||!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(options.run_id))throw new Error('ui_runtime_authorization');
     if(options.mode==='live'&&!ports.provenance)throw new Error('ui_live_provenance_required');
     if(options.reviewed_candidate_trial_authorized!==undefined&&typeof options.reviewed_candidate_trial_authorized!=='boolean')throw new Error('ui_trial_authorization');
+    if(options.autonomous_trial_authorized!==undefined&&typeof options.autonomous_trial_authorized!=='boolean')throw new Error('ui_trial_authorization');
     this.maxActions=options.max_actions??16;this.total=options.max_duration_ms??120000;this.age=options.max_source_age_ms??750;this.timeout=options.model_timeout_ms??35000;
     if(!Number.isSafeInteger(this.maxActions)||!finite(this.maxActions,1,32)||!Number.isSafeInteger(this.total)||!finite(this.total,1,180000)||!Number.isSafeInteger(this.age)||!finite(this.age,1,750)||!Number.isSafeInteger(this.timeout)||!finite(this.timeout,1,35000))throw new Error('ui_runtime_budget');
     this.checks=[...(options.effect_check_ms??[500,1000,3000,8000])];if(!this.checks.length||this.checks.length>8||this.checks.some((x,i)=>!Number.isSafeInteger(x)||x<0||x>30000||i>0&&x<=this.checks[i-1]!))throw new Error('ui_effect_check_budget');
@@ -77,6 +78,9 @@ export class UiSkillRuntime {
         if(choice.status==='proposed'){
           skill=await this.proposal(choice.proposal,before,signal);
           result.skill_id=skill.skill_id;if(!this.options.autonomous_trial_authorized){result.review_request=await this.review(before,'proposal_pending_supervisor_audit',goal,[skill],choice.proposal,signal);result.reason='ui_review_required';return result;}
+          // Registration fixes the full knowledge snapshot. Persisting a new
+          // proposal cannot add it to that run's authority or revision list.
+          result.reason='ui_knowledge_changed_new_run_required';return result;
         }
         else if(choice.status==='selected'){
           if(choice.source_observation_id!==before.source.observation_id||choice.source_frame_id!==before.source.frame_id)throw new UiStop('blocked','ui_model_result_old_source');
@@ -89,6 +93,7 @@ export class UiSkillRuntime {
       const expectedEffect=skill.expected_effect;
       if(/npc|talk|dialogue|quest/i.test(skill.element.purpose))throw new UiStop('blocked','ui_gameplay_requires_layered_tutorial');
       result.skill_id=skill.skill_id;
+      if((this.nonProgress.get(skill.skill_id)??0)>=3)throw new UiStop('blocked','ui_same_step_three_nonprogress');
       if(skill.action&&(!Number.isSafeInteger(skill.action.duration_ms)||skill.action.duration_ms<1||skill.action.duration_ms>(skill.action.kind==='wait'?1000:skill.action.kind==='drag'||skill.action.kind==='move'?1500:150)||skill.action.kind==='key'&&(skill.action.keys.length!==1||!['ESC','ENTER'].includes(skill.action.keys[0]))))throw new UiStop('blocked','ui_key_or_wait_not_finite');
       // Slow results never make an old frame fresh. Native must recognize the
       // installed reference on a new frame before this enters Body's own gate.
@@ -114,7 +119,6 @@ export class UiSkillRuntime {
       const t=receipt?.input_timing;
       if(result.input_issued&&t&&before.source.clock.domain==='windows-qpc'&&t.clock==='windows_qpc'&&Number.isFinite(t.first_send_finished_ms)&&t.first_send_finished_ms>=before.source.clock.ticks)attempt.latency.observe_to_input_ms=t.first_send_finished_ms-before.source.clock.ticks;
       if(body.status!=='completed'||body.release!=='confirmed'||this.options.mode==='live'&&!waiting&&(!result.input_issued||!receipt?.input.released||receipt.input.events_inserted!==receipt.input.events_requested)){
-        if(body.status==='failed'&&receipt?.status==='failed'&&attempt.native_receipt)attempt.outcome_class='true_failure';
         throw new UiStop(body.status==='cancelled'?'cancelled':body.status==='failed'?'failed':'blocked',body.reason??'ui_body_input_or_release_unconfirmed');
       }
       const effectStart=this.ports.now();let after:UiFrame|null=null;
@@ -135,8 +139,8 @@ export class UiSkillRuntime {
         }
       }
       if(!result.effect_confirmed)throw new UiStop('blocked','ui_effect_timeout');
-      attempt.outcome_class='success';result.status='completed';result.reason='independent_ui_effect_confirmed';await this.call(this.ports.recordAttempt(attempt),signal);await this.call(this.ports.append('ui_skill_effect',{attempt_id:attemptId,effect:attempt.effect,game_effect:result.game_effect,mode:this.options.mode}),signal);
-    }catch(error){result.status=error instanceof UiStop?error.status:signal.aborted?'cancelled':'failed';result.reason=error instanceof Error?error.message:'ui_runtime_failure';if(result.attempt){result.attempt.failure_reason=result.reason;if(result.attempt.outcome_class!=='true_failure')result.attempt.outcome_class=result.status==='cancelled'?'cancelled':/timeout|deadline/.test(result.reason)?'timeout':'unverified';if(!result.effect_confirmed)result.attempt.effect.status=result.attempt.outcome_class==='true_failure'?'failed':'unverified';if(result.attempt.outcome_class==='true_failure')this.failures++;try{await this.ports.recordAttempt(result.attempt);}catch{result.reason+=':attempt_persistence_failed';}}}
+      attempt.outcome_class='success';result.status='completed';result.reason='independent_ui_effect_confirmed';this.nonProgress.delete(skill.skill_id);this.failures=0;await this.call(this.ports.append('ui_skill_effect',{attempt_id:attemptId,effect:attempt.effect,game_effect:result.game_effect,mode:this.options.mode}),signal);await this.call(this.ports.recordAttempt(attempt),signal);
+    }catch(error){result.status=error instanceof UiStop?error.status:signal.aborted?'cancelled':'failed';result.reason=error instanceof Error?error.message:'ui_runtime_failure';if(result.skill_id&&result.attempt&&!result.effect_confirmed&&result.status!=='cancelled')this.nonProgress.set(result.skill_id,(this.nonProgress.get(result.skill_id)??0)+1);if(result.attempt){result.attempt.failure_reason=result.reason;if(result.attempt.outcome_class!=='true_failure')result.attempt.outcome_class=result.status==='cancelled'?'cancelled':/timeout|deadline/.test(result.reason)?'timeout':'unverified';if(!result.effect_confirmed)result.attempt.effect.status=result.attempt.outcome_class==='true_failure'?'failed':'unverified';if(result.attempt.outcome_class==='true_failure')this.failures++;try{let timer:ReturnType<typeof setTimeout>;await Promise.race([this.ports.release(result.reason),new Promise(resolve=>{timer=setTimeout(resolve,3000);})]).finally(()=>clearTimeout(timer));await Promise.race([this.ports.recordAttempt(result.attempt),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('attempt_persistence_timeout')),3000);})]).finally(()=>clearTimeout(timer));}catch{result.reason+=':attempt_persistence_failed';}}}
     finally{try{let timer:ReturnType<typeof setTimeout>;result.release=await Promise.race([this.ports.release(result.reason),new Promise<'unconfirmed'>(resolve=>{timer=setTimeout(()=>resolve('unconfirmed'),3000);})]).finally(()=>clearTimeout(timer));}catch{result.release='unconfirmed';}if(result.release!=='confirmed'){result.status='blocked';result.reason='ui_release_unconfirmed';}this.busy=false;}
     if(result.release!=='confirmed'){result.status='blocked';result.reason='ui_release_unconfirmed';}return result;
   }

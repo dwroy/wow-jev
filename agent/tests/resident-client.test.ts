@@ -30,6 +30,8 @@ const rl=createInterface({input:process.stdin});rl.on('line',line=>{const c=JSON
  if(c.op==='observe'||c.op==='evidence'||c.op==='load_ui_skills'){const s=structuredClone(template);s.id=c.id;s.seq=++seq;s.memory_frame.seq=seq;s.memory_frame.frame_id='frame-'+seq;
   if(mutate==='stale')s.capture.started_qpc_ms=s.memory_frame.source_qpc_ms=100;
   if(mutate==='wrong-generation')s.memory_frame.channel_generation='33333333-3333-4333-8333-333333333333';
+  if(c.op==='load_ui_skills'&&mutate==='require-negative'&&(!c.negative_validation_canonical||!c.negative_validation_sha256))throw Error('missing_native_top_level_sidecar');
+  if(c.op==='observe'&&['ui-known','ui-unqualified'].includes(mutate))s.ui_skills={status:'known',state_id:'char_select',confidence:.396587,matches:[{skill_id:'learned-enter',state_id:'char_select',signature_id:'signature-enter',status:'candidate',hard_stop:false,roi_sha256:'${hash}',scores:{},active_qualified:mutate==='ui-known',negative_validation_sha256:'${hash}'}],knowledge_sha256:'${hash}',hard_stop:false,started_qpc_ms:101.7,finished_qpc_ms:101.8,modal:{status:'clear',reason:'test_fixture',evidence:[]}};
   if(c.op==='load_ui_skills')s.ui_skills={status:'unknown',state_id:null,confidence:0,matches:[],knowledge_sha256:c.snapshot_sha256,hard_stop:false,started_qpc_ms:101.7,finished_qpc_ms:101.8};
   if(c.op==='evidence')emit({protocol:'wow-resident',version:1,type:'evidence',session_id:ready.session_id,id:c.id,sample:s,artifact:{id:'image-'+seq,windows_path:'C:\\\\fixture.png',sha256:'${hash}',width:1280,height:720,source_frame_id:s.memory_frame.frame_id,source_qpc_ms:s.memory_frame.source_qpc_ms},ocr:null,local_clock:{domain:'windows-qpc',at_ms:102}});else emit(s);return;}
  const n={protocol:'wow-input',version:1,type:'receipt',session_id:ready.session_id,id:c.id,op:c.op,status:c.op==='execute'?'completed':'ok',input:{status:'not_sent',events_requested:0,events_inserted:0,released:true},effect:{status:'unknown'},timing:{clock:'windows_qpc',started_ms:null,finished_ms:103},local_clock:{domain:'windows-qpc',at_ms:103}};
@@ -112,4 +114,26 @@ test('knowledge reload accepts only a version-bound sample and preserves subsequ
   await assert.rejects(m.client.loadUiSkills(text,'0'.repeat(64),{target_scope:'retail_wow',build:'12.1.0.69933',locale:'zh_CN',size_bucket:'1280x720',ui_scale:1}),/knowledge_sha/);
   const fresh=await m.client.sample();assert.equal(fresh.sample.seq,2);assert.equal(m.client.validateOriginal(frame),false);assert.equal(m.client.validateOriginal(fresh.sample),true);
  }finally{await m.cleanup();}
+});
+
+test('launcher environment error retains bounded stable code without exposing stderr contents',async()=>{
+ const v=await validators(),dir=await mkdtemp(join(tmpdir(),'resident-environment-fault-'));
+ try{await assert.rejects(ResidentClient.start({repository,config:join(dir,'config.json'),runDir:dir,startupTimeoutMs:1000,launcher:()=>spawn(process.execPath,['-e',"process.stderr.write('resident_schema_rebuild_required private-diagnostic-not-exported');process.exit(3)"],{stdio:['pipe','pipe','pipe']})},v.resident,v.native),error=>{assert.equal((error as Error).message,'resident_launcher_disconnected:resident_schema_rebuild_required');return true;});}finally{await rm(dir,{recursive:true,force:true});}
+});
+test('Client transmits verified negative sidecar at native command top level and rejects changed bytes',async()=>{
+ const {createHash}=await import('node:crypto'),m=await mock({mutate:'require-negative',readonly:true});try{
+ const snapshot=JSON.stringify({protocol:'wow-ui-skill-snapshot',version:1,skills:[]}),sha=createHash('sha256').update(snapshot).digest('hex'),sidecar='{"protocol":"wow-ui-negative-validation","version":1}',negative={canonical:sidecar,sha256:createHash('sha256').update(sidecar).digest('hex')},scope={target_scope:'retail_wow' as const,build:'12.1.0.69933',locale:'zh_CN',size_bucket:'1280x720',ui_scale:1};
+ await assert.rejects(m.client.loadUiSkills(snapshot,sha,scope,{...negative,canonical:sidecar+' '}),/negative_sha/);
+ assert.equal((await m.client.loadUiSkills(snapshot,sha,scope,negative)).seq,1);
+ }finally{await m.cleanup();}
+});
+test('private UI route binds current compact/skill; unqualified match can use slow path but never reflex',async()=>{
+ for(const qualified of [false,true]){const m=await mock({mutate:qualified?'ui-known':'ui-unqualified'});try{
+ const b=await m.client.sample(),before={bracket:b,artifact:null,observation:{id:'source'}} as unknown as Collected,action={kind:'key' as const,keys:['W'],duration_ms:20};
+ const intent={id:'tagged-input',actor:'code',mode:'live',based_on_observation_id:'source',plan:{id:'ui-task',revision:1},action:{name:'native_input',args:action}} as ActionIntent,context={command_id:'tagged-input',task_id:'ui-task',task_revision:1,run_epoch:0,mode:'live' as const,conditions:[],signal:new AbortController().signal};
+ await assert.rejects(m.client.bindSource(before,intent,context,{skill_id:'learned-enter',route:'slow_path',knowledge_sha256:'b'.repeat(64)}),/ui_dispatch/);
+ if(!qualified)await assert.rejects(m.client.bindSource(before,intent,context,{skill_id:'learned-enter',route:'reflex',knowledge_sha256:hash}),/ui_dispatch/);
+ const route=qualified?'reflex':'slow_path';await m.client.bindSource(before,intent,context,{skill_id:'learned-enter',route,knowledge_sha256:hash});let actual:unknown;
+ m.client.once('resident_receipt',r=>{actual=r.intent.ui_skill;});await m.client.execute(action,{id:'tagged-input'});assert.deepEqual(actual,{skill_id:'learned-enter',route,knowledge_sha256:hash});
+ }finally{await m.cleanup();}}
 });
