@@ -364,3 +364,5 @@ UI 和世界屏幕交互仍使用原同帧目标、布局、自由光标条件�
 新增显式 `ui_key` capability 和 BodyAction `{kind:'ui_key',key:'ESC'|'ENTER',state_id,duration_ms:1..150}`，仅编译有限 key_down/key_up，不增加 click settle、不开放文本或其它键。必须当前 known 原生 CV `ui.state` 与 `ui.layout_id` 同 observation/capture，布局等于 profile、状态 id 等于请求；完整 `{id,confidence,signature_sha256,hard_stop}` 保存为独立条件快照。正常 hard_stop=null（兼容旧 false）；危险/未知/畸形状态拒绝。BodyRuntime 保留统一闸、前台/来源/时效/批准重验、取消与释放，不猜 movement mode。未新增跨语言 Body wire，原 NativeTimeline schema 继续约束实际原生动作。
 
 新增5项回归覆盖 ESC/ENTER 的1/80/150ms、非法按键/时长/文本、能力缺失、状态与布局的旧来源/时间、危险状态、原 BodyRuntime mock 发送、失焦、log后同id换signature以及取消释放。定向 TS 110/110、全树 typecheck、diff check通过；证据 `/tmp/wow-ui-key-targeted.tap`、`/tmp/wow-ui-key-typecheck.log`。仅本地提交，无游戏输入、未推送。此阶段未扩展旧 strict layer replay 的通用 UI 按键任务；正式 UI 学习入口和现场验收由负责人集成。
+
+**2026-10-07自主恢复续跑：autonomous-resume-17先核验当前选中小呵/战士/联盟与按钮，旧恢复统一闸已有限点击进世界并释放。独立后图在船上，但OCR英文误作launcher，原自动恢复结果仍blocked；不回填晋升成功。autonomous-jaina-18只读见键位说明弹窗，0交谈输入。新增同源Seed正常场景+可见按钮框与现有Native控件吻合时选择既有candidate，未知modal不再要求active用的场景guard；Native present/hardstop仍拒绝且不授active。关键测试1项及typecheck通过。**

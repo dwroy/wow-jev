@@ -32,6 +32,7 @@ import {verifyProposalPixels,independentProposalAnchors} from '../ui-skills/prop
 import {prepareUiRunRegistration,registeredUiProvenance,frozenRunSkills,type UiRuntimeContext,type UiRunRegistration} from '../ui-skills/run-provenance.js';
 import {freshTutorialObservation} from '../ui-skills/tutorial-observation.js';
 import {unverifiedLayerAttempt} from '../ui-skills/layer-attempt.js';
+import {selectExistingSceneControl} from '../ui-skills/scene-choice.js';
 const hash=(x:string|Buffer)=>createHash('sha256').update(x).digest('hex');
 const run=promisify(execFile);
 const fixedRoot=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
@@ -106,6 +107,7 @@ export async function uiField(args:string[]){
    const scene=v.model_result.scene,state=scene==='world'?'in_world':scene==='character_select'?'char_select':scene==='disconnected'?'wow_reconnect_page':scene==='tutorial_controls_intro'?'controls_position_hint':scene;
    const purpose=state==='game_menu'?'logout':state==='char_select'?'enter_world':state==='in_world'?'game_menu':state==='wow_reconnect_page'?'reconnect':state==='controls_position_hint'?'tutorial_confirm':null;
    const control=v.model_result.controls.find(c=>c.id===purpose&&c.status==='known'&&c.confidence>=.95&&c.rect);if(!purpose||!control?.rect)return{status:'unknown',reason:'seed_control_unknown'};
+   const existing=selectExistingSceneControl(request,latest,v.model_result);if(existing){await append('seed_existing_native_candidate_selected',{source:request.source,scene,choice:existing,prompt_version:v.prompt_version,prompt_sha256:v.prompt_sha256,result_sha256:hash(await readFile(join(modelDir,'result.json'))),basis:'same_source_seed_scene_and_button_bbox_plus_current_native_control; no_reflex_grant'});return existing;}
    const independentAnchors=independentProposalAnchors({id:control.id,rect:control.rect},v.model_result);if(!independentAnchors.length)return{status:'unknown',reason:'seed_independent_context_unknown'};
    const expected=purpose==='logout'?'char_select':purpose==='enter_world'?'in_world':purpose==='game_menu'?'game_menu':purpose==='reconnect'?'char_select':purpose==='tutorial_confirm'?'in_world':null;
    const p:UiProposal={source_observation_id:request.source.observation_id,source_frame_id:request.source.frame_id,state_id:state,skill_id:stableSkillId(config.scope,state,purpose,expected),hard_stop:null,element:{id:purpose,purpose,label:control.label,bbox:control.rect,button:'left',duration_ms:80},signature_bbox:control.rect,signature_anchors:independentAnchors,expected_to_state:expected,confidence:control.confidence,prompt_sha256:v.prompt_sha256,prompt_version:v.prompt_version,result_sha256:hash(await readFile(join(modelDir,'result.json'))),provider:'Seed'};return{status:'proposed',proposal:p};
