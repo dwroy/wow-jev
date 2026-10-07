@@ -1,3 +1,5 @@
+**最新完整地面接线验收c4522eb：Python985 passed＋3项既有strict xfail、TS769/769、typecheck通过，0普通skip/fail/cancel。Windows宿主/NPC/治理fixture构建通过，纯治理32/32；地面原生14/14保存图检查。** 完整日志主out/integration/c4522eb-*。首轮受限环境IPC/WSL互操作失败日志单独保留，正常授权测试权限实际重跑全绿，不跳过原生测试。最近独立现场62确认角色在选角，热身仍0/1；完整绿后唯一执行端续恢复→一次W150ms→后图→当帧假人攻击。地面候选不晋升active，输入发出与伤害/1/1确认分开；现场结果随后追加。
+
 地面修补904cc78已离线冻结：standing_boots_deck_v1以当前双靴暗色轮廓/靴底甲板支持加独立deck纹理复核，只适用当前教程站立场景；候选修订3、不晋升active。三独立55正例与菜单/选角/旧姿态保存负例、跳起/单靴/蓝水等关键检查合计14/14，Collector与approach helper8项TS、4项Python/typecheck通过。Root补齐宿主及旧NPC/治理fixture构建源依赖，完整冻结回归随后记录；当前仍安全选角、W0、“热身”0/1。算法/来源/修订原件主out/acceptance/ui-skill-learning-20261007/ground-contact-checkpoint/。
 
 **2026-10-07 最新冻结验收7112147：Python983 passed＋3项既有strict xfail，TS768/768、typecheck、Windows编译及81项纯原生检查通过（0普通跳过/失败）。角色当前由独立62新帧确认安全选角；“热身”仍0/1，尚未发出W靠近。**

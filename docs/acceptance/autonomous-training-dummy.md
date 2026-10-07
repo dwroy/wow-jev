@@ -27,3 +27,9 @@
 审计audit-checkpoint-62的HTML17,259,147字节，JPEG预览长边≤512，原图链接/全部负例/尝试与审核链保留；精确JSON SHA9c948adb32a38a14b3e40a788d61b69be3765bc8ccfe345956e7f6a900917ba3。23技能，0active、0治理合格确认；旧late-review隔离记录不得计入晋升。首次交谈manual confirmed与热身accept发生不变。
 
 同一Windows QPC域细分47最新观察→首SendInput完成237.6951ms：帧到ROI开始0.0933、ROI复制/Hash84.4199、ROI→CV0.0001、CV9.4725、CV完成→响应49.4900、响应→原生dispatch64.9290（含WSL往返）、dispatch→SendInput开始28.4490（含原生排队/闸）、SendInput调用0.8413ms。后几项为组合区间，不伪造更细分层；协调器L2编译1ms/三次闸4+2+2ms分别在其单调钟域报告，不加入QPC总数。完整源SHA与边界见主out/acceptance/ui-skill-learning-20261007/training-engage-47-latency.json，SHA21661aa41bcde3dae3ae518cba08512e7e93a8884d4693117a38e08e4cfd0bf7。n=1、p50未知，150ms目标未达；仅选中未确认伤害，不包含较早规划/模型和未对时WGC compositor延迟。
+
+## c4522eb地面接线完整回归
+
+Python985 passed＋3项既有strict xfail、TS769/769、typecheck全部通过，0普通skip/fail/cancel。Windows常驻宿主/NPC/治理fixture编译成功，纯治理32/32无桌面无输入；standing_boots_deck_v1保存图/故障检查14/14，三张同run独立后图不能计为两个live run晋升。首轮沙箱阻断IPC及WSL互操作的失败原日志另保留，正常授权权限重跑后才报告全绿。
+
+地面算法SHA f6df43cc6a0da2b7eadcad2ffd37c3597a30a0a4392528d08ee4e3d88c38ba2b；运行candidate修订3绑定原56站立源图、完整暗色mask、独立deck及真实Native score/同帧ROI，AFK坐姿/跳起/未知尺寸拒绝。W仍持续键位配置，不伪称当帧OCR。该视觉证据仅适用当前站立教程场景，不是通用地面物理真值。完整原件ground-contact-checkpoint，待真实150ms有限靠近与伤害/目标后图，不把14项保存图检查写成现场成功。
