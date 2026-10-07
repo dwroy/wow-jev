@@ -91,7 +91,7 @@ export class UiResidentCollector {
     }
     if(state?.id==='tutorial_attack_training'&&matched?.status==='known'){
       const ground=matched.matches.find(match=>skills.some(k=>k.skill_id===match.skill_id&&k.element.purpose==='ground_training_evidence'&&k.element.label==='双脚与甲板'));
-      const roi=ground?m.rois.find(r=>r.id==='learned-ui-'+ground.skill_id&&r.sha256===ground.roi_sha256&&r.calibration_sha256===matched.knowledge_sha256):null;
+      const roi=nativeGroundContact(m,ground,matched.knowledge_sha256);
       if(ground&&roi){add('player.movement_mode','ground','cv');add('player.ground_source',{mode:'ground',frame_id:m.frame_id,layout_id:m.layout_id,roi_id:roi.id,roi_sha256:roi.sha256,calibration_sha256:roi.calibration_sha256},'cv');}
     }
     if(elements.length){add('ui.elements',elements.map(({signature_sha256:_,...e})=>e),'cv');add('ui.control_signatures',elements.map(e=>({id:e.id,signature_sha256:e.signature_sha256})),'cv');add('input.mouse_mode','ui','cv');}
@@ -132,6 +132,14 @@ export class UiResidentCollector {
     const frame:UiFrame={collected,source,state,elements,hard_stop:hardStop,scope:this.options.scope,recognition,skill_matches:skillMatches,...(nativeEvidence?{native_evidence:nativeEvidence}:{} )};this.frames.set(collected,frame);
     await writeFile(join(this.options.directory,id+'.json'),JSON.stringify({source,native:s,observation})+'\n',{flag:'wx'});return frame;
   }
+}
+
+/** This scene-limited CV proof is not a general physical-ground assertion. */
+export function nativeGroundContact(m:ResidentMemoryFrame,raw:unknown,knowledge:string):ResidentMemoryFrame['rois'][number]|null{
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
+  const match=raw as Record<string,any>,score=match.scores;
+  if(!score||score.metric!=='standing_boots_deck_v1'||score.algorithm_sha256!=='f6df43cc6a0da2b7eadcad2ffd37c3597a30a0a4392528d08ee4e3d88c38ba2b'||score.matched!==true||![score.raw_iou,score.foreground_ratio,score.left_support,score.right_support].every(v=>typeof v==='number'&&Number.isFinite(v))||score.raw_iou<.90||score.raw_iou>1||score.foreground_ratio<.90||score.foreground_ratio>1.10||score.left_support<.90||score.left_support>1||score.right_support<.90||score.right_support>1||!Number.isSafeInteger(score.sole_bottom_delta)||score.sole_bottom_delta<0||score.sole_bottom_delta>3||!Array.isArray(score.anchors)||score.anchors.length<2||!score.anchors.every((a:Record<string,unknown>)=>a?.matched===true))return null;
+  return m.rois.find(r=>r.id==='learned-ui-'+match.skill_id&&r.sha256===match.roi_sha256&&r.calibration_sha256===knowledge)??null;
 }
 
 /** Current native nameplate/body detector only; no reference element point. */

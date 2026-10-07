@@ -1,4 +1,5 @@
 using TrainingDummyVision = WowJev.Resident.TrainingDummyVision;
+using TrainingGroundVision = WowJev.Resident.TrainingGroundVision;
 // Read-only learned UI matcher. Knowledge may propose no input; Body/hand retain authority.
 using System;
 using System.Collections.Generic;
@@ -13,7 +14,7 @@ sealed class UiSkillVision
     public const string GreenTolerantAlgorithm="green_glyph_tolerant_v2:g>=60,g>r*1.3,g>b*1.3;msb0-row-major;min100;dilation-chebyshev-radius1;shift3;raw_iou0.65;bidirectional_coverage_min0.95;live_source_fg_ratio0.8:1.25";
     public const string GreenTolerantV3Algorithm="green_glyph_tolerant_v3:g>=60,g>r*1.3,g>b*1.3;msb0-row-major;min100;dilation-chebyshev-radius1;shift3;raw_iou0.5;bidirectional_coverage_min0.95;live_source_fg_ratio0.8:1.25";
     public const string ModalAlgorithm="neutral_panel_components_v1:tile8;sample-step2;rgb-chroma28;neutral-fraction0.875;bt601-variance64;component-fill0.8;min-width0.16;min-height0.10;central0.15,0.10,0.70,0.80;exclude-client-border;expected-iou0.85;one-to-one";
-    sealed class Entry { public string Id,State,Signature,SignatureSha,Status,Metric="rgb_exact_v1",Algorithm,NpcName,NpcMethod,EligibilityReason="negative_validation_missing",SourceCaptureSha; public int NpcAnchor=-1; public bool HardStop,SupervisorReviewed,ActiveQualified,RecognizeApproved; public Dictionary<string,object> Box,Scope,ModalGuard,Element,Action,RawSignature,AuthorityReview; public byte[] Template,Mask; public int Width,Height,MaskWidth,MaskHeight,ReferenceWidth,ReferenceHeight; public Rectangle? ReferenceRect,NeutralGoldRect; public bool[] NeutralNameMask; public double MaxError,MaxFraction; public List<Entry> Anchors=new List<Entry>(); public HashSet<string> RequiredStates=new HashSet<string>(); }
+    sealed class Entry { public string Id,State,Signature,SignatureSha,Status,Metric="rgb_exact_v1",Algorithm,NpcName,NpcMethod,EligibilityReason="negative_validation_missing",SourceCaptureSha; public int NpcAnchor=-1; public bool HardStop,SupervisorReviewed,ActiveQualified,RecognizeApproved; public Dictionary<string,object> Box,Scope,ModalGuard,Element,Action,RawSignature,AuthorityReview; public byte[] Template,Mask; public int Width,Height,MaskWidth,MaskHeight,ReferenceWidth,ReferenceHeight; public Rectangle? ReferenceRect,NeutralGoldRect; public bool[] NeutralNameMask,GroundMask; public double MaxError,MaxFraction; public List<Entry> Anchors=new List<Entry>(); public HashSet<string> RequiredStates=new HashSet<string>(); }
     readonly List<Entry> entries=new List<Entry>();
     readonly List<object> quarantine=new List<object>();
     public string KnowledgeSha {get;private set;}
@@ -53,6 +54,12 @@ sealed class UiSkillVision
                 var a=ResidentWire.Map(rawAnchor);var anchor=new Entry{Id=e.Id+"-anchor-"+e.Anchors.Count,Box=ResidentWire.Map(a["bbox"]),Scope=e.Scope,Width=ResidentWire.Int(a,"template_width"),Height=ResidentWire.Int(a,"template_height"),MaxError=ResidentWire.Num(a,"max_mean_abs_error"),MaxFraction=ResidentWire.Num(a,"max_fraction_above_24")};
                 ResidentWire.Need(anchor.Width>=1&&anchor.Width<=64&&anchor.Height>=1&&anchor.Height<=32&&anchor.MaxError>=0&&anchor.MaxError<=12&&anchor.MaxFraction>=0&&anchor.MaxFraction<=.1&&e.Anchors.Count<8,"ui_anchor_bounds");
                 anchor.Template=Convert.FromBase64String(ResidentWire.Text(a,"rgb_base64"));ResidentWire.Need(anchor.Template.Length==anchor.Width*anchor.Height*3&&ResidentWire.Hash(anchor.Template)==ResidentWire.Text(a,"template_sha256"),"ui_anchor_sha_changed");Feature(anchor,a,true,features&&e.State=="tutorial_talk_jaina");Reference(anchor,a);RectangleFor(anchor.Box,2560,1440);e.Anchors.Add(anchor);
+            }
+            if(sig.ContainsKey("ground_contact")){
+                var contact=ResidentWire.Map(sig["ground_contact"]);ResidentWire.Need(contact.Count==4&&ResidentWire.Text(contact,"method")==TrainingGroundVision.Method&&ResidentWire.Text(contact,"algorithm_sha256")==ResidentWire.Hash(Encoding.UTF8.GetBytes(TrainingGroundVision.Algorithm))&&ResidentWire.Text(e.Scope,"target_scope")=="retail_wow"&&e.State=="tutorial_attack_training"&&e.Element!=null&&ResidentWire.Text(e.Element,"purpose")=="ground_training_evidence"&&ResidentWire.Text(e.Element,"label")=="双脚与甲板"&&e.ReferenceRect.HasValue&&e.Anchors.Count>=2&&!sig.ContainsKey("npc_locator"),"ui_ground_contact_scope");
+                int deck=ExactInteger(contact,"deck_anchor_index",0,e.Anchors.Count-1);var anchor=e.Anchors[deck];ResidentWire.Need(anchor.Metric=="rgb_exact_v1"&&anchor.MaxError<=8&&anchor.MaxFraction<=.05&&anchor.ReferenceRect.HasValue&&!anchor.ReferenceRect.Value.IntersectsWith(e.ReferenceRect.Value),"ui_ground_deck_independent_anchor");
+                var mask=ResidentWire.Map(contact["mask"]);int w=e.ReferenceRect.Value.Width,h=e.ReferenceRect.Value.Height;ResidentWire.Need(mask.Count==5&&ResidentWire.Text(mask,"packing")=="msb0-row-major"&&ExactInteger(mask,"width",80,180)==w&&ExactInteger(mask,"height",80,160)==h,"ui_ground_contact_geometry");
+                byte[] raw=Convert.FromBase64String(ResidentWire.Text(mask,"base64"));ResidentWire.Need(raw.Length==(w*h+7)/8&&ResidentWire.Hash(raw)==ResidentWire.Text(mask,"sha256"),"ui_ground_contact_mask_sha");e.GroundMask=new bool[w*h];for(int i=0;i<e.GroundMask.Length;i++)e.GroundMask[i]=(raw[i/8]&(128>>(i%8)))!=0;for(int i=e.GroundMask.Length;i<raw.Length*8;i++)ResidentWire.Need((raw[i/8]&(128>>(i%8)))==0,"ui_ground_contact_mask_padding");TrainingGroundVision.ValidateReference(e.GroundMask,w,h);
             }
             if(sig.ContainsKey("npc_locator")){
                 var locator=ResidentWire.Map(sig["npc_locator"]);
@@ -136,7 +143,7 @@ sealed class UiSkillVision
     }
     static void Qualify(Entry entry,object[] profiles,object[] corpus){
         ResidentWire.Need(entry.Status=="active"&&!entry.HardStop&&entry.RecognizeApproved&&IsSha(entry.SignatureSha),"ui_entry_not_objectively_active");
-        ResidentWire.Need(entry.Metric=="rgb_exact_v1"&&entry.Width==32&&entry.Height==16&&entry.Anchors.Count>=1&&entry.Anchors.All(a=>a.Metric=="rgb_exact_v1"&&a.Width==32&&a.Height==16)&&entry.NpcAnchor<0,"ui_derived_or_unanchored_active_unsupported");
+        ResidentWire.Need(entry.Metric=="rgb_exact_v1"&&entry.Width==32&&entry.Height==16&&entry.Anchors.Count>=1&&entry.Anchors.All(a=>a.Metric=="rgb_exact_v1"&&a.Width==32&&a.Height==16)&&entry.NpcAnchor<0&&entry.GroundMask==null,"ui_derived_or_unanchored_active_unsupported");
         ResidentWire.Need(entry.Element!=null&&!new[]{"npc_interact","talk_jaina_layered","talk_to","interact_npc"}.Contains(ResidentWire.Text(entry.Element,"purpose")),"ui_npc_fixed_element_reflex_forbidden");
         var matching=profiles.Select(row=>ResidentWire.Map(row)).Where(p=>ResidentWire.Text(p,"skill_id")==entry.Id).ToArray();ResidentWire.Need(matching.Length==1,"ui_negative_profile_not_unique");var profile=matching[0];
         ResidentWire.Need(ResidentWire.Text(profile,"state_id")==entry.State&&ResidentWire.Same(profile["scope"],entry.Scope)&&ResidentWire.Text(profile,"signature_sha256")==entry.SignatureSha,"ui_negative_profile_identity_changed");
@@ -325,6 +332,10 @@ sealed class UiSkillVision
         return ResidentWire.Obj("metric",metric,"algorithm_sha256",AlgorithmSha(metric),"matched",matched,"raw_iou",bestIou,"min_raw_iou",minRaw,"source_coverage",bestSourceCoverage,"live_coverage",bestLiveCoverage,"bidirectional_coverage",Math.Max(0,bestCoverage),"min_bidirectional_coverage",.95,"foreground_ratio",ratio,"min_foreground_ratio",.8,"max_foreground_ratio",1.25,"source_foreground",points.Length,"live_foreground",livePoints.Count,"min_foreground",100,"dilation_radius",1,"shift_x",bestX,"shift_y",bestY,"max_shift",3);
     }
     static Dictionary<string,object> EntryScore(Entry entry,WgcCapture.Roi roi){
+        if(entry.GroundMask!=null){
+            if(!entry.ReferenceRect.HasValue||entry.ReferenceRect.Value.Width!=roi.Rectangle.Width||entry.ReferenceRect.Value.Height!=roi.Rectangle.Height)return ResidentWire.Obj("metric",TrainingGroundVision.Method,"matched",false,"raw_iou",0,"foreground_ratio",0,"sole_bottom_delta",100,"left_support",0,"right_support",0);
+            var ground=TrainingGroundVision.Match(roi.Pixels,roi.Rectangle.Width,roi.Rectangle.Height,entry.GroundMask);return ResidentWire.Obj("metric",TrainingGroundVision.Method,"algorithm_sha256",ResidentWire.Hash(Encoding.UTF8.GetBytes(TrainingGroundVision.Algorithm)),"matched",ground.Matched,"raw_iou",ground.RawIou,"foreground_ratio",ground.ForegroundRatio,"sole_bottom_delta",ground.BottomDelta,"left_support",ground.LeftSupport,"right_support",ground.RightSupport,"reason",ground.Reason);
+        }
         if(entry.Metric=="chroma_surface_v1")return ScoreChroma(roi.Pixels,roi.Rectangle.Width,roi.Rectangle.Height,entry.Template);
         if(entry.Metric=="green_mask_v1")return ScoreGreenMask(roi.Pixels,roi.Rectangle.Width,roi.Rectangle.Height,entry.Mask,entry.MaskWidth,entry.MaskHeight);
         if(entry.Metric=="green_glyph_tolerant_v2")return ScoreGreenGlyphTolerant(roi.Pixels,roi.Rectangle.Width,roi.Rectangle.Height,entry.Mask,entry.MaskWidth,entry.MaskHeight);
@@ -461,6 +472,7 @@ sealed class UiSkillVision
     }
     static double ErrorRatio(double value,double threshold){return threshold>0?Math.Min(100,value/threshold):value==0?0:100;}
     static double Distance(Entry entry,Dictionary<string,object> score){
+        if(entry.GroundMask!=null){double ratio=ResidentWire.Num(score,"foreground_ratio");return Math.Max((1-ResidentWire.Num(score,"raw_iou"))/.1,Math.Max(Math.Abs(ratio-1)/.1,Math.Max(ResidentWire.Num(score,"sole_bottom_delta")/3,Math.Max((1-ResidentWire.Num(score,"left_support"))/.1,(1-ResidentWire.Num(score,"right_support"))/.1))));}
         if(entry.Metric=="chroma_surface_v1")return Math.Max(ResidentWire.Num(score,"tv_distance")/.15,Math.Min(ResidentWire.Num(score,"source_luma_variance"),ResidentWire.Num(score,"live_luma_variance"))<300?2:0);
         if(entry.Metric=="green_mask_v1")return(1-ResidentWire.Num(score,"mask_iou"))/(1-.9);
         if(entry.Metric=="green_glyph_tolerant_v2"||entry.Metric=="green_glyph_tolerant_v3"){

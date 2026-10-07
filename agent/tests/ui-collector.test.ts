@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {UiResidentCollector,nativeNpcSurface} from '../src/resident/ui-collector.js';
+import {UiResidentCollector,nativeNpcSurface,nativeGroundContact} from '../src/resident/ui-collector.js';
 import type {ResidentClient} from '../src/resident/client.js';
 import {MemoryFrameRegistry} from '../src/eye/memory-frame.js';
 import {MemoryOwner,memorySample} from './fixtures/resident-memory.js';
@@ -44,4 +44,12 @@ test('current NPC surface binds same frame/QPC/ROI and never uses the reference 
     (v:typeof raw)=>{v.location.method='reference_bbox';},
   ]){const v=structuredClone(raw);mutate(v);assert.equal(nativeNpcSurface(m,v),null);}
   assert.equal(nativeNpcSurface(m,{reference_point:{x:420,y:310}}),null);
+});
+test('ground evidence requires native supported boot mask and independent current anchors',()=>{
+ const sample=memorySample('ground-current',1),m=sample.memory_frame,knowledge='e'.repeat(64);
+ m.rois.push({id:'learned-ui-ground',x:100,y:100,width:110,height:96,sha256:'f'.repeat(64),calibration_id:'ground',calibration_sha256:knowledge});
+ const raw={skill_id:'ground',roi_sha256:'f'.repeat(64),scores:{metric:'standing_boots_deck_v1',algorithm_sha256:'f6df43cc6a0da2b7eadcad2ffd37c3597a30a0a4392528d08ee4e3d88c38ba2b',matched:true,raw_iou:.97,foreground_ratio:1,sole_bottom_delta:1,left_support:1,right_support:1,anchors:[{matched:true},{matched:true}]}};
+ assert.equal(nativeGroundContact(m,raw,knowledge)?.id,'learned-ui-ground');
+ for(const mutate of [(x:typeof raw)=>{x.scores.metric='model_ground'},(x:typeof raw)=>{x.scores.algorithm_sha256='a'.repeat(64)},(x:typeof raw)=>{x.scores.sole_bottom_delta=8},(x:typeof raw)=>{x.scores.left_support=.5},(x:typeof raw)=>{x.scores.anchors[0]!.matched=false},(x:typeof raw)=>{x.roi_sha256='a'.repeat(64)}]){const v=structuredClone(raw);mutate(v);assert.equal(nativeGroundContact(m,v,knowledge),null);}
+ assert.equal(nativeGroundContact(m,raw,'a'.repeat(64)),null);
 });
