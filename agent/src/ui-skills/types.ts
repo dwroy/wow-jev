@@ -15,12 +15,13 @@ export interface UiSource {
 }
 export interface UiState {id:string;confidence:number;signature_sha256:string;hard_stop:HardStop|null}
 export interface UiElement {id:string;x:number;y:number;layout_id:string;enabled:boolean;signature_sha256:string}
-export interface UiFrame {collected:Collected;source:UiSource;state:UiState|null;elements:UiElement[];hard_stop:HardStop|null;scope:UiScope}
+export interface UiFrame {collected:Collected;source:UiSource;state:UiState|null;elements:UiElement[];hard_stop:HardStop|null;scope:UiScope;skill_matches?:Array<{skill_id:string;signature_sha256:string}>}
 export interface UiSkill {
   skill_id:string;state_id:string;scope:UiScope;revision:number;status:'active'|'candidate'|'pending_review'|'quarantined';confirmed_count:number;failure_streak:number;last_failure:{attempt_id:string;reason:string}|null;hard_stop:boolean;
   review:{status:'approved'|'pending'|'rejected';reviewer:string;reviewed_at:string;reason:string};
   element:{id:string;purpose:string;label:string;bbox:Bbox;button:'left'|'right';duration_ms:number};
   signature:{sha256:string;[key:string]:unknown};expected_effect:{state_id:string;signature_sha256:string|null}|null;
+  action?:{kind:'key';keys:['ESC'|'ENTER'];duration_ms:number}|{kind:'wait';duration_ms:number}|null;
 }
 export interface UiProposal {
   source_observation_id:string;source_frame_id:string;state_id:string;skill_id:string;hard_stop:HardStop|null;
@@ -36,7 +37,7 @@ export interface UiReviewRequest {request_id:string;run_id:string;reason:string;
 export interface UiReviewResume {request_id:string;reviewed_source_observation_id:string;reviewed_source_frame_id:string;reviewed_capture_sha256:string;skill_id?:string;proposal?:UiProposal}
 export interface UiEffect {status:'confirmed'|'failed'|'unverified';verifier:'cv'|'local_ocr'|'seed'|'review';source_observation_id:string|null;proof:{path:string;sha256:string}|null;state_id?:string;signature_sha256?:string}
 export interface UiAttempt {
-  skill_id:string;attempt_id:string;mode:UiMode;route:'code'|'model_revalidated'|'manual_reviewed'|'simulated';before:UiSource;after:UiSource|null;native_receipt:{path:string;sha256:string}|null;windows_clock_id:string|null;effect:UiEffect;
+  skill_id:string;attempt_id:string;mode:UiMode|'readonly';route:'code'|'model_revalidated'|'manual_reviewed'|'simulated';before:UiSource;after:UiSource|null;native_receipt:{path:string;sha256:string}|null;windows_clock_id:string|null;effect:UiEffect;
   latency:{clock:{domain:'windows-qpc'|'coordinator-monotonic';clock_id:string;unit:'ms'};observe_to_input_ms:number|null;observe_to_effect_ms:number|null};failure_reason:string|null;
 }
 export interface UiBodyOutcome extends BodyOutcome {dispatch_frame:UiFrame|null;compiled_action?:NativeAction;intent?:ActionIntent}
@@ -56,7 +57,7 @@ export interface UiPorts {
   execute(skill:UiSkill,before:UiFrame,attemptId:string,signal:AbortSignal):Promise<UiBodyOutcome>;
   release(reason:string):Promise<'confirmed'|'unconfirmed'>;
   confirmEffect?(skill:UiSkill,before:UiFrame,after:UiFrame,signal:AbortSignal):Promise<UiEffect>;
-  saveNativeReceipt?(outcome:BodyOutcome):Promise<{path:string;sha256:string}|null>;
+  saveNativeReceipt?(outcome:UiBodyOutcome):Promise<{path:string;sha256:string}|null>;
   saveEffectProof(effect:Omit<UiEffect,'proof'>,after:UiFrame):Promise<{path:string;sha256:string}>;
   recordAttempt(attempt:UiAttempt):Promise<void>;queueReview(request:UiReviewRequest):Promise<void>;append(kind:string,data:unknown):Promise<void>;
 }

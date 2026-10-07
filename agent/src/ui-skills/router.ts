@@ -3,7 +3,8 @@ import type {UiFrame,UiSkill,UiScope} from './types.js';
 export const sameScope=(a:UiScope,b:UiScope)=>canonical(a)===canonical(b);
 export function matchingSkills(frame:UiFrame,skills:UiSkill[]):UiSkill[]{
   if(!frame.state)return[];
-  return skills.filter(s=>sameScope(s.scope,frame.scope)&&!s.hard_stop&&s.review.status==='approved'&&!['pending_review','quarantined'].includes(s.status)&&s.state_id===frame.state!.id&&frame.elements.some(e=>e.enabled&&e.id===s.element.id&&e.layout_id===frame.source.layout_id&&e.signature_sha256===s.signature.sha256));
+  return skills.filter(s=>sameScope(s.scope,frame.scope)&&!s.hard_stop&&s.review.status==='approved'&&!['pending_review','quarantined'].includes(s.status)&&s.state_id===frame.state!.id&&
+    (s.action?frame.state!.signature_sha256===s.signature.sha256&&Boolean(frame.skill_matches?.some(m=>m.skill_id===s.skill_id&&m.signature_sha256===s.signature.sha256)):frame.elements.some(e=>e.enabled&&e.id===s.element.id&&e.layout_id===frame.source.layout_id&&e.signature_sha256===s.signature.sha256)));
 }
 export function routeUi(frame:UiFrame,skills:UiSkill[],failureStreak:number):{owner:'reflex'|'jev'|'seed'|null;reason:string;candidates:UiSkill[]}{
   if(frame.hard_stop||frame.state?.hard_stop)return{owner:null,reason:`hard_stop:${frame.hard_stop??frame.state!.hard_stop}`,candidates:[]};

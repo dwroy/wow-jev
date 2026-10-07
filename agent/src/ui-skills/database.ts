@@ -21,6 +21,7 @@ export class UiSkillDatabase {
   async query(scope:UiScope):Promise<UiSkill[]>{const reply=await this.request<{skills:UiSkill[]}>('query',{scope,status:'all'});if(!Array.isArray(reply.skills))throw new Error('ui_database_skill_rows');return reply.skills;}
   async attempt(attempt:UiAttempt):Promise<void>{await this.request('attempt',attempt);}
   async seedProposal(proposal:UiProposal,frame:UiFrame):Promise<UiSkill>{
-    const reply=await this.request<{skill:UiSkill}>('seed',{state_id:proposal.state_id,skill_id:proposal.skill_id,element:proposal.element,scope:frame.scope,signature_bbox:proposal.signature_bbox,frame:frame.source,review:{status:'approved',reviewer:proposal.provider,reviewed_at:new Date().toISOString(),reason:`source_bound_${proposal.provider}`},hard_stop:Boolean(proposal.hard_stop),...(proposal.expected_to_state?{expected_effect:{state_id:proposal.expected_to_state,signature_sha256:null}}:{})});return reply.skill;
+    await this.request('seed',{state_id:proposal.state_id,skill_id:proposal.skill_id,element:proposal.element,scope:frame.scope,signature_bbox:proposal.signature_bbox,frame:frame.source,review:{status:'approved',reviewer:proposal.provider==='Seed'?'seed':'self',reviewed_at:new Date().toISOString(),reason:`source_bound_${proposal.provider}`},hard_stop:Boolean(proposal.hard_stop),...(proposal.expected_to_state?{expected_effect:{state_id:proposal.expected_to_state,signature_sha256:null}}:{})});
+    const skill=(await this.query(frame.scope)).find(s=>s.skill_id===proposal.skill_id);if(!skill)throw new Error('ui_database_seed_row_missing');return skill;
   }
 }
